@@ -42,7 +42,6 @@ def get_scanning_universe(universe_type):
     if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
         return target_stocks
 
-    # Modernized alternate link to avoid 404 errors from NSE main archive
     url = "https://niftyindices.com/IndexConstituentList/ind_nifty500list.csv"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
@@ -59,7 +58,6 @@ def get_scanning_universe(universe_type):
     except Exception:
         pass
         
-    # Standard Backup URL if the first one fails
     try:
         backup_url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         res = requests.get(backup_url, headers=headers, timeout=10)
@@ -116,18 +114,5 @@ def process_market_analytics(tickers, mode="live"):
             df['Pct_Change'] = ((df['Close'] - df['Close'].shift(1)) / df['Close'].shift(1)) * 100
             df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
             df['Return_20d'] = ((df['Close'] - df['Close'].shift(20)) / df['Close'].shift(20)) * 100
-            df['Turnover'] = df['Close'] * df['Volume']
-            
-            df['Max_2_High_20_Ago'] = df['High'].shift(20).rolling(2, min_periods=1).max()
-            df['Max_200_High_31_Ago'] = df['High'].shift(31).rolling(200, min_periods=1).max()
-            df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(500, min_periods=1).max()
-            
-            # Next Day Move
-            df['Next_Day_Return'] = ((df['Close'].shift(-1) - df['Close']) / df['Close']) * 100
-
-            # Formula Conditions
-            cond1 = df['Close'] >= 20
-            cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 11.0)
-            cond3 = df['Volume'] > df['Vol_SMA20']
-            cond4 = df
+            df
             
