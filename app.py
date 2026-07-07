@@ -3,7 +3,6 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor
-import urllib.request
 
 # Page configuration
 st.set_page_config(
@@ -31,41 +30,38 @@ st.sidebar.header("⚙️ Scanner Settings")
 index_choice = st.sidebar.selectbox("Select Universe", ["Nifty 500", "Nifty 50", "Nifty Next 50", "All NSE Stocks"])
 run_scan = st.sidebar.button("🚀 Run Live Scan")
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400) # Cache for 24 hours to make it super fast
 def load_nifty_symbols(universe_type):
     try:
-        # Headers added to prevent NSE from blocking the cloud request
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        
+        # Using highly stable GitHub data repositories to bypass NSE cloud blocking
         if universe_type == "Nifty 50":
-            url = "https://archives.nseindia.com/content/indices/ind_nifty50list.csv"
+            url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-Ticker-List/main/ind_nifty50list.csv"
+            df = pd.read_csv(url)
         elif universe_type == "Nifty Next 50":
-            url = "https://archives.nseindia.com/content/indices/ind_niftynext50list.csv"
-        elif universe_type == "Nifty00":
-            url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+            url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-Ticker-List/main/ind_niftynext50list.csv"
+            df = pd.read_csv(url)
+        elif universe_type == "Nifty 500":
+            url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-Ticker-List/main/ind_nifty500list.csv"
+            df = pd.read_csv(url)
         else:
-            url = "https://archives.nseindia.com/content/equities/EQUITY_L_market_data.csv"
+            # Stable public backup for all listed equity tickers
+            url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-Ticker-List/main/NSE_Tickers.csv"
+            df = pd.read_csv(url)
+            df = df.rename(columns={'SYMBOL': 'Symbol', 'NAME OF COMPANY': 'Company Name', 'INDUSTRY': 'Industry'})
+            if 'Industry' not in df.columns:
+                df['Industry'] = 'NSE Equity'
         
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response:
-            df = pd.read_csv(response)
-            
         df.columns = df.columns.str.strip()
-        
-        if universe_type == "All NSE Stocks":
-            df = df[df['SERIES'] == 'EQ']
-            df = df.rename(columns={'SYMBOL': 'Symbol', 'NAME OF COMPANY': 'Company Name'})
-            df['Industry'] = 'NSE Equity'
-        
         df['Ticker'] = df['Symbol'].str.strip() + ".NS"
         return df[['Ticker', 'Symbol', 'Company Name', 'Industry']]
+        
     except Exception as e:
-        st.error(f"Error fetching symbols from NSE: {e}")
+        st.warning(f"Mirror failed, using emergency hardcoded fallback list. Error: {e}")
         fallback_data = {
-            'Ticker': ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS'],
-            'Symbol': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'],
-            'Company Name': ['Reliance Industries', 'TCS', 'Infosys', 'HDFC Bank', 'ICICI Bank'],
-            'Industry': ['Oil & Gas', 'IT', 'IT', 'Banking', 'Banking']
+            'Ticker': ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'CUPID.NS', 'DIACABS.NS', 'SPARC.NS'],
+            'Symbol': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'CUPID', 'DIACABS', 'SPARC'],
+            'Company Name': ['Reliance Industries', 'TCS', 'Infosys', 'HDFC Bank', 'ICICI Bank', 'Cupid Ltd', 'Diamond Power', 'Sun Pharma Adv'],
+            'Industry': ['Oil & Gas', 'IT', 'IT', 'Banking', 'Banking', 'Healthcare', 'Industrials', 'Healthcare']
         }
         return pd.DataFrame(fallback_data)
 
@@ -76,6 +72,7 @@ def process_ticker(ticker_info):
     industry = ticker_info['Industry']
     
     try:
+        # Fetching data for formulas
         df = yf.download(ticker, period="3y", progress=False, group_by='ticker')
         if df.empty or len(df) < 501:
             return None
@@ -119,6 +116,7 @@ def process_ticker(ticker_info):
         if current_close < max_500_1d_ago:
             return None
             
+        # Market Cap check via fast lookup
         t_meta = yf.Ticker(ticker)
         mcap = t_meta.info.get('marketCap', 0)
         mcap_crores = mcap / 10000000 if mcap else 0
@@ -147,7 +145,8 @@ if run_scan:
     matched_stocks = []
     stock_list = stocks_df.to_dict('records')
     
-    with ThreadPoolExecutor(max_workers=25) as executor:
+    # Optimized for fast concurrent cloud processing
+    with ThreadPoolExecutor(max_workers=30) as executor:
         results = executor.map(process_ticker, stock_list)
         for i, res in enumerate(results):
             progress_bar.progress((i + 1) / len(stock_list))
@@ -171,13 +170,12 @@ if run_scan:
         csv_data = res_df.to_csv(index=False).encode('utf-8')
         st.download_button("Download CSV", data=csv_data, file_name="scanned_stocks.csv", mime="text/csv")
         
-        if index_choice != "All NSE Stocks":
-            st.subheader("📈 Sector / Industry Distribution")
-            industry_counts = res_df['Industry'].value_counts().reset_index()
-            industry_counts.columns = ['Industry', 'Count']
-            fig = px.bar(industry_counts, x='Industry', y='Count', title="Stocks Count by Sector",
-                         color='Industry', template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
+        st.subheader("📈 Sector / Industry Distribution")
+        industry_counts = res_df['Industry'].value_counts().reset_index()
+        industry_counts.columns = ['Industry', 'Count']
+        fig = px.bar(industry_counts, x='Industry', y='Count', title="Stocks Count by Sector",
+                     color='Industry', template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
         
     else:
         st.warning("No stocks matched the criteria at this moment.")
