@@ -1,16 +1,8 @@
-import os
-import sys
-
-# 1. Corrected lowercase imports to prevent immediate SyntaxError
-try:
-    import yfinance as yf
-except ImportError:
-    os.system(f"{sys.executable} -m pip install yfinance")
-    import yfinance as yf
-
 import streamlit as st
 import pandas as pd
+import yfinance as yf
 
+# Page Initialization
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
 st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
 
@@ -21,7 +13,7 @@ st.info(
     "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
-# BROAD MARKET LIST
+# RE-OPTIMIZED BROAD MARKET LIST
 ALL_INDIAN_STOCKS = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS",
     "LTIM.NS", "LT.NS", "HINDALCO.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "JIOFIN.NS", "ZOMATO.NS", "WIPRO.NS",
@@ -34,37 +26,119 @@ ALL_INDIAN_STOCKS = [
     "GRSE.NS", "BEML.NS", "JINDALSTEL.NS", "JSWSTEEL.NS", "SUNPHARMA.NS", "CIPLA.NS", "DRREDDY.NS",
     "APOLLOHOSP.NS", "DIVISLAB.NS", "TITAN.NS", "ASIANPAINT.NS", "BERGEPAINT.NS", "PIDILITIND.NS", "GRASIM.NS",
     "ULTRACEMCO.NS", "ACC.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "BAJAJ-AUTO.NS", "M&M.NS", "MARUTI.NS",
-    "ASHOKLEY.NS", "TATACONSUM.NS", "BRITANNIA.NS", "NESTLEIND.NS", "COLPAL.NS", "GODREJCP.NS", "DABUR.NS",
-    "CHOLAFIN.NS", "SRF.NS", "HAVELLS.NS", "VOLTAS.NS", "BLUESTARCO.NS", "POLYCAB.NS", "KEI.NS", "IRCTC.NS",
-    "CONCOR.NS", "INDIGO.NS", "SPICEJET.NS", "TRENT.NS", "ABFRL.NS", "PAGEIND.NS", "MUTHOOTFIN.NS", "MANAPPURAM.NS",
-    "AUBANK.NS", "BANDHANBNK.NS", "FEDERALBNK.NS", "IDBI.NS", "INDIANB.NS", "IOB.NS", "UCOBANK.NS", "UNIONBANK.NS",
-    "CENTRALBK.NS", "BOM.NS", "EXIDEIND.NS", "BALKRISIND.NS", "MRF.NS", "APOLLOTYRE.NS", "JKTYRE.NS", "CEATLTD.NS",
-    "TATACOMM.NS", "INDUSTOWER.NS", "IDEA.NS", "HINDCOPPER.NS", "NATIONALUM.NS", "GLENMARK.NS", "LUPIN.NS",
-    "BIOCON.NS", "AUROPHARMA.NS", "ALKEM.NS", "TORNTPHARM.NS", "LAURUSLABS.NS", "PEL.NS", "PVRINOX.NS",
-    "SUNTV.NS", "ZEEL.NS", "NETWORK18.NS", "CHAMBLFERT.NS", "GNFC.NS", "GSFC.NS", "COROMANDEL.NS", "DEEPAKNTR.NS",
-    "UPL.NS", "PIIND.NS", "AARTIIND.NS", "ATUL.NS", "JINDALSAW.NS", "WELCORP.NS", "MAHSEAMLES.NS", "RATNAMANI.NS",
-    "APLAPOLLO.NS", "HINDZINC.NS", "MOIL.NS", "GMDC.NS", "OBEROIRLTY.NS", "LODHA.NS", "GODREJPROP.NS", "SOBHA.NS",
-    "PRESTIGE.NS", "BRIGADE.NS", "MTARTECH.NS", "PATELENG.NS", "NCC.NS", "IRB.NS", "KNRENG.NS", "PNCINFRA.NS",
-    "HGINFRA.NS", "DILIPBUILD.NS", "ENGINDERSIN.NS", "IHCL.NS", "CAMPUS.NS", "MRPL.NS", "CHENNPETRO.NS"
+    "ASHOKLEY.NS", "TATACONSUM.NS", "BRITANNIA.NS", "NESTLEIND.NS", "COLPAL.NS", "GODREJCP.NS", "DABUR.NS"
 ]
 
 # SIDEBAR DYNAMIC CONTROLS
 st.sidebar.markdown("## ⚙️ Filter Tuning")
-min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=5, max_value=100, value=20, step=5)
+min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=1, max_value=100, value=10, step=1)
 
-def run_safe_screener(target_turnover_cr):
+def run_bulletproof_screener(target_turnover_cr):
     scanned_results = []
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    chunk_size = 15
+    # Downloading in small safe chunks to avoid data format breaking
+    chunk_size = 10
     total_stocks = len(ALL_INDIAN_STOCKS)
     
     for i in range(0, total_stocks, chunk_size):
         batch = ALL_INDIAN_STOCKS[i:i+chunk_size]
-        status_text.markdown(f"⏳ **Scanning Market Block:** Processing stocks {i} to {min(i+chunk_size, total_stocks)}...")
+        status_text.markdown(f"⏳ **Processing Market Block:** Stocks {i} to {min(i+chunk_size, total_stocks)}...")
         progress_bar.progress(min(i / total_stocks, 1.0))
         
         try:
-            # Download data with multi-year buffer for 500-day calculations
-            data = yf.download(batch, period="3y", group_
+            # Download without group_by to maintain standard pandas multi-indexing schema
+            data = yf.download(batch, period="3y", progress=False, timeout=30)
+            
+            if data.empty:
+                continue
+                
+            for ticker in batch:
+                try:
+                    df = pd.DataFrame()
+                    
+                    # Safe Extraction: Handles both multi-ticker and single-ticker fallback responses safely
+                    if isinstance(data.columns, pd.MultiIndex):
+                        if ticker in data['Close'].columns:
+                            df['Close'] = data['Close'][ticker]
+                            df['High'] = data['High'][ticker]
+                            df['Volume'] = data['Volume'][ticker]
+                        else:
+                            continue
+                    else:
+                        df = data[['Close', 'High', 'Volume']].copy()
+                    
+                    df = df.dropna()
+                    
+                    # Absolute Safety Check for multi-year calculations
+                    if len(df) < 515:
+                        continue
+                        
+                    current_close = df['Close'].iloc[-1]
+                    current_volume = df['Volume'].iloc[-1]
+                    prev_close = df['Close'].iloc[-2]
+                    close_20d_ago = df['Close'].iloc[-20]
+                    volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
+                    
+                    if prev_close <= 0 or close_20d_ago <= 0:
+                        continue
+                        
+                    # --- FORMULA CALCULATION ---
+                    c1 = current_close >= 20
+                    daily_return = ((current_close - prev_close) / prev_close) * 100
+                    c2 = (daily_return >= 1.0) and (daily_return <= 11.0)
+                    c3 = current_volume > volume_sma20
+                    
+                    return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
+                    c4 = return_20d >= 3.0
+                    
+                    turnover = current_close * current_volume
+                    turnover_cr = turnover / 10000000
+                    c5 = turnover_cr >= target_turnover_cr
+                    
+                    # --- ADVANCED LOOKBACK HIGHS ---
+                    high_series = df['High']
+                    max_2_20d_ago_high = high_series.shift(20).rolling(2).max().iloc[-1]
+                    max_200_31d_ago_high = high_series.shift(31).rolling(200).max().iloc[-1]
+                    c6 = max_2_20d_ago_high >= max_200_31d_ago_high
+                    
+                    max_500_1d_ago_high = high_series.shift(1).rolling(500).max().iloc[-1]
+                    c7 = current_close >= max_500_1d_ago_high
+                    
+                    # If any metric is broken or NaN, skip cleanly
+                    if pd.isna(max_2_20d_ago_high) or pd.isna(max_200_31d_ago_high) or pd.isna(max_500_1d_ago_high):
+                        continue
+                        
+                    if c1 and c2 and c3 and c4 and c5 and c6 and c7:
+                        scanned_results.append({
+                            "Ticker": ticker.replace(".NS", ""),
+                            "Price (₹)": round(current_close, 2),
+                            "Daily Change %": round(daily_return, 2),
+                            "20-Day Change %": round(return_20d, 2),
+                            "Volume": int(current_volume),
+                            "Turnover (Cr)": round(turnover_cr, 2)
+                        })
+                except:
+                    continue
+        except:
+            continue
+            
+    progress_bar.progress(1.0)
+    status_text.text("🎉 Full Market Analytics Completed Successfully!")
+    return pd.DataFrame(scanned_results)
+
+# SCAN ENGINE TRIGGER
+if st.button("🔍 Start Live Broad Market Scan"):
+    with st.spinner("Processing deep high-frequency lookbacks..."):
+        df_final = run_bulletproof_screener(min_turnover_cr)
+        
+        if not df_final.empty:
+            st.success(f"🎯 Boom! Found {len(df_final)} Breakout Stocks matching your strict rules:")
+            st.dataframe(df_final, use_container_width=True)
+            
+            csv = df_final.to_csv(index=False).encode('utf-8')
+            st.write("---")
+            st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
+        else:
+            st.warning(f"Abhi is strict 500-Day High Breakout aur {min_turnover_cr} Cr Turnover criteria par koi stock select nahi hua. Sidebar se Turnover slider ko '1 Cr' ya '2 Cr' karke fir se run karein!")
