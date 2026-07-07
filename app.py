@@ -87,5 +87,5 @@ if st.button("🔍 Scan Market Live Now"):
             st.success(f"Mil gaye! Niche diye gaye stocks criteria match karte hain:")
             st.dataframe(df_final, use_container_width=True)
         else:
-            st.warning("Filhal is live formula par koi stock match nahi hua. Kuch der baad ya live market mein try karein.")
+            st.warning("No Data Found")
             
