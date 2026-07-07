@@ -28,7 +28,7 @@ def run_screener(watch_list):
             status_text.text(f"Scanning ({idx+1}/{total_stocks}): {ticker}")
             
             stock = yf.Ticker(ticker)
-            df = stock.history(period="1mo") # Fast scanning using 1 month data
+            df = stock.history(period="1mo")
             
             if len(df) < 20:
                 continue
@@ -39,7 +39,6 @@ def run_screener(watch_list):
             close_20d_ago = df['Close'].iloc[-20]
             volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
             
-            # Basic conditions matching your Chartink formula
             c1 = current_close >= 20
             daily_return = ((current_close - prev_close) / prev_close) * 100
             c2 = (daily_return >= 1) and (daily_return <= 11)
@@ -47,7 +46,7 @@ def run_screener(watch_list):
             return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
             c4 = return_20d >= 3
             turnover = current_close * current_volume
-            c5 = turnover > 500000000 # 50 Crores
+            c5 = turnover > 500000000
             
             if c1 and c2 and c3 and c4 and c5:
                 scanned_results.append({
@@ -84,4 +83,5 @@ if scan_clicked:
                 mime="text/csv"
             )
         else:
-            st.warning("No stocks found")
+            st.warning("No stocks matched the criteria at this moment.")
+            
