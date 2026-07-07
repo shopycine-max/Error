@@ -1,5 +1,14 @@
+import os
+import sys
+
+# AUTO-INSTALLER JUGAAD: Agar server par yfinance nahi hai, toh ye khud install kar lega
+try:
+    import yfinance as yf
+except ImportError:
+    os.system(f"{sys.executable} -m pip install yfinance")
+    import yfinance as yf
+
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 
 st.set_page_config(page_title="Live Full NSE Market Scanner", layout="wide")
@@ -8,13 +17,11 @@ st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr
 
 @st.cache_data(ttl=3600)
 def get_all_nse_tickers():
-    # Safe and direct download using only pandas
     try:
         url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-LIST/main/NSE_ALL_STOCKS.csv"
         df_symbols = pd.read_csv(url)
-        # Filter top volume/liquid stocks to optimize scanning speed on free servers
         symbols = df_symbols['SYMBOL'].dropna().unique()
-        return [str(sym).strip() + ".NS" for sym in symbols[:300]] # Core Nifty top liquid stocks
+        return [str(sym).strip() + ".NS" for sym in symbols[:250]] # Scan top 250 highly liquid stocks
     except:
         return ["RELIANCE.NS", "SBIN.NS", "TATAMOTORS.NS", "TCS.NS", "AARTIDRUGS.NS", "BALAMINES.NS"]
 
