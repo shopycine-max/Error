@@ -1,102 +1,141 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import io
-import urllib.request
+import plotly.express as px
+from datetime import datetime
 
 # Page Configuration
-st.set_page_config(
-    page_title="ERROR09 - Live NSE Magic Scanner",
-    layout="wide",
-    initial_sidebar_state="expanded"
+st.set_page_config(page_title="ERROR09 - Live Stock Scanner", page_icon="📊", layout="wide")
+
+st.title("📊 ERROR09 - Live Stock Scanner Dashboard")
+st.caption("Created with ❤️ | Powered by Live yFinance Data")
+
+# --- Sidebar Settings ---
+st.sidebar.header("🔧 Scanner Settings")
+universe = st.sidebar.selectbox(
+    "Select Universe",
+    ["Nifty 50", "Nifty Next 50", "Custom Watchlist"]
 )
 
-# Dark Theme Custom CSS (Chartink Premium Cloned Look)
-st.markdown("""
-    <style>
-    .main { background-color: #0d1117; color: #c9d1d9; }
-    .stButton>button { background-color: #238636; color: white; font-weight: bold; width: 100%; border-radius: 6px; height: 45px; border: none; }
-    .stButton>button:hover { background-color: #2ea043; }
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-    h1, h2, h3 { color: #58a6ff; }
-    div.block-container { padding-top: 2rem; }
-    </style>
-""", unsafe_allow_html=True)
+# Reliable Fallback Ticker Lists (To avoid NSE 404 Errors)
+tickers_dict = {
+    "Nifty 50": [
+        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "BHARTIARTL.NS", "ICICIBANK.NS",
+        "INFY.NS", "SBI.NS", "LICI.NS", "ITC.NS", "HINDUNILVR.NS", "LT.NS",
+        "BAJFINANCE.NS", "HCLTECH.NS", "MARUTI.NS", "SUNPHARMA.NS", "ADANIENT.NS",
+        "TATAMOTORS.NS", "NTPC.NS", "KOTAKBANK.NS", "TITAN.NS"
+    ],
+    "Nifty Next 50": [
+        "CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS",
+        "IRFC.NS", "PFC.NS", "RECLTD.NS", "HAL.NS", "BEL.NS", "ZOMATO.NS"
+    ],
+    "Custom Watchlist": ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+}
 
-st.title("📊 ERROR09 - Live Chartink Cloned Dashboard")
-st.caption("Created by Chandan kumar shaw | 100% Fixed Accuracy Engine")
+selected_tickers = tickers_dict[universe]
 
-# Sidebar Configuration
-st.sidebar.header("⚙️ Scanner Settings")
-universe_choice = st.sidebar.selectbox(
-    "Select Stock Universe", 
-    ["📸 Chartink Screenshot Test (5 Stocks)", "Nifty 50", "Nifty 100", "Nifty 500", "All Indian Stocks"]
-)
-
-# Added bypass checkbox to prevent Yahoo's broken server info from dropping genuine stocks
-bypass_mcap = st.sidebar.checkbox("Bypass Yahoo Market Cap API (Highly Recommended)", value=True)
-
-run_scan = st.sidebar.button("🚀 Run Live Magic Scan")
-
-@st.cache_data(ttl=43200)
-def load_stock_symbols(universe_type):
-    # Fixed Master Array consisting of your target verification stocks
-    fallback_data = {
-        'Ticker': ['CUPID.NS', 'DIACABS.NS', 'SPARC.NS', 'ADANIENSOL.NS', 'JBCHEPHARM.NS', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS'],
-        'Symbol': ['CUPID', 'DIACABS', 'SPARC', 'ADANIENSOL', 'JBCHEPHARM', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'],
-        'Company Name': ['Cupid Ltd', 'Diamond Power Infrastructure', 'Sun Pharma Advanced Research', 'Adani Energy Solutions', 'JB Chemicals & Pharma', 'Reliance Industries', 'TCS', 'Infosys', 'HDFC Bank', 'ICICI Bank'],
-        'Industry': ['Healthcare', 'Industrials', 'Healthcare', 'Power', 'Healthcare', 'Energy', 'IT', 'IT', 'Banking', 'Banking']
-    }
-    fallback_df = pd.DataFrame(fallback_data)
+# --- Scanner Logic ---
+def run_scanner(tickers):
+    success_stocks = []
     
-    # Instant verification mode for your 5 stocks
-    if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
-        return fallback_df.head(5)
+    st.info(f"Scanning {len(tickers)} stocks from {universe} using merged formulas...")
+    progress_bar = st.progress(0)
+    
+    # Download 3 years of data in one batch for maximum speed & live performance
+    with st.spinner("Fetching live market data from yfinance..."):
+        try:
+            data = yf.download(tickers, period="3y", group_by='ticker', progress=False)
+        except Exception as e:
+            st.error(f"Error fetching data from yfinance: {e}")
+            return pd.DataFrame()
+
+    for idx, ticker in enumerate(tickers):
+        progress_bar.progress((idx + 1) / len(tickers))
         
-    urls = {
-        "Nifty 50": "https://archives.nseindia.com/content/indices/ind_nifty50list.csv",
-        "Nifty 100": "https://archives.nseindia.com/content/indices/ind_nifty100list.csv",
-        "Nifty 500": "https://archives.nseindia.com/content/indices/ind_nifty500list.csv",
-        "All Indian Stocks": "https://archives.nseindia.com/content/equities/EQUITY_LREG.csv"
-    }
-    
-    req_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    try:
-        url = urls.get(universe_type)
-        req = urllib.request.Request(url, headers=req_headers)
-        with urllib.request.urlopen(req, timeout=8) as response:
-            df = pd.read_csv(io.StringIO(response.read().decode('utf-8')))
-            df.columns = df.columns.str.strip()
-            
-            sym_col = next((c for c in df.columns if c.upper() in ['SYMBOL', 'TICKER', 'STOCK']), None)
-            name_col = next((c for c in df.columns if any(k in c.upper() for k in ['NAME', 'COMPANY'])), None)
-            ind_col = next((c for c in df.columns if 'INDUSTRY' in c.upper() or 'SECTOR' in c.upper()), None)
-            
-            if sym_col is not None:
-                res_df = pd.DataFrame()
-                res_df['Symbol'] = df[sym_col].astype(str).str.strip()
-                res_df['Ticker'] = res_df['Symbol'] + ".NS"
-                res_df['Company Name'] = df[name_col].astype(str).str.strip() if name_col else res_df['Symbol']
-                res_df['Industry'] = df[ind_col].astype(str).str.strip() if ind_col else 'NSE Equity'
+        try:
+            # Extract ticker specific dataframe
+            if len(tickers) > 1:
+                df = data[ticker].dropna()
+            else:
+                df = data.dropna()
                 
-                # Injection layer to guarantee target stocks are never omitted from global lists
-                for _, row in fallback_df.head(5).iterrows():
-                    if row['Symbol'] not in res_df['Symbol'].values:
-                        res_df = pd.concat([res_df, pd.DataFrame([row])], ignore_index=True)
-                        
-                return res_df.dropna().drop_duplicates()
-    except Exception:
-        pass
-        
-    return fallback_df
+            if len(df) < 520:  # 500 day breakout ke liye पर्याप्त data hona chahiye
+                continue
+                
+            # Current and Previous values
+            close_today = df['Close'].iloc[-1]
+            close_yesterday = df['Close'].iloc[-2]
+            volume_today = df['Volume'].iloc[-1]
+            high_today = df['High'].iloc[-1]
+            
+            # --- Chartink Merged Formula Implementation ---
+            
+            # 1. Daily Close >= 20
+            cond1 = close_today >= 20
+            
+            # 2. Daily % Change between 1% and 11%
+            pct_change = ((close_today - close_yesterday) / close_yesterday) * 100
+            cond2 = 1.0 <= pct_change <= 11.0
+            
+            # 3. Daily Volume > Daily SMA(Volume, 20)
+            sma_volume_20 = df['Volume'].rolling(20).mean().iloc[-1]
+            cond3 = volume_today > (sma_volume_20 * 1)
+            
+            # 4. 20 days ago close return >= 3%
+            close_20_days_ago = df['Close'].iloc[-21] # 20 candles back
+            return_20_days = ((close_today - close_20_days_ago) / close_20_days_ago) * 100
+            cond4 = return_20_days >= 3.0
+            
+            # 5. Daily Close * Daily Volume > 50,000,000 (Value Traded)
+            cond5 = (close_today * volume_today) > 500000000
+            
+            # 6. Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High)
+            max_2_high_20_ago = df['High'].shift(20).rolling(2).max().iloc[-1]
+            max_200_high_31_ago = df['High'].shift(31).rolling(200).max().iloc[-1]
+            cond6 = max_2_high_20_ago >= max_200_high_31_ago
+            
+            # 7. Daily Close >= 1 day ago Max(500, Daily High) -> 500 Day Breakout!
+            max_500_high_1_day_ago = df['High'].shift(1).rolling(500).max().iloc[-1]
+            cond7 = close_today >= max_500_high_1_day_ago
+            
+            # Merging all conditions
+            if cond1 and cond2 and cond3 and cond4 and cond5 and cond6 and cond7:
+                success_stocks.append({
+                    "Symbol": ticker.replace(".NS", ""),
+                    "Close": round(close_today, 2),
+                    "% Change": round(pct_change, 2),
+                    "Volume": int(volume_today),
+                    "Value Traded (Cr)": round((close_today * volume_today) / 10000000, 2)
+                })
+                
+        except Exception:
+            continue # Agar kisi stock ka data corrupt ho to skip karein
+            
+    return pd.DataFrame(success_stocks)
 
-def process_live_scan(stocks_list, bypass_mcap_check):
-    tickers = stocks_list['Ticker'].tolist()
-    matched = []
-    if not tickers:
-        return matched
+# --- Main App Execution ---
+if st.button("🚀 Run Live Scan", type="primary"):
+    results_df = run_scanner(selected_tickers)
+    
+    if not results_df.empty:
+        st.success(f"🔥 Found {len(results_df)} stocks matching your criteria!")
         
-    try:
-        # Fetches extensive history to clear 500 candle lookback flawlessly
-        data = yf.download(tickers, period="4y", interval="1d",
-                           
+        # Display Summary Cards
+        col1, col2 = st.columns(2)
+        col1.metric("Total Stocks Scanned", len(selected_tickers))
+        col2.metric("Stocks Passed Filters", len(results_df))
+        
+        # Display Table
+        st.subheader("📋 Filtered Stocks List")
+        st.dataframe(results_df, use_container_width=True)
+        
+        # Live Plotly Chart for Visualizing % Change
+        st.subheader("📈 Performance Visualization")
+        fig = px.bar(results_df, x="Symbol", y="% Change", text="Close", color="% Change",
+                     title="Passed Stocks Day Change %", color_continuous_scale="Greens")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Export Option
+        csv = results_df.to_csv(index=False).encode('utf-8')
+        st.download_button("
+        
