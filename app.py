@@ -10,7 +10,7 @@ st.write("### 📊 Active Stock")
 st.info(
     "Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr | "
     "Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High) | "
-    "Daily Close >= 1 day ago Max(50, Daily High)"
+    "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
 # RE-OPTIMIZED BROAD MARKET LIST
@@ -433,7 +433,7 @@ if st.button("🔍 Scan"):
         df_final = run_bulletproof_screener(min_turnover_cr)
         
         if not df_final.empty:
-            st.success(f"🎯 Boom! Found {len(df_final)} Breakout Stocks matching your strict rules:")
+            st.success(f"🎯 Boom! Found {len(filtered_df)} Breakout Stocks matching your strict rules:")
             st.dataframe(df_final, use_container_width=True)
             
             csv = df_final.to_csv(index=False).encode('utf-8')
