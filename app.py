@@ -4,59 +4,62 @@ import yfinance as yf
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor
 
+# Streamlit Page Design
 st.set_page_config(
-    page_title="ERROR09 - Live NSE Stock Scanner",
+    page_title="ERROR09 - Live NSE Mega Breakout Scanner",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Custom Styling for Dark Premium UI
 st.markdown("""
     <style>
     .main { background-color: #0d1117; color: #c9d1d9; }
-    .stButton>button { background-color: #238636; color: white; border-radius: 5px; }
+    .stButton>button { background-color: #238636; color: white; font-weight: bold; width: 100%; border-radius: 6px; }
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
     h1, h2, h3 { color: #58a6ff; }
     div.block-container { padding-top: 2rem; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 ERROR09 - Live Stock Scanner Dashboard")
-st.caption("Created by Chandan kumar shaw | Powered by Live yFinance Data")
+st.title("📊 ERROR09 - Live Chartink Cloned Dashboard")
+st.caption("Created by Chandan kumar shaw | Real-time NSE & yFinance Data Engine")
 
+# Sidebar Configuration
 st.sidebar.header("⚙️ Scanner Settings")
-index_choice = st.sidebar.selectbox("Select Universe", ["Nifty 50", "Nifty Next 50", "Nifty 500", "All Indian Stocks"])
-run_scan = st.sidebar.button("🚀 Run Live Scan")
+index_choice = st.sidebar.selectbox(
+    "Select Universe", 
+    ["Nifty 50", "Nifty Next 50", "Nifty 500", "All Indian Stocks"]
+)
+run_scan = st.sidebar.button("🚀 Run Live Magic Scan")
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=43200)
 def load_nifty_symbols(universe_type):
+    """Fetches stock lists dynamically from reliable cloud repositories"""
     mirrors = {
         "Nifty 50": [
-            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_nifty50list.csv",
-            "https://raw.githubusercontent.com/itswsh/NSE-Stocks-Tracker/main/ind_nifty50list.csv"
+            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_nifty50list.csv"
         ],
         "Nifty Next 50": [
-            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_niftynext50list.csv",
-            "https://raw.githubusercontent.com/itswsh/NSE-Stocks-Tracker/main/ind_niftynext50list.csv"
+            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_niftynext50list.csv"
         ],
         "Nifty 500": [
-            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_nifty500list.csv",
-            "https://raw.githubusercontent.com/itswsh/NSE-Stocks-Tracker/main/ind_nifty500list.csv"
+            "https://raw.githubusercontent.com/stock-market-india/nifty-indices-dataset/main/datasets/ind_nifty500list.csv"
         ],
         "All Indian Stocks": [
             "https://raw.githubusercontent.com/shubham-singh-9/NSE-Symbols/main/symbols.csv",
-            "https://raw.githubusercontent.com/pankaj0323/NSE-Stock-Tickers/master/NSE_Tickers.csv",
-            "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-LIST/main/ind_nifty500list.csv"
+            "https://raw.githubusercontent.com/pankaj0323/NSE-Stock-Tickers/master/NSE_Tickers.csv"
         ]
     }
     
     selected_urls = mirrors[universe_type]
+    df = None
     
     for url in selected_urls:
         try:
             df = pd.read_csv(url)
             df.columns = df.columns.str.strip()
             
-            # Smart Column Detector: Automatically finds columns regardless of case/format
             sym_col = next((c for c in df.columns if c.upper() in ['SYMBOL', 'TICKER', 'STOCK']), None)
             name_col = next((c for c in df.columns if any(k in c.upper() for k in ['NAME', 'COMPANY', 'DESCRIPTION'])), None)
             ind_col = next((c for c in df.columns if 'INDUSTRY' in c.upper() or 'SECTOR' in c.upper()), None)
@@ -65,9 +68,147 @@ def load_nifty_symbols(universe_type):
                 res_df = pd.DataFrame()
                 res_df['Symbol'] = df[sym_col].astype(str).str.strip()
                 res_df['Ticker'] = res_df['Symbol'] + ".NS"
+                res_df['Company Name'] = df[name_col].astype(str).str.strip() if name_col else res_df['Symbol']
+                res_df['Industry'] = df[ind_col].astype(str).str.strip() if ind_col else 'NSE Equity'
+                return res_df.dropna().drop_duplicates()
+        except Exception:
+            continue
+
+    # Reliable Emergency Backup List if internet links fail
+    fallback_data = {
+        'Ticker': ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'CUPID.NS', 'DIACABS.NS', 'SPARC.NS', 'TATAMOTORS.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS'],
+        'Symbol': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'CUPID', 'DIACABS', 'SPARC', 'TATAMOTORS', 'SBIN', 'BHARTIARTL', 'ITC'],
+        'Company Name': ['Reliance Industries', 'TCS', 'Infosys', 'HDFC Bank', 'ICICI Bank', 'Cupid Ltd', 'Diamond Power', 'Sun Pharma Adv', 'Tata Motors', 'SBI', 'Bharti Airtel', 'ITC Ltd'],
+        'Industry': ['Oil & Gas', 'IT', 'IT', 'Banking', 'Banking', 'Healthcare', 'Industrials', 'Healthcare', 'Automobile', 'Banking', 'Telecom', 'FMCG']
+    }
+    return pd.DataFrame(fallback_data)
+
+def process_ticker(ticker_info):
+    """Applies your exact merged Chartink mathematical formula conditions"""
+    ticker = ticker_info['Ticker']
+    symbol = ticker_info['Symbol']
+    company_name = ticker_info['Company Name']
+    industry = ticker_info['Industry']
+    
+    try:
+        # Downloading 3 Years data to process 500-day rolling max
+        df = yf.download(ticker, period="3y", progress=False, group_by='ticker')
+        if df.empty or len(df) < 502:
+            return None
+            
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.droplevel(0)
+            
+        close = df['Close']
+        high = df['High']
+        volume = df['Volume']
+        
+        # 1. Daily Close >= 20
+        current_close = float(close.iloc[-1])
+        if current_close < 20:
+            return None
+            
+        # 3 & 4. Daily % Change between 1% and 11%
+        prev_close = float(close.iloc[-2])
+        pct_change = ((current_close - prev_close) / prev_close) * 100
+        if not (1 <= pct_change <= 11):
+            return None
+            
+        # 5. Daily Volume > Daily SMA (Volume, 20) * 1
+        current_volume = float(volume.iloc[-1])
+        volume_sma20 = float(volume.rolling(20).mean().iloc[-1])
+        if current_volume <= volume_sma20:
+            return None
+            
+        # 6. Daily Close - (20 days ago Close) / 20 days ago Close * 100 >= 3
+        close_20d_ago = float(close.iloc[-21])
+        return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
+        if return_20d < 3:
+            return None
+            
+        # 7. Daily Close * Daily Volume > 500,000,000 (Turnover filter)
+        turnover = current_close * current_volume
+        if turnover <= 500000000:
+            return None
+            
+        # 8. daily max(2, 20 days ago high) >= daily max(200, 31 days ago high)
+        max_2_20d_ago = float(high.shift(20).rolling(2).max().iloc[-1])
+        max_200_31d_ago = float(high.shift(31).rolling(200).max().iloc[-1])
+        if max_2_20d_ago < max_200_31d_ago:
+            return None
+            
+        # 9. daily close >= 1 day ago max(500, daily high) -> 500 Days Breakout!
+        max_500_1d_ago = float(high.shift(1).rolling(500).max().iloc[-1])
+        if current_close < max_500_1d_ago:
+            return None
+            
+        # 2. Market Cap Greater than 1000 Cr
+        t_meta = yf.Ticker(ticker)
+        mcap = t_meta.info.get('marketCap', 0)
+        mcap_crores = mcap / 10000000 if mcap else 0
+        if mcap_crores <= 1000:
+            return None
+
+        return {
+            "Stock Name": company_name,
+            "Symbol": symbol,
+            "Close": round(current_close, 2),
+            "%_change": round(pct_change, 2),
+            "Volume": int(current_volume),
+            "Market Cap (Cr)": round(mcap_crores, 2),
+            "Industry": industry
+        }
+    except Exception:
+        return None
+
+# Load dataset based on user choice
+stocks_df = load_nifty_symbols(index_choice)
+
+if run_scan:
+    st.write(f"🔍 Scanning **{len(stocks_df)}** live stocks from **{index_choice}** using Chartink merged formulas...")
+    progress_bar = st.progress(0)
+    
+    matched_stocks = []
+    stock_list = stocks_df.to_dict('records')
+    
+    # Executing multi-threaded execution for high speed live scans
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        results = executor.map(process_ticker, stock_list)
+        for i, res in enumerate(results):
+            progress_bar.progress((i + 1) / len(stock_list))
+            if res is not None:
+                matched_stocks.append(res)
                 
-                if name_col is not None:
-                    res_df['Company Name'] = df[name_col].astype(str).str.strip()
-                else:
-                    res_df['Company Name'] = res_df['Symbol']
-                    
+    progress_bar.empty()
+    
+    if matched_stocks:
+        res_df = pd.DataFrame(matched_stocks)
+        res_df.insert(0, 'Sr.', range(1, len(res_df) + 1))
+        
+        # Display Summary Metrics
+        col1, col2 = st.columns(2)
+        col1.metric("Total Stocks Audited", len(stocks_df))
+        col2.metric("Passed Magic Filter 🎉", len(res_df))
+        
+        # Filtered Output Table
+        st.subheader("📋 Chartink Filter Match Results")
+        st.dataframe(res_df.drop(columns=['Industry']), use_container_width=True, hide_index=True)
+        
+        # Export Actions
+        st.subheader("📥 Export Options")
+        csv_data = res_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download CSV Report", data=csv_data, file_name="magic_scan_results.csv", mime="text/csv")
+        
+        # Plotly Sector Analytics Chart
+        st.subheader("📈 Sector / Industry Wise Distribution")
+        industry_counts = res_df['Industry'].value_counts().reset_index()
+        industry_counts.columns = ['Industry', 'Count']
+        fig = px.bar(industry_counts, x='Industry', y='Count', title="Breakout Count by Sectors",
+                     color='Industry', template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+        
+    else:
+        st.warning("No stocks matched the 500-day high breakout criteria at this absolute millisecond.")
+else:
+    st.info("👈 Select your desired Stock Universe and hit 'Run Live Magic Scan' to scan live NSE data!")
+    
