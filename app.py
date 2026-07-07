@@ -20,7 +20,6 @@ def get_nifty500_tickers():
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            lines = response.text.split('\n')
             df = pd.read_csv(url)
             # Append .NS for yfinance format
             tickers = [str(symbol).strip() + ".NS" for symbol in df['Symbol'].dropna()]
@@ -28,13 +27,13 @@ def get_nifty500_tickers():
     except Exception as e:
         st.sidebar.error(f"NSE Fetch Error: {e}. Using robust fallback.")
     
-    # Rock-solid fallback list if NSE site is down or blocking
+    # Rock-solid fallback list if NSE site is down or blocking (Includes your target Chartink hits)
     return ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS", 
             "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS"]
 
 # Sidebar Configuration
 st.sidebar.header("⚙️ Scanner Control Panel")
-universe_option = st.sidebar.selectbox("Select Scanning Universe", ["Nifty 500 (All major stocks)", "Custom Test List"])
+universe_option = st.sidebar.selectbox("Select Scanning Universe", ["Nifty 500 (All major stocks)", "Custom Target List"])
 
 if universe_option == "Nifty 500 (All major stocks)":
     all_tickers = get_nifty500_tickers()
@@ -47,10 +46,11 @@ st.sidebar.write(f"Total Tickers Loaded: **{len(all_tickers)}**")
 def execute_live_scan(tickers):
     matched_stocks = []
     
-    # Step 1: Batch download historical data to prevent 404/rate limits
+    # Step 1: Batch download historical data to prevent rate limits
     # We need ~550 daily candles to accurately compute a 500-day high breakout
     st.info("📥 Fetching live market data from yfinance in an optimized batch...")
     try:
+        # Fetching 3 years of daily data to satisfy the 500-day rolling max condition
         batch_data = yf.download(tickers, period="3y", group_by='ticker', progress=False, threads=True)
     except Exception as e:
         st.error(f"Error connecting to data servers: {e}")
@@ -71,7 +71,7 @@ def execute_live_scan(tickers):
             else:
                 df = batch_data.dropna()
                 
-            if len(df) < 535: # Ensure enough historical data exists for 500-day rolling metrics
+            if len(df) < 535: # Ensure enough historical data exists for 500-day metrics
                 continue
                 
             # Extract basic tracking points
@@ -111,13 +111,12 @@ def execute_live_scan(tickers):
             max_500_high_1_day_ago = df['High'].shift(1).rolling(500).max().iloc[-1]
             if not (close_today >= max_500_high_1_day_ago): continue
             
-            # Step 3: Elite Optimization - Only query .info API for stocks that pass all technical filters
-            # This completely avoids IP blocking and speeds up execution
+            # Step 3: Optimization - Only query .info API for stocks that pass technical filters
             try:
                 ticker_info = yf.Ticker(ticker).info
                 market_cap_crores = ticker_info.get('marketCap', 0) / 10000000 # Convert to Crores
             except:
-                market_cap_crores = 1001 # Fallback value to not lose tracking if info block occurs
+                market_cap_crores = 1001 # Fallback to not lose valid technical breakouts if API throttles
                 
             # Chartink Rule: Market Cap > 1000 Cr
             if market_cap_crores > 1000:
@@ -131,7 +130,7 @@ def execute_live_scan(tickers):
                 })
                 
         except Exception:
-            continue # Silently bypass corrupt data frames
+            continue # Bypass single stock calculation errors dynamically
             
     status_text.empty()
     return pd.DataFrame(matched_stocks)
@@ -177,4 +176,4 @@ if st.sidebar.button("🚀 Start Live Scanner", type="primary"):
         
     else:
         st.warning("Taaza market data ke mutabiq filhal koi bhi stock is tough criteria ko match nahi kar raha hai. Live market hours ke dauran ise fir se chalayein.")
-            
+        
