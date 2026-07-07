@@ -13,8 +13,14 @@ import pandas as pd
 
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
 st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
-st.write("Formula Parameters: Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr |  Daily Close -  (  20 days ago Close ) /  20 days ago Close *  100 >=  3  |  Daily Max ( 2 ,  20 days ago High ) >=  Daily Max ( 200 ,  31 days ago High )  |  Daily Close >=  1 day ago Max ( 500 ,  Daily High")
-  ")
+
+# FIXED: Cleaned up line 16 and 17 multi-line text completely
+st.write("### 📊 Active Formula Engine:")
+st.info(
+    "Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr | "
+    "Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High) | "
+    "Daily Close >= 1 day ago Max(500, Daily High)"
+)
 
 # PRE-MAPPED HIGH MOMENTUM & BROAD MARKET LIST
 ALL_INDIAN_STOCKS = [
@@ -62,7 +68,8 @@ def run_safe_screener(target_turnover_cr):
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    chunk_size = 30
+    # Kept chunk size optimal for data download
+    chunk_size = 20
     total_stocks = len(ALL_INDIAN_STOCKS)
     
     for i in range(0, total_stocks, chunk_size):
@@ -71,7 +78,8 @@ def run_safe_screener(target_turnover_cr):
         progress_bar.progress(min(i / total_stocks, 1.0))
         
         try:
-            data = yf.download(batch, period="1mo", group_by="ticker", progress=False, timeout=15)
+            # FIXED: Changed period to '3y' to accommodate the 500-day high calculation rule
+            data = yf.download(batch, period="3y", group_by="ticker", progress=False, timeout=20)
             
             for ticker in batch:
                 try:
@@ -82,8 +90,9 @@ def run_safe_screener(target_turnover_cr):
                             continue
                     else:
                         df = data.dropna()
-                        
-                    if len(df) < 20:
+                    
+                    # Core requirement: Must have enough historical data rows for 500 SMA/Max lookbacks
+                    if len(df) < 515:
                         continue
                         
                     current_close = df['Close'].iloc[-1]
@@ -92,7 +101,7 @@ def run_safe_screener(target_turnover_cr):
                     close_20d_ago = df['Close'].iloc[-20]
                     volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
                     
-                    # --- FORMULA EVALUATION ---
+                    # --- BASE FORMULA EVALUATION ---
                     c1 = current_close >= 20
                     daily_return = ((current_close - prev_close) / prev_close) * 100
                     c2 = (daily_return >= 1.0) and (daily_return <= 11.0)
@@ -104,36 +113,15 @@ def run_safe_screener(target_turnover_cr):
                     turnover_cr = turnover / 10000000
                     c5 = turnover_cr >= target_turnover_cr
                     
-                    # Correct indentation with active output appending logic
-                    if c1 and c2 and c3 and c4 and c5:
-                        scanned_results.append({
-                            "Ticker": ticker.replace(".NS", ""),
-                            "Price (₹)": round(current_close, 2),
-                            "Daily Change %": round(daily_return, 2),
-                            "20-Day Change %": round(return_20d, 2),
-                            "Volume": int(current_volume),
-                            "Turnover (Cr)": round(turnover_cr, 2)
-                        })
-                except:
-                    continue
-        except:
-            continue
+                    # --- NEW CHARTINK ADVANCED ENGINE MATHEMATICS ---
+                    # 1. Daily Max(2, 20 days ago High)
+                    max_2_20d_ago_high = df['High'].shift(20).rolling(2).max().iloc[-1]
+                    
+                    # 2. Daily Max(200, 31 days ago High)
+                    max_200_31d_ago_high = df['High'].shift(31).rolling(200).max().iloc[-1]
+                    
+                    c6 = max_2_20d_ago_high >= max_200_31d_ago_high
+                    
+                    # 3. Daily Close >= 1 day ago Max(500, Daily High)
+                    max_500_1d_ago_high = df
             
-    progress_bar.progress(1.0)
-    status_text.text("🎉 Full Market Analytics Completed!")
-    return pd.DataFrame(scanned_results)
-
-# SCREEN ACTION BUTTON
-if st.button("🔍 Start Live Broad Market Scan"):
-    with st.spinner("Analyzing high-frequency data matrices..."):
-        df_final = run_safe_screener(min_turnover_cr)
-        
-        if not df_final.empty:
-            st.success(f"🎯 Boom! Found {len(df_final)} Breakout Stocks matching your strict rules:")
-            st.dataframe(df_final, use_container_width=True)
-            
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.write("---")
-            st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
-        else:
-            st.warning(f"Abhi {min_turnover_cr} Cr Turnover ke upar koi stock filter clear nahi kar paya. Sidebar se Turnover slider ko thoda kam karke dobara scan run karein!")
