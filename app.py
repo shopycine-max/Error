@@ -65,5 +65,39 @@ def load_nifty_symbols(universe_type):
             continue # If fails, try the next mirror
             
     if df is not None:
-        try
-        
+        try:
+            # Map column names based on dataset format
+            if 'Symbol' not in df.columns and 'SYMBOL' in df.columns:
+                df = df.rename(columns={'SYMBOL': 'Symbol'})
+            if 'Company Name' not in df.columns and 'NAME OF COMPANY' in df.columns:
+                df = df.rename(columns={'NAME OF COMPANY': 'Company Name'})
+            if 'Industry' not in df.columns:
+                df['Industry'] = 'NSE Equity'
+                
+            df['Ticker'] = df['Symbol'].str.strip() + ".NS"
+            return df[['Ticker', 'Symbol', 'Company Name', 'Industry']].dropna().drop_duplicates()
+        except Exception:
+            pass
+
+    # Safe hardcoded emergency fallback with top Nifty stocks if all mirrors fail
+    fallback_data = {
+        'Ticker': ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'CUPID.NS', 'DIACABS.NS', 'SPARC.NS', 'TATAMOTORS.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS'],
+        'Symbol': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'CUPID', 'DIACABS', 'SPARC', 'TATAMOTORS', 'SBIN', 'BHARTIARTL', 'ITC'],
+        'Company Name': ['Reliance Industries', 'TCS', 'Infosys', 'HDFC Bank', 'ICICI Bank', 'Cupid Ltd', 'Diamond Power', 'Sun Pharma Adv', 'Tata Motors', 'SBI', 'Bharti Airtel', 'ITC Ltd'],
+        'Industry': ['Oil & Gas', 'IT', 'IT', 'Banking', 'Banking', 'Healthcare', 'Industrials', 'Healthcare', 'Automobile', 'Banking', 'Telecom', 'FMCG']
+    }
+    return pd.DataFrame(fallback_data)
+
+def process_ticker(ticker_info):
+    ticker = ticker_info['Ticker']
+    symbol = ticker_info['Symbol']
+    company_name = ticker_info['Company Name']
+    industry = ticker_info['Industry']
+    
+    try:  # Fixed the missing colon syntax error here
+        df = yf.download(ticker, period="3y", progress=False, group_by='ticker')
+        if df.empty or len(df) < 501:
+            return None
+            
+        if isinstance(df.columns, pd.Multi
+                      
