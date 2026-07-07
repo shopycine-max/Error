@@ -4,7 +4,37 @@ import pandas as pd
 
 st.set_page_config(page_title="Live Stock Scanner", layout="wide")
 st.title("🚀 Live Stock Scanner")
-st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr | Multi-Breakout")
+st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr | Multi-Breakout stock = yf.Ticker(ticker)
+            df = stock.history(period="3y") 
+            
+            if len(df) < 500:
+                continue
+                
+            current_close = df['Close'].iloc[-1]
+            current_volume = df['Volume'].iloc[-1]
+            prev_close = df['Close'].iloc[-2]
+            close_20d_ago = df['Close'].iloc[-21]
+            volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
+            
+            max_high_31d_ago_200 = df['High'].iloc[-231:-31].max()
+            max_high_20d_ago_2 = df['High'].iloc[-22:-20].max()
+            max_high_500d_ago = df['High'].iloc[-501:-1].max()
+            
+            c1 = current_close >= 20
+            
+            daily_return = ((current_close - prev_close) / prev_close) * 100
+            c2 = (daily_return >= 1) and (daily_return <= 11)
+            
+            c3 = current_volume > volume_sma20
+            
+            return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
+            c4 = return_20d >= 3
+            
+            turnover = current_close * current_volume
+            c5 = turnover > 500000000
+            
+            c6 = max_high_20d_ago_2 >= max_high_31d_ago_200
+            c7 = current_close >= max_high_500d_ago)
 
 # Aap yahan apni marzi se aur bhi naye tickers (.NS ke saath) jod sakte hain
 watch_list = ["RELIANCE.NS", "SBIN.NS", "TATAMOTORS.NS", "TCS.NS", "INFY.NS", "ZOMATO.NS", "IRFC.NS", "JIOFIN.NS", "PFC.NS", "RECLTD.NS"]
