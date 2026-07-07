@@ -1,7 +1,7 @@
 import os
 import sys
 
-# Auto-dependency installer
+# 1. Corrected lowercase imports to prevent immediate SyntaxError
 try:
     import yfinance as yf
 except ImportError:
@@ -14,7 +14,6 @@ import pandas as pd
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
 st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
 
-# FIXED: Cleaned up line 16 and 17 multi-line text completely
 st.write("### 📊 Active Formula Engine:")
 st.info(
     "Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr | "
@@ -22,7 +21,7 @@ st.info(
     "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
-# PRE-MAPPED HIGH MOMENTUM & BROAD MARKET LIST
+# BROAD MARKET LIST
 ALL_INDIAN_STOCKS = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS",
     "LTIM.NS", "LT.NS", "HINDALCO.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "JIOFIN.NS", "ZOMATO.NS", "WIPRO.NS",
@@ -46,30 +45,19 @@ ALL_INDIAN_STOCKS = [
     "UPL.NS", "PIIND.NS", "AARTIIND.NS", "ATUL.NS", "JINDALSAW.NS", "WELCORP.NS", "MAHSEAMLES.NS", "RATNAMANI.NS",
     "APLAPOLLO.NS", "HINDZINC.NS", "MOIL.NS", "GMDC.NS", "OBEROIRLTY.NS", "LODHA.NS", "GODREJPROP.NS", "SOBHA.NS",
     "PRESTIGE.NS", "BRIGADE.NS", "MTARTECH.NS", "PATELENG.NS", "NCC.NS", "IRB.NS", "KNRENG.NS", "PNCINFRA.NS",
-    "HGINFRA.NS", "DILIPBUILD.NS", "ENGINDERSIN.NS", "IHCL.NS", "CAMPUS.NS", "MRPL.NS", "CHENNPETRO.NS",
-    "ALOKINDS.NS", "AWFIS.NS", "AZAD.NS", "BBL.NS", "BLS.NS", "BOROLTD.NS", "CEINFO.NS", "CENTURYPLY.NS",
-    "CRAFTSMAN.NS", "DOMS.NS", "EASEMYTRIP.NS", "EIDPARRY.NS", "ELGIEQUIP.NS", "EMUDHRA.NS",
-    "ENDURANCE.NS", "EPL.NS", "ESCORTS.NS", "FSL.NS", "GABRIEL.NS", "GARFIBRES.NS", "GATEWAY.NS",
-    "GENUSPOWER.NS", "GEOJITFSL.NS", "GHCL.NS", "GICRE.NS", "GILLETTE.NS", "GLS.NS", "GODFRYPHLP.NS",
-    "GPIL.NS", "GRAVITA.NS", "GREENPANEL.NS", "GRINFRA.NS", "GSPL.NS", "HAPPYFORGE.NS", "HBLPOWER.NS", "HEG.NS",
-    "HERANBA.NS", "HIKAL.NS", "HINDWAREAP.NS", "HONAUT.NS", "HUDCO.NS", "IBREALEST.NS", "IKIO.NS",
-    "INDIACEM.NS", "INDIAMART.NS", "INDIGOPNTS.NS", "INOXGREEN.NS", "INOXWIND.NS", "INTELLECT.NS", "IONEXCHANG.NS",
-    "ISGEC.NS", "ITI.NS", "J&KBANK.NS", "JAGRAN.NS", "JAIBALAJI.NS", "JAMNAAUTO.NS",
-    "JBCHEPHARM.NS", "JINDALWORLD.NS", "JKCEMENT.NS", "JKPAPER.NS", "JMFINANCIL.NS", "JSWENERGY.NS",
-    "JSWINFRA.NS", "JTEKTINDIA.NS", "JUBILANT.NS", "JUBLINGREA.NS", "JUBLPHARMA.NS", "JUSTDIAL.NS", "JYOTHYLAB.NS"
+    "HGINFRA.NS", "DILIPBUILD.NS", "ENGINDERSIN.NS", "IHCL.NS", "CAMPUS.NS", "MRPL.NS", "CHENNPETRO.NS"
 ]
 
 # SIDEBAR DYNAMIC CONTROLS
 st.sidebar.markdown("## ⚙️ Filter Tuning")
-min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=5, max_value=100, value=50, step=5)
+min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=5, max_value=100, value=20, step=5)
 
 def run_safe_screener(target_turnover_cr):
     scanned_results = []
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # Kept chunk size optimal for data download
-    chunk_size = 20
+    chunk_size = 15
     total_stocks = len(ALL_INDIAN_STOCKS)
     
     for i in range(0, total_stocks, chunk_size):
@@ -78,50 +66,5 @@ def run_safe_screener(target_turnover_cr):
         progress_bar.progress(min(i / total_stocks, 1.0))
         
         try:
-            # FIXED: Changed period to '3y' to accommodate the 500-day high calculation rule
-            data = yf.download(batch, period="3y", group_by="ticker", progress=False, timeout=20)
-            
-            for ticker in batch:
-                try:
-                    if isinstance(data.columns, pd.MultiIndex):
-                        if ticker in data.columns.levels[0]:
-                            df = data[ticker].dropna()
-                        else:
-                            continue
-                    else:
-                        df = data.dropna()
-                    
-                    # Core requirement: Must have enough historical data rows for 500 SMA/Max lookbacks
-                    if len(df) < 515:
-                        continue
-                        
-                    current_close = df['Close'].iloc[-1]
-                    current_volume = df['Volume'].iloc[-1]
-                    prev_close = df['Close'].iloc[-2]
-                    close_20d_ago = df['Close'].iloc[-20]
-                    volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
-                    
-                    # --- BASE FORMULA EVALUATION ---
-                    c1 = current_close >= 20
-                    daily_return = ((current_close - prev_close) / prev_close) * 100
-                    c2 = (daily_return >= 1.0) and (daily_return <= 11.0)
-                    c3 = current_volume > volume_sma20
-                    return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
-                    c4 = return_20d >= 3.0
-                    
-                    turnover = current_close * current_volume
-                    turnover_cr = turnover / 10000000
-                    c5 = turnover_cr >= target_turnover_cr
-                    
-                    # --- NEW CHARTINK ADVANCED ENGINE MATHEMATICS ---
-                    # 1. Daily Max(2, 20 days ago High)
-                    max_2_20d_ago_high = df['High'].shift(20).rolling(2).max().iloc[-1]
-                    
-                    # 2. Daily Max(200, 31 days ago High)
-                    max_200_31d_ago_high = df['High'].shift(31).rolling(200).max().iloc[-1]
-                    
-                    c6 = max_2_20d_ago_high >= max_200_31d_ago_high
-                    
-                    # 3. Daily Close >= 1 day ago Max(500, Daily High)
-                    max_500_1d_ago_high = df
-            
+            # Download data with multi-year buffer for 500-day calculations
+            data = yf.download(batch, period="3y", group_
