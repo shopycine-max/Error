@@ -6,7 +6,7 @@ st.set_page_config(page_title="Live Momentum Scanner", layout="wide")
 st.title("🚀 Live Momentum Buy Signal Scanner & Backtester")
 st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr | Multi-Breakout")
 
-# Aap yahan apni marzi se aur bhi naye tickers (.NS ke saath) jod sakte hain
+# Tickers List (Sabhi bilkul left side se shuru hain, koi indentation error nahi aayega)
 watch_list = ["RELIANCE.NS", "SBIN.NS", "TATAMOTORS.NS", "TCS.NS", "INFY.NS", "ZOMATO.NS", "IRFC.NS", "JIOFIN.NS", "PFC.NS", "RECLTD.NS", "BHEL.NS", "ITC.NS"]
 
 def run_screener():
@@ -62,21 +62,18 @@ def run_screener():
             
     return pd.DataFrame(scanned_results)
 
-# UI Buttons
-col1, col2 = st.columns(2)
-
-with col1:
-    scan_clicked = st.button("🔍 Scan Market Live Now")
+# UI Layout
+scan_clicked = st.button("🔍 Scan Market Live Now")
 
 if scan_clicked:
     with st.spinner("Chartink Formula ke mutabik stocks scan ho rahe hain..."):
         df_final = run_screener()
         
         if not df_final.empty:
-            st.success(f"Mil gaye! Niche diye gaye stocks criteria match karte hain:")
+            st.success("Mil gaye! Niche diye gaye stocks criteria match karte hain:")
             st.dataframe(df_final, use_container_width=True)
             
-            # CSV Convertor for Backtest Download
+            # CSV Conversion for Download
             csv_data = df_final.to_csv(index=False).encode('utf-8')
             
             st.write("---")
@@ -90,4 +87,4 @@ if scan_clicked:
             )
         else:
             st.warning("Filhal is live formula par koi stock match nahi hua. Kuch der baad ya live market mein try karein.")
-                    
+            
