@@ -1,7 +1,7 @@
 import os
 import sys
 
-# AUTO-INSTALLER JUGAAD: Agar server par yfinance nahi hai, toh ye khud install kar lega
+# Auto-installer for yfinance
 try:
     import yfinance as yf
 except ImportError:
@@ -21,11 +21,15 @@ def get_all_nse_tickers():
         url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-LIST/main/NSE_ALL_STOCKS.csv"
         df_symbols = pd.read_csv(url)
         symbols = df_symbols['SYMBOL'].dropna().unique()
-        return [str(sym).strip() + ".NS" for sym in symbols[:250]] # Scan top 250 highly liquid stocks
+        return [str(sym).strip() + ".NS" for sym in symbols[:200]]  # Top active cash stocks
     except:
         return ["RELIANCE.NS", "SBIN.NS", "TATAMOTORS.NS", "TCS.NS", "AARTIDRUGS.NS", "BALAMINES.NS"]
 
-def run_screener(watch_list):
+# Get the list at the top level
+watch_list = get_all_nse_tickers()
+st.sidebar.write(f"📊 Total Active Stocks in System: {len(watch_list)}")
+
+def run_screener():
     scanned_results = []
     progress_bar = st.progress(0)
     total_stocks = len(watch_list)
@@ -73,14 +77,11 @@ def run_screener(watch_list):
     status_text.text("Scanning Completed Successfully!")
     return pd.DataFrame(scanned_results)
 
-all_stocks = get_all_nse_tickers()
-st.sidebar.write(f"📊 Total Active Stocks: {len(all_stocks)}")
-
 scan_clicked = st.button("🔍 Scan All Stocks Live Now")
 
 if scan_clicked:
     with st.spinner("Processing market data..."):
-        df_final = run_screener(all_stocks)
+        df_final = run_screener()
         if not df_final.empty:
             st.success(f"Found {len(df_final)} momentum stocks:")
             st.dataframe(df_final, use_container_width=True)
@@ -95,4 +96,3 @@ if scan_clicked:
             )
         else:
             st.warning("No stocks matched the exact breakout criteria at this moment.")
-            
