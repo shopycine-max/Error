@@ -1,301 +1,166 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import requests
+import io
 
 # Page Initialization
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
-st.title("🚀 Stock Screener")
+st.title("🚀 NSE Pro Market Breakout Engine")
 
-st.write("### 📊 Stock Search:")
+st.write("### 📊 Active Formula Engine:")
 st.info(
     "Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr | "
     "Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High) | "
     "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
-# RE-OPTIMIZED BROAD MARKET LIST
-ALL_INDIAN_STOCKS = [
-    "20MICRONS.NS", "21STCENMGM.NS", "360ONE.NS", "3BBLACKBIO.NS", "3IINFOLTD.NS", "3MINDIA.NS", "3PLAND.NS", "5PAISA.NS", 
-    "63MOONS.NS", "A2ZINFRA.NS", "AAATECH.NS", "AADHARHFC.NS", "AAKASH.NS", "AAREYDRUGS.NS", "AARNAV.NS", "AARON.NS", 
-    "AARTECH.NS", "AARTIDRUGS.NS", "AARTIIND.NS", "AARTIPHARM.NS", "AARTISURF.NS", "AARVI.NS", "AASTHA.NS", "AAVAS.NS", 
-    "ABAN.NS", "ABANSENT.NS", "ABB.NS", "ABBOTINDIA.NS", "ABCAPITAL.NS", "ABCOTS.NS", "ABDL.NS", "ABFRL.NS", 
-    "ABINFRA.NS", "ABLBL.NS", "ABMINTLLTD.NS", "ABMKNO.NS", "ABREL.NS", "ABSLAMC.NS", "ACC.NS", "ACCELYA.NS", 
-    "ACCURACY.NS", "ACE.NS", "ACEINTEG.NS", "ACI.NS", "ACL.NS", "ACMESOLAR.NS", "ACSTECH.NS", "ACUTAAS.NS", 
-    "ADANIENSOL.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANIPORTS.NS", "ADANIPOWER.NS", "ADFFOODS.NS", "ADL.NS", "ADOR.NS", 
-    "ADROITINFO.NS", "ADSL.NS", "ADVAIT.NS", "ADVANCE.NS", "ADVANIHOTR.NS", "ADVENTHTL.NS", "ADVENZYMES.NS", "AEGISLOG.NS", 
-    "AEGISVOPAK.NS", "AEPL.NS", "AEQUS.NS", "AEROENTER.NS", "AEROFLEX.NS", "AERONEU.NS", "AETHER.NS", "AFCONS.NS", 
-    "AFFLE.NS", "AFFORDABLE.NS", "AFIL.NS", "AFSL.NS", "AGARIND.NS", "AGARWALEYE.NS", "AGI.NS", "AGIIL.NS", 
-    "AGL.NS", "AGRITECH.NS", "AGROPHOS.NS", "AHCL.NS", "AHLADA.NS", "AHLEAST.NS", "AHLUCONT.NS", "AHLWEST.NS", 
-    "AIAENG.NS", "AIIL.NS", "AIRAN.NS", "AIROLAM.NS", "AJANTPHARM.NS", "AJAXENGG.NS", "AJMERA.NS", "AJOONI.NS", 
-    "AKASH.NS", "AKCAPIT.NS", "AKG.NS", "AKI.NS", "AKSHAR.NS", "AKSHARCHEM.NS", "AKSHOPTFBR.NS", "AKUMS.NS", 
-    "ALANKIT.NS", "ALBERTDAVD.NS", "ALEMBICLTD.NS", "ALGOQUANT.NS", "ALICON.NS", "ALIVUS.NS", "ALKALI.NS", "ALKEM.NS", 
-    "ALKYLAMINE.NS", "ALLCARGO.NS", "ALLDIGI.NS", "ALLTIME.NS", "ALMONDZ.NS", "ALOKINDS.NS", "ALPA.NS", "ALPHAGEO.NS", 
-    "AMAGI.NS", "AMANTA.NS", "AMBALALSA.NS", "AMBER.NS", "AMBICAAGAR.NS", "AMBIKCO.NS", "AMBUJACEM.NS", "AMDIND.NS", 
-    "AMIRCHAND.NS", "AMJLAND.NS", "AMNPLST.NS", "AMRUTANJAN.NS", "ANANDRATHI.NS", "ANANTRAJ.NS", "ANDHRAPAP.NS", "ANDHRSUGAR.NS", 
-    "ANGELONE.NS", "ANIKINDS.NS", "ANKITMETAL.NS", "ANMOL.NS", "ANSALAPI.NS", "ANTELOPUS.NS", "ANTGRAPHIC.NS", "ANTHEM.NS", 
-    "ANUHPHR.NS", "ANUP.NS", "ANURAS.NS", "APARINDS.NS", "APCL.NS", "APCOTEXIND.NS", "APEX.NS", "APLAPOLLO.NS", 
-    "APLLTD.NS", "APOLLO.NS", "APOLLOHOSP.NS", "APOLLOPIPE.NS", "APOLLOTYRE.NS", "APOLSINHOT.NS", "APTECHT.NS", "APTUS.NS", 
-    "AQYLON.NS", "ARCHIDPLY.NS", "ARCHIES.NS", "ARE&M.NS", "ARENTERP.NS", "ARFIN.NS", "ARIES.NS", "ARIHANT.NS", 
-    "ARIHANTCAP.NS", "ARIHANTSUP.NS", "ARIS.NS", "ARKADE.NS", "ARMANFIN.NS", "AROGRANITE.NS", "ARROWGREEN.NS", "ARSHIYA.NS", 
-    "ARSSBL.NS", "ARTEMISMED.NS", "ARTNIRMAN.NS", "ARVEE.NS", "ARVIND.NS", "ARVINDFASN.NS", "ARVSMART.NS", "ASAHIINDIA.NS", 
-    "ASAHISONG.NS", "ASAL.NS", "ASALCBR.NS", "ASHAPURMIN.NS", "ASHIANA.NS", "ASHIKA.NS", "ASHIMASYN.NS", "ASHOKA.NS", 
-    "ASHOKAMET.NS", "ASHOKLEY.NS", "ASIANENE.NS", "ASIANHOTNR.NS", "ASIANPAINT.NS", "ASIANTILES.NS", "ASKAUTOLTD.NS", "ASMS.NS", 
-    "ASPINWALL.NS", "ASTAR.NS", "ASTEC.NS", "ASTERDM.NS", "ASTRAL.NS", "ASTRAMICRO.NS", "ASTRAZEN.NS", "ASTRON.NS", 
-    "ATALREAL.NS", "ATAM.NS", "ATGL.NS", "ATHERENERG.NS", "ATL.NS", "ATLANTAA.NS", "ATLANTAELE.NS", "ATLASCYCLE.NS", 
-    "ATUL.NS", "ATULAUTO.NS", "AUBANK.NS", "AURIGROW.NS", "AURIONPRO.NS", "AUROPHARMA.NS", "AURUM.NS", "AUSOMENT.NS", 
-    "AUTOAXLES.NS", "AUTOIND.NS", "AVADHSUGAR.NS", "AVALON.NS", "AVANTEL.NS", "AVANTIFEED.NS", "AVG.NS", "AVL.NS", 
-    "AVONMORE.NS", "AVROIND.NS", "AVTNPL.NS", "AWFIS.NS", "AWHCL.NS", "AWL.NS", "AXISBANK.NS", "AXISCADES.NS", 
-    "AXITA.NS", "AYE.NS", "AYMSYNTEX.NS", "AZAD.NS", "BAFNAPH.NS", "BAGFILMS.NS", "BAIDFIN.NS", "BAJAJ-AUTO.NS", 
-    "BAJAJCON.NS", "BAJAJELEC.NS", "BAJAJFINSV.NS", "BAJAJHCARE.NS", "BAJAJHFL.NS", "BAJAJHIND.NS", "BAJAJHLDNG.NS", "BAJAJINDEF.NS", 
-    "BAJAJST.NS", "BAJEL.NS", "BAJFINANCE.NS", "BALAJEE.NS", "BALAJITELE.NS", "BALAMINES.NS", "BALAXI.NS", "BALKRISHNA.NS", 
-    "BALKRISIND.NS", "BALMLAWRIE.NS", "BALPHARMA.NS", "BALRAMCHIN.NS", "BALUFORGE.NS", "BANARBEADS.NS", "BANARISUG.NS", "BANCOINDIA.NS", 
-    "BANDHANBNK.NS", "BANG.NS", "BANKA.NS", "BANKBARODA.NS", "BANKINDIA.NS", "BANSALWIRE.NS", "BANSWRAS.NS", "BASF.NS", 
-    "BASML.NS", "BATAINDIA.NS", "BATLIBOI.NS", "BAYERCROP.NS", "BBL.NS", "BBOX.NS", "BBTC.NS", "BBTCL.NS", 
-    "BCG.NS", "BCLIND.NS", "BCONCEPTS.NS", "BCPL.NS", "BDL.NS", "BEARDSELL.NS", "BECTORFOOD.NS", "BEDMUTHA.NS", 
-    "BEEKAY.NS", "BEL.NS", "BELLACASA.NS", "BELRISE.NS", "BEML.NS", "BENGALASM.NS", "BEPL.NS", "BERGEPAINT.NS", 
-    "BESTAGRO.NS", "BETA.NS", "BFINVEST.NS", "BFUTILITIE.NS", "BGRENERGY.NS", "BHAGCHEM.NS", "BHAGERIA.NS", "BHAGYANGR.NS", 
-    "BHANDARI.NS", "BHARATCOAL.NS", "BHARATFORG.NS", "BHARATGEAR.NS", "BHARATRAS.NS", "BHARATSE.NS", "BHARATWIRE.NS", "BHARTIARTL.NS", 
-    "BHARTIHEXA.NS", "BHEL.NS", "BI.NS", "BIGBLOC.NS", "BIKAJI.NS", "BIL.NS", "BILVYAPAR.NS", "BIMETAL.NS", 
-    "BIOCON.NS", "BIOFILCHEM.NS", "BIRLACABLE.NS", "BIRLACORPN.NS", "BIRLAMONEY.NS", "BIRLANU.NS", "BIRLAPREC.NS", "BLACKBUCK.NS", 
-    "BLACKROSE.NS", "BLAL.NS", "BLBLIMITED.NS", "BLIL.NS", "BLISSGVS.NS", "BLKASHYAP.NS", "BLS.NS", "BLSE.NS", 
-    "BLUECOAST.NS", "BLUEDART.NS", "BLUEJET.NS", "BLUESTARCO.NS", "BLUESTONE.NS", "BLUSPRING.NS", "BMWVENTLTD.NS", "BNAGROCHEM.NS", 
-    "BNALTD.NS", "BODALCHEM.NS", "BOHRAIND.NS", "BOMDYEING.NS", "BONLON.NS", "BORANA.NS", "BOROLTD.NS", "BORORENEW.NS", 
-    "BOROSCI.NS", "BOSCH-HCIL.NS", "BOSCHLTD.NS", "BPCL.NS", "BPL.NS", "BRIGADE.NS", "BRIGHOTEL.NS", "BRITANNIA.NS", 
-    "BRNL.NS", "BROOKS.NS", "BSE.NS", "BSHSL.NS", "BSL.NS", "BSOFT.NS", "BTML.NS", "BTTL.NS", "BUILDPRO.NS", 
-    "BUTTERFLY.NS", "BVCL.NS", "BYKE.NS", "CALSOFT.NS", "CAMLINFINE.NS", "CAMPUS.NS", "CAMS.NS", "CANBK.NS", 
-    "CANFINHOME.NS", "CANHLIFE.NS", "CANTABIL.NS", "CAPACITE.NS", "CAPILLARY.NS", "CAPITALSFB.NS", "CAPLIPOINT.NS", "CAPTRUST.NS", 
-    "CARBORUNIV.NS", "CARERATING.NS", "CARRARO.NS", "CARTRADE.NS", "CARYSIL.NS", "CASTROLIND.NS", "CCAVENUE.NS", "CCCL.NS", 
-    "CCHHL.NS", "CCL.NS", "CDSL.NS", "CEATLTD.NS", "CEIGALL.NS", "CEINSYS.NS", "CELEBRITY.NS", "CELLO.NS", 
-    "CEMPRO.NS", "CENTENKA.NS", "CENTEXT.NS", "CENTRALBK.NS", "CENTRUM.NS", "CENTUM.NS", "CENTURYPLY.NS", "CERA.NS", 
-    "CEREBRAINT.NS", "CESC.NS", "CEWATER.NS", "CGCL.NS", "CGPOWER.NS", "CHALET.NS", "CHAMBLFERT.NS", "CHEMBOND.NS", 
-    "CHEMBONDCH.NS", "CHEMCON.NS", "CHEMFAB.NS", "CHEMPLASTS.NS", "CHENNPETRO.NS", "CHEVIOT.NS", "CHOICEIN.NS", "CHOLAFIN.NS", 
-    "CHOLAHLDNG.NS", "CIEINDIA.NS", "CIFL.NS", "CINELINE.NS", "CINEVISTA.NS", "CIPLA.NS", "CLEAN.NS", "CLEANMAX.NS", 
-    "CLEDUCATE.NS", "CLSEL.NS", "CMPDI.NS", "CMRGREEN.NS", "CMSINFO.NS", "CNL.NS", "COALINDIA.NS", "COASTCORP.NS", 
-    "COCHINSHIP.NS", "COCKERILL.NS", "COFFEEDAY.NS", "COFORGE.NS", "COHANCE.NS", "COLPAL.NS", "COMFINTE.NS", "COMPINFO.NS", 
-    "COMPUSOFT.NS", "COMSYN.NS", "CONCOR.NS", "CONCORDBIO.NS", "CONFIPET.NS", "CONSOFINVT.NS", "CONTROLPR.NS", "CORALFINAC.NS", 
-    "CORDELIA.NS", "CORDSCABLE.NS", "COROMANDEL.NS", "CORONA.NS", "COSMOFIRST.NS", "COUNCODOS.NS", "CPCAP.NS", "CPEDU.NS", 
-    "CPPLUS.NS", "CRAFTSMAN.NS", "CRAMC.NS", "CREATIVEYE.NS", "CREDITACC.NS", "CREST.NS", "CRISIL.NS", "CRIZAC.NS", 
-    "CROMPTON.NS", "CROWN.NS", "CSBBANK.NS", "CSLFINANCE.NS", "CSM.NS", "CTE.NS", "CUB.NS", "CUBEXTUB.NS", 
-    "CUMMINSIND.NS", "CUPID.NS", "CURAA.NS", "CYBERMEDIA.NS", "CYBERTECH.NS", "CYIENT.NS", "CYIENTDLM.NS", "DABUR.NS", 
-    "DAICHI.NS", "DALBHARAT.NS", "DALMIASUG.NS", "DAMCAPITAL.NS", "DAMODARIND.NS", "DANGEE.NS", "DATAMATICS.NS", "DATAPATTNS.NS", 
-    "DAVANGERE.NS", "DBCORP.NS", "DBEIL.NS", "DBL.NS", "DBOL.NS", "DBREALTY.NS", "DBSTOCKBRO.NS", "DCAL.NS", 
-    "DCBBANK.NS", "DCI.NS", "DCM.NS", "DCMFINSERV.NS", "DCMNVL.NS", "DCMSHRIRAM.NS", "DCMSIL.NS", "DCMSRIND.NS", 
-    "DCW.NS", "DCXINDIA.NS", "DDEVPLSTIK.NS", "DECCANCE.NS", "DECNGOLD.NS", "DEEDEV.NS", "DEEPAKFERT.NS", "DEEPAKNTR.NS", 
-    "DEEPINDS.NS", "DELHIVERY.NS", "DELPHIFX.NS", "DELTACORP.NS", "DELTAMAGNT.NS", "DEN.NS", "DENORA.NS", "DENTA.NS", 
-    "DEVIT.NS", "DEVX.NS", "DEVYANI.NS", "DGCONTENT.NS", "DHAMPURSUG.NS", "DHANBANK.NS", "DHANUKA.NS", "DHARAN.NS", 
-    "DHARMAJ.NS", "DHRUV.NS", "DHUNINV.NS", "DIACABS.NS", "DIAMINESQ.NS", "DIAMONDYD.NS", "DICIND.NS", "DIFFNKG.NS", 
-    "DIGIDRIVE.NS", "DIGISPICE.NS", "DIGITIDE.NS", "DIGJAMLMTD.NS", "DISAQ.NS", "DISHTV.NS", "DIVGIITTS.NS", "DIVISLAB.NS", 
-    "DIXON.NS", "DJML.NS", "DLF.NS", "DLINKINDIA.NS", "DMART.NS", "DMCC.NS", "DNAMEDIA.NS", "DODLA.NS", 
-    "DOLATALGO.NS", "DOLLAR.NS", "DOLPHIN.NS", "DOMS.NS", "DONEAR.NS", "DPABHUSHAN.NS", "DPSCLTD.NS", "DPWIRES.NS", 
-    "DRAGARWQ.NS", "DRCSYSTEMS.NS", "DREAMFOLKS.NS", "DREDGECORP.NS", "DRREDDY.NS", "DSFCL.NS", "DSSL.NS", "DTIL.NS", 
-    "DUCON.NS", "DVL.NS", "DWARKESH.NS", "DYCL.NS", "DYNAMATECH.NS", "DYNPRO.NS", "E2E.NS", "EASEMYTRIP.NS", 
-    "EASTSILK.NS", "EBGNG.NS", "ECLERX.NS", "ECOSMOBLTY.NS", "EDELWEISS.NS", "EFCIL.NS", "EICHERMOT.NS", "EIDPARRY.NS", 
-    "EIEL.NS", "EIFFL.NS", "EIHAHOTELS.NS", "EIHOTEL.NS", "EIMCOELECO.NS", "EKC.NS", "ELANTAS.NS", "ELCIDIN.NS", 
-    "ELDEHSG.NS", "ELECON.NS", "ELECTCAST.NS", "ELECTHERM.NS", "ELGIEQUIP.NS", "ELGIRUBCO.NS", "ELIN.NS", "ELITECON.NS", 
-    "ELLEN.NS", "ELPROINTL.NS", "EMAMILTD.NS", "EMAMIPAP.NS", "EMAMIREAL.NS", "EMBDL.NS", "EMCURE.NS", "EMIL.NS", 
-    "EMKAY.NS", "EMMBI.NS", "EMMVEE.NS", "EMPOWER.NS", "EMSLIMITED.NS", "EMUDHRA.NS", "ENDURANCE.NS", "ENERGYDEV.NS", 
-    "ENGINERSIN.NS", "ENIL.NS", "ENRIN.NS", "ENTERO.NS", "EPACK.NS", "EPACKPEB.NS", "EPIGRAL.NS", "EPL.NS", 
-    "EQUIPPP.NS", "EQUITASBNK.NS", "ERIS.NS", "ESABINDIA.NS", "ESAFSFB.NS", "ESCORTS.NS", "ESSARSHPNG.NS", "ESSENTIA.NS", 
-    "ESTER.NS", "ETERNAL.NS", "ETHOSLTD.NS", "EUREKAFORB.NS", "EUROBOND.NS", "EUROPRATIK.NS", "EUROTEXIND.NS", "EVEREADY.NS", 
-    "EVERESTIND.NS", "EXCELINDUS.NS", "EXCELSOFT.NS", "EXICOM.NS", "EXIDEIND.NS", "EXPLEOSOL.NS", "EXXARO.NS", "FABTECH.NS", 
-    "FACT.NS", "FAIRCHEMOR.NS", "FAZE3Q.NS", "FCL.NS", "FCSSOFT.NS", "FDC.NS", "FEDDERSHOL.NS", "FEDERALBNK.NS", 
-    "FEDFINA.NS", "FEL.NS", "FELDVR.NS", "FERMENTA.NS", "FIBERWEB.NS", "FIEMIND.NS", "FILATEX.NS", "FILATFASH.NS", 
-    "FINCABLES.NS", "FINEORG.NS", "FINKURVE.NS", "FINOPB.NS", "FINPIPE.NS", "FIRSTCRY.NS", "FISCHER.NS", "FIVESTAR.NS", 
-    "FLAIR.NS", "FLEXITUFF.NS", "FLUOROCHEM.NS", "FMGOETZE.NS", "FMNL.NS", "FOCUS.NS", "FOODSIN.NS", "FORCEMOT.NS", 
-    "FORTIS.NS", "FOSECOIND.NS", "FRACTAL.NS", "FRONTSP.NS", "FSL.NS", "FUSION.NS", "GABRIEL.NS", "GAEL.NS", 
-    "GAIL.NS", "GALAPREC.NS", "GALAXYSURF.NS", "GALLANTT.NS", "GANDHAR.NS", "GANDHITUBE.NS", "GANECOS.NS", "GANESHBE.NS", 
-    "GANESHCP.NS", "GANESHHOU.NS", "GANGAFORGE.NS", "GANGESSECU.NS", "GARFIBRES.NS", "GARUDA.NS", "GATECH.NS", "GATECHDVR.NS", 
-    "GATEWAY.NS", "GAUDIUMIVF.NS", "GAYAHWS.NS", "GAYAPROJ.NS", "GCSL.NS", "GEECEE.NS", "GEEKAYWIRE.NS", "GEMAROMA.NS", 
-    "GENCON.NS", "GENESYS.NS", "GENUSPAPER.NS", "GENUSPOWER.NS", "GEOJITFSL.NS", "GESHIP.NS", "GFLLIMITED.NS", "GHCL.NS", 
-    "GHCLTEXTIL.NS", "GICHSGFIN.NS", "GICL.NS", "GICRE.NS", "GILLANDERS.NS", "GILLETTE.NS", "GINNIFILA.NS", "GIPCL.NS", 
-    "GKENERGY.NS", "GKSL.NS", "GKWLIMITED.NS", "GLAND.NS", "GLAXO.NS", "GLENMARK.NS", "GLFL.NS", "GLOBAL.NS", 
-    "GLOBALE.NS", "GLOBALVECT.NS", "GLOBE.NS", "GLOBECIVIL.NS", "GLOBUSSPR.NS", "GLOSTERLTD.NS", "GLOTTIS.NS", "GMBREW.NS", 
-    "GMDCLTD.NS", "GMMPFAUDLR.NS", "GMRAIRPORT.NS", "MRP&UI.NS", "GNA.NS", "GNFC.NS", "GNRL.NS", "GOACARBON.NS", 
-    "GOCLCORP.NS", "GOCOLORS.NS", "GODAVARIB.NS", "GODFRYPHLP.NS", "GODIGIT.NS", "GODREJAGRO.NS", "GODREJCP.NS", "GODREJIND.NS", 
-    "GODREJPROP.NS", "GOKEX.NS", "GOKUL.NS", "GOKULAGRO.NS", "GOLDENTOBC.NS", "GOLDIAM.NS", "GOLDTECH.NS", "GOODLUCK.NS", 
-    "GOODYEAR.NS", "GOPAL.NS", "GOYALALUM.NS", "GPIL.NS", "GPPL.NS", "GPTHEALTH.NS", "GPTINFRA.NS", "GRADIENTE.NS", 
-    "GRANDOAK.NS", "GRANULES.NS", "GRAPHITE.NS", "GRASIM.NS", "GRAUWEIL.NS", "GRAVISSHO.NS", "GRAVITA.NS", "GREAVESCOT.NS", 
-    "GREENLAM.NS", "GREENPANEL.NS", "GREENPLY.NS", "GREENPOWER.NS", "GRINDWELL.NS", "GRINFRA.NS", "GRMOVER.NS", "GROBTEA.NS", 
-    "GROWW.NS", "GRPLTD.NS", "GRSE.NS", "GRWRHITECH.NS", "GSFC.NS", "GSLSU.NS", "GSPCROP.NS", "GSS.NS", 
-    "GTECJAINX.NS", "GTL.NS", "GTLINFRA.NS", "GTPL.NS", "GUFICBIO.NS", "GUJALKALI.NS", "GUJAPOLLO.NS", "GUJENERGY.NS", 
-    "GUJRAFFIA.NS", "GUJTHEM.NS", "GULFOILLUB.NS", "GULFPETRO.NS", "GULPOLY.NS", "GVKPIL.NS", "GVPIL.NS", "GVPTECH.NS", 
-    "GVT&D.NS", "HAL.NS", "HALDER.NS", "HALDYNGL.NS", "HALEOSLABS.NS", "HAPPSTMNDS.NS", "HAPPYFORGE.NS", "HARDWYN.NS", 
-    "HARIOMPIPE.NS", "HARRMALAYA.NS", "HARSHA.NS", "HATHWAY.NS", "HATSUN.NS", "HAVELLS.NS", "HAVISHA.NS", "HAWKINCOOK.NS", 
-    "HBESD.NS", "HBLENGINE.NS", "HBSL.NS", "HCC.NS", "HCG.NS", "HCL-INSYS.NS", "HCLTECH.NS", "HDBFS.NS", 
-    "HDFCAMC.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HDIL.NS", "HEADSUP.NS", "HEALTHX.NS", "HECPROJECT.NS", "HEG.NS", 
-    "HEIDELBERG.NS", "HEMIPROP.NS", "HERANBA.NS", "HERITGFOOD.NS", "HEROMOTOCO.NS", "HESTERBIO.NS", "HEXAGON.NS", "HEXATRADEX.NS", 
-    "HEXT.NS", "HFCL.NS", "HGINFRA.NS", "HGM.NS", "HGS.NS", "HIKAL.NS", "HILINFRA.NS", "HILTON.NS", 
-    "HIMATSEIDE.NS", "HINDALCO.NS", "HINDCOMPOS.NS", "HINDCON.NS", "HINDCOPPER.NS", "HINDOILEXP.NS", "HINDPETRO.NS", "HINDUNILVR.NS", 
-    "HINDWAREAP.NS", "HINDZINC.NS", "HIRECT.NS", "HISARMETAL.NS", "HITECH.NS", "HITECHCORP.NS", "HITECHGEAR.NS", "HLEGLAS.NS", 
-    "HLVLTD.NS", "HMAAGRO.NS", "HMT.NS", "HMVL.NS", "HNDFDS.NS", "HOMEFIRST.NS", "HONASA.NS", "HONAUT.NS", 
-    "HONDAPOWER.NS", "HPAL.NS", "HPIL.NS", "HPL.NS", "HSCL.NS", "HTMEDIA.NS", "HUBTOWN.NS", "HUDCO.NS", 
-    "HUHTAMAKI.NS", "HYBRIDFIN.NS", "HYUNDAI.NS", "IBULLSLTD.NS", "ICDSLTD.NS", "ICEMAKE.NS", "ICICIAMC.NS", "ICICIBANK.NS", 
-    "ICICIGI.NS", "ICICIPRULI.NS", "ICIL.NS", "ICRA.NS", "IDBI.NS", "IDEA.NS", "IDEAFORGE.NS", "IDFCFIRSTB.NS", 
-    "IEX.NS", "IFBAGRO.NS", "IFBIND.NS", "IFCI.NS", "IFGLEXPOR.NS", "IGARASHI.NS", "IGCL.NS", "IGIL.NS", 
-    "IGL.NS", "IGPL.NS", "IIFL.NS", "IIFLCAPS.NS", "IITL.NS", "IKIO.NS", "IKS.NS", "IL&FSENGG.NS", 
-    "IL&FSTRANS.NS", "IMAGICAA.NS", "IMFA.NS", "IMPAL.NS", "INA.NS", "INCREDIBLE.NS", "INDBANK.NS", "INDGN.NS", 
-    "INDHOTEL.NS", "INDIACEM.NS", "INDIAGLYCO.NS", "INDIAMART.NS", "INDIANB.NS", "INDIANCARD.NS", "INDIANHUME.NS", "INDIASHLTR.NS", 
-    "INDIGO.NS", "INDIGOPNTS.NS", "INDIQUBE.NS", "INDNIPPON.NS", "INDOAMIN.NS", "INDOBORAX.NS", "INDOCO.NS", "INDOFARM.NS", 
-    "INDORAMA.NS", "INDOSTAR.NS", "INDOTECH.NS", "INDOTHAI.NS", "INDOUS.NS", "INDOWIND.NS", "INDPRUD.NS", "INDRAMEDCO.NS", 
-    "INDSWFTLAB.NS", "INDTERRAIN.NS", "INDUSINDBK.NS", "INDUSTOWER.NS", "INFOBEAN.NS", "INFOMEDIA.NS", "INFY.NS", "INGERRAND.NS", 
-    "INNOVACAP.NS", "INNOVANA.NS", "INNOVISION.NS", "INOXGREEN.NS", "INOXINDIA.NS", "INOXWIND.NS", "INSECTICID.NS", "INSPIRISYS.NS", 
-    "INTELLECT.NS", "INTENTECH.NS", "INTERARCH.NS", "INTLCONV.NS", "INVENTURE.NS", "INVPRECQ.NS", "IOB.NS", "IOC.NS", 
-    "IOLCP.NS", "IONEXCHANG.NS", "IPCALAB.NS", "IPL.NS", "IRB.NS", "IRCON.NS", "IRCTC.NS", "IREDA.NS", 
-    "IRFC.NS", "IRIS.NS", "IRISDOREME.NS", "IRMENERGY.NS", "ISFT.NS", "ISGEC.NS", "ISHANCH.NS", "ITC.NS", 
-    "ITCHOTELS.NS", "ITDC.NS", "ITI.NS", "IVALUE.NS", "IVC.NS", "IVP.NS", "IWP.NS", "IXIGO.NS", 
-    "IZMO.NS", "J&KBANK.NS", "JAGRAN.NS", "JAGSNPHARM.NS", "JAIBALAJI.NS", "JAICORPLTD.NS", "JAINREC.NS", "JAIPURKURT.NS", 
-    "JAMNAAUTO.NS", "JARO.NS", "JASH.NS", "JAYAGROGN.NS", "JAYBARMARU.NS", "JAYKAY.NS", "JAYNECOIND.NS", "JAYSREETEA.NS", 
-    "JBCHEPHARM.NS", "JBMA.NS", "JETFREIGHT.NS", "JGCHEM.NS", "JHS.NS", "JINDALPHOT.NS", "JINDALPOLY.NS", "JINDALSAW.NS", 
-    "JINDALSTEL.NS", "JINDRILL.NS", "JINDWORLD.NS", "JIOFIN.NS", "JISLDVREQS.NS", "JISLJALEQS.NS", "JITFINFRA.NS", "JKCEMENT.NS", 
-    "JKIL.NS", "JKIPL.NS", "JKLAKSHMI.NS", "JKPAPER.NS", "JKTYRE.NS", "JLHL.NS", "JMA.NS", "JMFINANCIL.NS", 
-    "JNKINDIA.NS", "JOCIL.NS", "JPOLYINVST.NS", "JPPOWER.NS", "JSFB.NS", "JSL.NS", "JSLL.NS", "JSWCEMENT.NS", 
-    "JSWDULUX.NS", "JSWENERGY.NS", "JSWHL.NS", "JSWINFRA.NS", "JSWSTEEL.NS", "JTEKTINDIA.NS", "JTLIND.NS", "JUBLCPL.NS", 
-    "JUBLFOOD.NS", "JUBLINGREA.NS", "JUBLPHARMA.NS", "JUNIPER.NS", "JUSTDIAL.NS", "JWL.NS", "JYOTHYLAB.NS", "JYOTICNC.NS", 
-    "JYOTISTRUC.NS", "KABRAEXTRU.NS", "KAJARIACER.NS", "KAKATCEM.NS", "KALAMANDIR.NS", "KALPATARU.NS", "KALYANI.NS", "KALYANIFRG.NS", 
-    "KALYANKJIL.NS", "KAMAHOLD.NS", "KAMATHOTEL.NS", "KAMDHENU.NS", "KAMOPAINTS.NS", "KANANIIND.NS", "KANCHI.NS", "KANORICHEM.NS", 
-    "KANPRPLA.NS", "KANSAINER.NS", "KAPSTON.NS", "KARMAENG.NS", "KARURVYSYA.NS", "KAUSHALYA.NS", "KAVDEFENCE.NS", "KAYA.NS", 
-    "KAYNES.NS", "KCP.NS", "KCPSUGIND.NS", "KDDL.NS", "KEC.NS", "KECL.NS", "KEEPLEARN.NS", "KEI.NS", 
-    "KELLTONTEC.NS", "KENNAMET.NS", "KERNEX.NS", "KESORAMIND.NS", "KEYFINSERV.NS", "KFINTECH.NS", "KHADIM.NS", "KHAICHEM.NS", 
-    "KHAITANLTD.NS", "KHANDSE.NS", "KICL.NS", "KILITCH.NS", "KIMS.NS", "KINGFA.NS", "KIOCL.NS", "KIRANVYPAR.NS", 
-    "KIRIINDUS.NS", "KIRLFER.NS", "KIRLOSBROS.NS", "KIRLOSENG.NS", "KIRLOSIND.NS", "KIRLPNU.NS", "KISSHT.NS", "KITEX.NS", 
-    "KKCL.NS", "KLBRENG-B.NS", "KMEW.NS", "KMSUGAR.NS", "KNAGRI.NS", "KNRCON.NS", "KOHINOOR.NS", "KOKUYOCMLN.NS", 
-    "KOLTEPATIL.NS", "KOPRAN.NS", "KOTAKBANK.NS", "KOTARISUG.NS", "KOTHARIPET.NS", "KOTHARIPRO.NS", "KOTIC.NS", "KOTYARK.NS", 
-    "KOVAI.NS", "KPEL.NS", "KPIGREEN.NS", "KPIL.NS", "KPITTECH.NS", "KPL.NS", "KPRMILL.NS", "KRBL.NS", 
-    "KREBSBIO.NS", "KRIDHANINF.NS", "KRISHANA.NS", "KRISHIVAL.NS", "KRISHNADEF.NS", "KRITI.NS", "KRITIKA.NS", "KRITINUT.NS", 
-    "KRN.NS", "KRONOX.NS", "KROSS.NS", "KRSNAA.NS", "KRYSTAL.NS", "KSB.NS", "KSCL.NS", "KSHINTL.NS", 
-    "KSHITIJPOL.NS", "KSL.NS", "KSOLVES.NS", "KSR.NS", "KTKBANK.NS", "KUANTUM.NS", "KWIL.NS", "LAGNAM.NS", 
-    "LAHOTIOV.NS", "LAKPRE.NS", "LAL.NS", "LALPATHLAB.NS", "LAMBODHARA.NS", "LANCORHOL.NS", "LANDMARK.NS", "LANDSMILL.NS", 
-    "LAOPALA.NS", "LASA.NS", "LATENTVIEW.NS", "LATTEYS.NS", "LAURUSLABS.NS", "LAXMICOT.NS", "LAXMIDENTL.NS", "LAXMIINDIA.NS", 
-    "LCCINFOTEC.NS", "LEMERITE.NS", "LEMONTREE.NS", "LENSKART.NS", "LEXUS.NS", "LFIC.NS", "LGBBROSLTD.NS", "LGEINDIA.NS", 
-    "LGHL.NS", "LIBAS.NS", "LIBERTSHOE.NS", "LICHSGFIN.NS", "LICI.NS", "LIKHITHA.NS", "LINC.NS", "LINCOLN.NS", 
-    "LINDEINDIA.NS", "LLOYDSENGG.NS", "LLOYDSENT.NS", "LLOYDSME.NS", "LMW.NS", "LODHA.NS", "LOKESHMACH.NS", "LORDSCHLO.NS", 
-    "LOTUSDEV.NS", "LOTUSEYE.NS", "LOVABLE.NS", "LOYALTEX.NS", "LPDC.NS", "LT.NS", "LTF.NS", "LTFOODS.NS", 
-    "LTM.NS", "LTTS.NS", "LUMAXIND.NS", "LUMAXTECH.NS", "LUPIN.NS", "LUXIND.NS", "LXCHEM.NS", "LYKALABS.NS", 
-    "LYPSAGEMS.NS", "M&M.NS", "M&MFIN.NS", "MAANALU.NS", "MACPOWER.NS", "MADHAV.NS", "MADHAVIPL.NS", "MADHUCON.NS", 
-    "MADRASFERT.NS", "MAFATIND.NS", "MAGADSUGAR.NS", "MAGNUM.NS", "MAHABANK.NS", "MAHAPEXLTD.NS", "MAHASTEEL.NS", "MAHEPC.NS", 
-    "MAHESHWARI.NS", "MAHLIFE.NS", "MAHLOG.NS", "MAHSCOOTER.NS", "MAHSEAMLES.NS", "MAITHANALL.NS", "MAJESAUT.NS", "MALLCOM.NS", 
-    "MALUPAPER.NS", "MAMATA.NS", "MANAKALUCO.NS", "MANAKCOAT.NS", "MANAKSIA.NS", "MANAKSTEEL.NS", "MANALIPETC.NS", "MANAPPURAM.NS", 
-    "MANBA.NS", "MANCREDIT.NS", "MANGALAM.NS", "MANGLMCEM.NS", "MANINDS.NS", "MANINFRA.NS", "MANKIND.NS", "MANOMAY.NS", 
-    "MANORAMA.NS", "MANORG.NS", "MANUGRAPH.NS", "MANYAVAR.NS", "MAPMYINDIA.NS", "MARALOVER.NS", "MARATHON.NS", "MARICO.NS", 
-    "MARINE.NS", "MARKOLINES.NS", "MARKSANS.NS", "MARSONS.NS", "MARUTI.NS", "MASFIN.NS", "MASKINVEST.NS", "MASTEK.NS", 
-    "MASTERTR.NS", "MATRIMONY.NS", "MAWANASUG.NS", "MAXESTATES.NS", "MAXHEALTH.NS", "MAXIND.NS", "MAYURUNIQ.NS", "MAZDA.NS", 
-    "MAZDOCK.NS", "MBAPL.NS", "MBEL.NS", "MBLINFRA.NS", "MCCHRLS-B.NS", "MCL.NS", "MCLEODRUSS.NS", "MCLOUD.NS", 
-    "MCX.NS", "MEDANTA.NS", "MEDIASSIST.NS", "MEDICAMEQ.NS", "MEDICO.NS", "MEDPLUS.NS", "MEESHO.NS", "MEGASTAR.NS", 
-    "MEIL.NS", "MENNPIS.NS", "MENONBE.NS", "MEP.NS", "MERCANTILE.NS", "MERCURYEV.NS", "METROBRAND.NS", "METROGLOBL.NS", 
-    "METROPOLIS.NS", "MFML.NS", "MFSL.NS", "MGEL.NS", "MGL.NS", "MHLXMIRU.NS", "MHRIL.NS"
-]
-
-
 # SIDEBAR DYNAMIC CONTROLS
 st.sidebar.markdown("## ⚙️ Filter Tuning")
 min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=1, max_value=100, value=10, step=1)
 
-def run_bulletproof_screener(target_turnover_cr):
+# 🔄 STEP 1: DYNAMIC TICKER FETCHING (ALL INDIAN STOCKS REPLACED WITH LIVE NIFTY 500)
+@st.cache_data(ttl=86400) # Cache list for 24 hours to keep app extremely snappy
+def get_live_nse_tickers():
+    """
+    Fetches the constituent list of Nifty 500 directly from the official Nifty Indices database.
+    This eliminates hardcoding and ensures corporate actions (delistings/adds) are handled automatically.
+    """
+    url = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    try:
+        session = requests.Session()
+        response = session.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            df = pd.read_csv(io.BytesIO(response.content))
+            # Safely extract Symbol column and convert to Yahoo Finance format
+            tickers = [f"{str(symbol).strip()}.NS" for symbol in df['Symbol'] if pd.notna(symbol)]
+            return tickers
+        else:
+            st.error("⚠️ NSE Data Endpoint unreachable. Using fallback top anchors.")
+            return ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS"]
+    except Exception as e:
+        st.error(f"⚠️ Live Fetch Error: {str(e)}. Using fallback anchors.")
+        return ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS"]
+
+# 🚀 STEP 2: BULK DOWNLOAD ENGINE WITH CACHING
+@st.cache_data(ttl=14400) # Stock historical data cached for 4 hours
+def bulk_download_market_matrix(stocks_list):
+    """
+    Downloads historical data for the entire stock array parallelly.
+    Uses native multithreading inside yfinance for raw speed.
+    """
+    # 3-Year historical matrix pull
+    data = yf.download(stocks_list, period="3y", progress=False, threads=True, timeout=60)
+    return data
+
+# 🧠 STEP 3: IN-MEMORY MATHEMATICAL SCREENING ENGINE
+def process_cached_matrix(data, tickers_list, target_turnover_cr):
     scanned_results = []
-    status_text = st.empty()
-    progress_bar = st.progress(0)
     
-    # Downloading in small safe chunks to avoid data format breaking
-    chunk_size = 10
-    total_stocks = len(ALL_INDIAN_STOCKS)
-    
-    for i in range(0, total_stocks, chunk_size):
-        batch = ALL_INDIAN_STOCKS[i:i+chunk_size]
-        status_text.markdown(f"⏳ **Processing Market Block:** Stocks {i} to {min(i+chunk_size, total_stocks)}...")
-        progress_bar.progress(min(i / total_stocks, 1.0))
+    if data.empty or not isinstance(data.columns, pd.MultiIndex):
+        return pd.DataFrame()
         
-        try:
-            # Download without group_by to maintain standard pandas multi-indexing schema
-            data = yf.download(batch, period="3y", progress=False, timeout=30)
+    # Extract structural sub-frames instantly to prevent multi-indexing slowdowns inside the loop
+    try:
+        close_matrix = data['Close']
+        high_matrix = data['High']
+        volume_matrix = data['Volume']
+    except KeyError:
+        return pd.DataFrame()
+        
+    for ticker in tickers_list:
+        if ticker not in close_matrix.columns:
+            continue
             
-            if data.empty:
+        try:
+            # Localize specific stock vectors from RAM matrix (Super fast)
+            close_series = close_matrix[ticker].dropna()
+            high_series = high_matrix[ticker].dropna()
+            volume_series = volume_matrix[ticker].dropna()
+            
+            # Absolute structure check for deep 500-day lookback calculation
+            if len(close_series) < 515:
                 continue
                 
-            for ticker in batch:
-                try:
-                    df = pd.DataFrame()
-                    
-                    # Safe Extraction: Handles both multi-ticker and single-ticker fallback responses safely
-                    if isinstance(data.columns, pd.MultiIndex):
-                        if ticker in data['Close'].columns:
-                            df['Close'] = data['Close'][ticker]
-                            df['High'] = data['High'][ticker]
-                            df['Volume'] = data['Volume'][ticker]
-                        else:
-                            continue
-                    else:
-                        df = data[['Close', 'High', 'Volume']].copy()
-                    
-                    df = df.dropna()
-                    
-                    # Absolute Safety Check for multi-year calculations
-                    if len(df) < 515:
-                        continue
-                        
-                    current_close = df['Close'].iloc[-1]
-                    current_volume = df['Volume'].iloc[-1]
-                    prev_close = df['Close'].iloc[-2]
-                    close_20d_ago = df['Close'].iloc[-20]
-                    volume_sma20 = df['Volume'].rolling(20).mean().iloc[-1]
-                    
-                    if prev_close <= 0 or close_20d_ago <= 0:
-                        continue
-                        
-                    # --- FORMULA CALCULATION ---
-                    c1 = current_close >= 20
-                    daily_return = ((current_close - prev_close) / prev_close) * 100
-                    c2 = (daily_return >= 1.0) and (daily_return <= 11.0)
-                    c3 = current_volume > volume_sma20
-                    
-                    return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
-                    c4 = return_20d >= 3.0
-                    
-                    turnover = current_close * current_volume
-                    turnover_cr = turnover / 10000000
-                    c5 = turnover_cr >= target_turnover_cr
-                    
-                    # --- ADVANCED LOOKBACK HIGHS ---
-                    high_series = df['High']
-                    max_2_20d_ago_high = high_series.shift(20).rolling(2).max().iloc[-1]
-                    max_200_31d_ago_high = high_series.shift(31).rolling(200).max().iloc[-1]
-                    c6 = max_2_20d_ago_high >= max_200_31d_ago_high
-                    
-                    max_500_1d_ago_high = high_series.shift(1).rolling(500).max().iloc[-1]
-                    c7 = current_close >= max_500_1d_ago_high
-                    
-                    # If any metric is broken or NaN, skip cleanly
-                    if pd.isna(max_2_20d_ago_high) or pd.isna(max_200_31d_ago_high) or pd.isna(max_500_1d_ago_high):
-                        continue
-                        
-                    if c1 and c2 and c3 and c4 and c5 and c6 and c7:
-                        scanned_results.append({
-                            "Ticker": ticker.replace(".NS", ""),
-                            "Price (₹)": round(current_close, 2),
-                            "Daily Change %": round(daily_return, 2),
-                            "20-Day Change %": round(return_20d, 2),
-                            "Volume": int(current_volume),
-                            "Turnover (Cr)": round(turnover_cr, 2)
-                        })
-                except:
-                    continue
+            current_close = close_series.iloc[-1]
+            current_volume = volume_series.iloc[-1]
+            prev_close = close_series.iloc[-2]
+            close_20d_ago = close_series.iloc[-20]
+            
+            # 20 SMA Volume using modern memory slicing
+            volume_sma20 = volume_series.iloc[-20:].mean() 
+            
+            if prev_close <= 0 or close_20d_ago <= 0:
+                continue
+                
+            # --- FORMULA CONDITIONS MATRICES ---
+            c1 = current_close >= 20
+            
+            daily_return = ((current_close - prev_close) / prev_close) * 100
+            c2 = (1.0 <= daily_return <= 11.0)
+            
+            c3 = current_volume > volume_sma20
+            
+            return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
+            c4 = return_20d >= 3.0
+            
+            turnover_cr = (current_close * current_volume) / 10000000
+            c5 = turnover_cr >= target_turnover_cr
+            
+            # --- ADVANCED LOOKBACK HIGHS FORMULA VALIDATION ---
+            # Max of 2 trading sessions starting from 20 days ago (t-20, t-21)
+            max_2_20d_ago_high = high_series.iloc[-21:-19].max()
+            
+            # Max of 200 trading sessions from 31 days ago (t-31 backwards to t-231)
+            max_200_31d_ago_high = high_series.iloc[-231:-31].max()
+            c6 = max_2_20d_ago_high >= max_200_31d_ago_high
+            
+            # Max high of past 500 sessions excluding today's current high
+            max_500_1d_ago_high = high_series.iloc[-501:-1].max()
+            c7 = current_close >= max_500_1d_ago_high
+            
+            if pd.isna(max_2_20d_ago_high) or pd.isna(max_200_31d_ago_high) or pd.isna(max_500_1d_ago_high):
+                continue
+                
+            if c1 and c2 and c3 and c4 and c5 and c6 and c7:
+                scanned_results.append({
+                    "Ticker": ticker.replace(".NS", ""),
+                    "Price (₹)": round(current_close, 2),
+                    "Daily Change %": round(daily_return, 2),
+                    "20-Day Change %": round(return_20d, 2),
+                    "Volume": int(current_volume),
+                    "Turnover (Cr)": round(turnover_cr, 2)
+                })
         except:
             continue
             
-    progress_bar.progress(1.0)
-    status_text.text("🎉 Full Market Analytics Completed Successfully!")
     return pd.DataFrame(scanned_results)
 
-# SCAN ENGINE TRIGGER
+# 🚦 SCAN ENGINE TRIGGER
 if st.button("🔍 Start Live Broad Market Scan"):
-    with st.spinner("Processing deep high-frequency lookbacks..."):
-        df_final = run_bulletproof_screener(min_turnover_cr)
+    status_msg = st.empty()
+    
+    status_msg.info("⏳ Step 1: Fetching active Nifty 500 tickers dynamically from indices matrix...")
+    live_tickers = get_live_nse_tickers()
+    
+    status_msg.info(f"⚡ Step 2: Running parallel data downloads for {len(live_tickers)} instruments via ThreadPool...")
+    raw_market_data = bulk_download_market_matrix(live_tickers)
+    
+    status_msg.info("⚙️ Step 3: Executing multi-conditional trend lookbacks in-memory...")
+    df_final = process_cached_matrix(raw_market_data, live_tickers, min_turnover_cr)
+    
+    status_msg.empty() # Clear information bar
+    
+    if not df_final.empty:
+        st.success(f"🎯 Boom! Found {len(df_final)} High-Momentum Breakout Stocks:")
+        st.dataframe(df_final, use_container_width=True)
         
-        if not df_final.empty:
-            st.success(f"🎯 Boom! Found {len(df_final)} Breakout Stocks matching your strict rules:")
-            st.dataframe(df_final, use_container_width=True)
+        csv = df_final.to_csv(index=False).encode('utf-8')
+        st.write("---")
+        st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
+    else:
+        st.warning(f"No Data Found. Is criteria par filhal koi stock match nahi ho raha hai. Turnover slider kam karke try karein!")
             
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.write("---")
-            st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
-        else:
-            st.warning(f"No Data Found")
