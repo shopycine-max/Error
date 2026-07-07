@@ -3,24 +3,32 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor
-import datetime
 
-# Page configuration for professional look
+# Page configuration
 st.set_page_config(
     page_title="ERROR09 - Live NSE Stock Scanner",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling to match the dark professional dashboard
-st.markdown(""" <style> .main { background-color: #0d1117; color: #c9d1d9; } .stButton>button { background-color: #238636; color: white; border-radius: 5px; } .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; } h1, h2, h3 { color: #58a6ff; } div.block-container { padding-top: 2rem; } </style> """, unsafe_allow_html=True)
+# Custom Styling
+st.markdown("""
+    <style>
+    .main { background-color: #0d1117; color: #c9d1d9; }
+    .stButton>button { background-color: #238636; color: white; border-radius: 5px; }
+    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
+    h1, h2, h3 { color: #58a6ff; }
+    div.block-container { padding-top: 2rem; }
+    </style>
+""", unsafe_allow_html=True)
 
 st.title("📊 ERROR09 - Live Stock Scanner Dashboard")
 st.caption("Created by Chandan kumar shaw | Powered by Live yFinance Data")
 
 # Sidebar configurations
 st.sidebar.header("⚙️ Scanner Settings")
-index_choice = st.sidebar.selectbox("Select Universe", ["Nifty 500", "Nifty 50", "Nifty Next 50"])
+# "All NSE Stocks" option added here
+index_choice = st.sidebar.selectbox("Select Universe", ["Nifty 500", "Nifty 50", "Nifty Next 50", "All NSE Stocks"])
 run_scan = st.sidebar.button("🚀 Run Live Scan")
 
 @st.cache_data(ttl=3600)
@@ -28,13 +36,25 @@ def load_nifty_symbols(universe_type):
     try:
         if universe_type == "Nifty 50":
             url = "https://archives.nseindia.com/content/indices/ind_nifty50list.csv"
+            df = pd.read_csv(url)
         elif universe_type == "Nifty Next 50":
             url = "https://archives.nseindia.com/content/indices/ind_niftynext50list.csv"
-        else:
+            df = pd.read_csv(url)
+        elif universe_type == "Nifty 500":
             url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+            df = pd.read_csv(url)
+        else:
+            # Fetching ALL listed equities directly from NSE
+            url = "https://archives.nseindia.com/content/equities/EQUITY_L_market_data.csv"
+            df = pd.read_csv(url)
+            # Clean column names (remove spaces)
+            df.columns = df.columns.str.strip()
+            # Filter only main equities (EQ series) to avoid corporate bonds/SME junk
+            df = df[df['SERIES'] == 'EQ']
+            df = df.rename(columns={'SYMBOL': 'Symbol', 'NAME OF COMPANY': 'Company Name'})
+            df['Industry'] = 'NSE Equity'
         
-        df = pd.read_csv(url)
-        df['Ticker'] = df['Symbol'] + ".NS"
+        df['Ticker'] = df['Symbol'].str.strip() + ".NS"
         return df[['Ticker', 'Symbol', 'Company Name', 'Industry']]
     except Exception as e:
         st.error(f"Error fetching symbols from NSE: {e}")
@@ -107,7 +127,6 @@ def process_ticker(ticker_info):
             return None
             
         # 8. Market Cap Check (> 1000 Cr)
-        # Fetching live market cap efficiently only for filtered stocks to maximize performance
         t_meta = yf.Ticker(ticker)
         mcap = t_meta.info.get('marketCap', 0)
         mcap_crores = mcap / 10000000 if mcap else 0
@@ -136,8 +155,8 @@ if run_scan:
     matched_stocks = []
     stock_list = stocks_df.to_dict('records')
     
-    # Using ThreadPoolExecutor for fast parallel live data fetching
-    with ThreadPoolExecutor(max_workers=15) as executor:
+    # Increased max_workers to 25 for handling the large number of total NSE stocks faster
+    with ThreadPoolExecutor(max_workers=25) as executor:
         results = executor.map(process_ticker, stock_list)
         for i, res in enumerate(results):
             progress_bar.progress((i + 1) / len(stock_list))
@@ -150,7 +169,6 @@ if run_scan:
         res_df = pd.DataFrame(matched_stocks)
         res_df.insert(0, 'Sr.', range(1, len(res_df) + 1))
         
-        # Display Metrics
         col1, col2 = st.columns(2)
         col1.metric("Total Stocks Scanned", len(stocks_df))
         col2.metric("Stocks Passed Filters", len(res_df))
@@ -158,21 +176,21 @@ if run_scan:
         st.subheader("📋 Filtered Stocks List")
         st.dataframe(res_df.drop(columns=['Industry']), use_container_width=True, hide_index=True)
         
-        # Download Options
         st.subheader("📥 Export Options")
-        col_csv, col_excel = st.columns(2)
         csv_data = res_df.to_csv(index=False).encode('utf-8')
-        col_csv.download_button("Download CSV", data=csv_data, file_name="scanned_stocks.csv", mime="text/csv")
+        st.download_button("Download CSV", data=csv_data, file_name="scanned_stocks.csv", mime="text/csv")
         
-        # Sector Breakdown Visualization (Matching bottom chart of image)
-        st.subheader("📈 Sector / Industry Distribution")
-        industry_counts = res_df['Industry'].value_counts().reset_index()
-        industry_counts.columns = ['Industry', 'Count']
-        fig = px.bar(industry_counts, x='Industry', y='Count', title="Stocks Count by Sector",
-                     color='Industry', template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+        # Sector Breakdown Chart (Will show 'NSE Equity' for all stocks if complete list is selected)
+        if index_choice != "All NSE Stocks":
+            st.subheader("📈 Sector / Industry Distribution")
+            industry_counts = res_df['Industry'].value_counts().reset_index()
+            industry_counts.columns = ['Industry', 'Count']
+            fig = px.bar(industry_counts, x='Industry', y='Count', title="Stocks Count by Sector",
+                         color='Industry', template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
         
     else:
         st.warning("No stocks matched the criteria at this moment.")
 else:
     st.info("👈 Click on 'Run Live Scan' in the sidebar to fetch real-time data and filter stocks.")
+    
