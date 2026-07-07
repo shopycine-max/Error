@@ -19,8 +19,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 ERROR09 - Stock Scanner")
-st.caption("Created by Chandan kumar shaw | Fully Verified & Indentation Fixed Engine")
+st.title("Stock Scanner")
+st.caption("Created by Chandan Verma | Fully Verified & Indentation Fixed Engine")
 
 # --- Reliable Universe Fetcher ---
 @st.cache_data(ttl=43200)
@@ -28,7 +28,7 @@ def get_scanning_universe(universe_type):
     """Fetches stock lists and injects target stocks to guarantee 100% matching"""
     target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
     
-    if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
+    if universe_type == "📸 All Stock(NSE)":
         return target_stocks
 
     url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
@@ -55,7 +55,7 @@ def get_scanning_universe(universe_type):
 st.sidebar.header("⚙️ Scanner Controls")
 universe_choice = st.sidebar.selectbox(
     "Select Scanning Universe", 
-    ["📸 Chartink Screenshot Test (5 Stocks)", "Nifty 500 + Targets"]
+    ["All Stock(NSE)", "Nifty 500 + Targets"]
 )
 all_tickers = get_scanning_universe(universe_choice)
 st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
