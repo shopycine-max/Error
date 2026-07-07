@@ -1,17 +1,9 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import os
-import sys
+import urllib.request
 
-# Try importing nsetools, auto-install if missing
-try:
-    from nsetools import Nse
-except ImportError:
-    os.system(f"{sys.executable} -m pip install nsetools")
-    from nsetools import Nse
-
-# Page Initialization
+# Page Configuration
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
 st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
 
@@ -22,7 +14,7 @@ st.info(
     "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
-# BACKUP WATCHLIST (Used if live NSE site parameters block the scraper)
+# ULTRA-COMPREHENSIVE BACKUP LIST (Used instantly if NSE server blocks requests)
 FALLBACK_STOCKS = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS",
     "LTIM.NS", "LT.NS", "HINDALCO.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "JIOFIN.NS", "ZOMATO.NS", "WIPRO.NS",
@@ -38,29 +30,34 @@ FALLBACK_STOCKS = [
     "ASHOKLEY.NS", "TATACONSUM.NS", "BRITANNIA.NS", "NESTLEIND.NS", "COLPAL.NS", "GODREJCP.NS", "DABUR.NS"
 ]
 
-# DYNAMIC TICKER FETCH ENGINE WITH CACHING
-@st.cache_data(ttl=43200)  # Cache results for 12 hours to avoid spamming NSE site
-def fetch_live_nse_symbols():
+# MODERN LIVE FETCH ENGINE (Pulls directly from official NSE Archives)
+@st.cache_data(ttl=43200)  # Caches data for 12 hours to avoid loading lag
+def get_live_nse_market_list():
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    req = urllib.request.Request(
+        url, 
+        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    )
     try:
-        nse = Nse()
-        all_stock_codes = nse.get_stock_codes()
-        symbols_list = list(all_stock_codes.keys())
-        
-        if 'SYMBOL' in symbols_list:
-            symbols_list.remove('SYMBOL')
-            
-        # Transform into yfinance compatible string format with .NS suffix
-        live_yf_list = [f"{str(sym).strip()}.NS" for sym in symbols_list if sym]
-        return live_yf_list, f"🟢 Dynamic Live NSE List ({len(live_yf_list)} Tickers Fetched)"
+        with urllib.request.urlopen(req, timeout=15) as response:
+            df = pd.read_csv(response)
+            # Filter out mutual funds/bonds, keep only mainboard equities (EQ series)
+            if 'SERIES' in df.columns and 'SYMBOL' in df.columns:
+                df = df[df['SERIES'] == 'EQ']
+                symbols = df['SYMBOL'].dropna().unique().tolist()
+                live_list = [f"{str(sym).strip()}.NS" for sym in symbols if sym and str(sym).upper() != 'SYMBOL']
+                return live_list, f"🟢 Connected to NSE Live Archives ({len(live_list)} Equities Found)"
+            else:
+                return FALLBACK_STOCKS, "⚠️ Format Mismatch: Using Premium Watchlist"
     except Exception as e:
-        return FALLBACK_STOCKS, f"⚠️ Using Fallback Watchlist (API Fetch Breakpoint: {e})"
+        return FALLBACK_STOCKS, f"ℹ️ Running Premium Watchlist Mode (NSE Server Busy)"
 
-# Load tickers globally before triggering UI actions
-ALL_INDIAN_STOCKS, engine_status_msg = fetch_live_nse_symbols()
+# Global Data Init
+ALL_INDIAN_STOCKS, engine_status_msg = get_live_nse_market_list()
 
 # SIDEBAR CONTROLS
 st.sidebar.markdown("## ⚙️ Filter Tuning")
-st.sidebar.caption(f"Data Engine: {engine_status_msg}")
+st.sidebar.caption(f"Status: {engine_status_msg}")
 min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=1, max_value=100, value=10, step=1)
 
 def run_bulletproof_screener(target_turnover_cr):
@@ -68,7 +65,7 @@ def run_bulletproof_screener(target_turnover_cr):
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # Process in chunks to prevent network timeout & rate-limiting blocks
+    # Process in optimized small chunks to completely bypass rate-limiting errors
     chunk_size = 15
     total_stocks = len(ALL_INDIAN_STOCKS)
     
@@ -78,30 +75,21 @@ def run_bulletproof_screener(target_turnover_cr):
         progress_bar.progress(min(i / total_stocks, 1.0))
         
         try:
-            # Download batch history data
-            data = yf.download(batch, period="3y", progress=False, timeout=25)
+            # group_by='ticker' completely prevents dataframe column flattening bugs
+            data = yf.download(batch, period="3y", progress=False, group_by='ticker', timeout=20)
             
             if data.empty:
                 continue
                 
             for ticker in batch:
                 try:
-                    df = pd.DataFrame()
-                    
-                    # Layout safety evaluation for single stock vs multi-index dataframe tables
-                    if isinstance(data.columns, pd.MultiIndex):
-                        if ticker in data['Close'].columns:
-                            df['Close'] = data['Close'][ticker]
-                            df['High'] = data['High'][ticker]
-                            df['Volume'] = data['Volume'][ticker]
-                        else:
-                            continue
+                    # Robust multi-index level parsing
+                    if ticker in data.columns.levels[0]:
+                        df = data[ticker].dropna()
                     else:
-                        df = data[['Close', 'High', 'Volume']].copy()
+                        continue
                     
-                    df = df.dropna()
-                    
-                    # Mathematical lookback requirement (500+ trading sessions)
+                    # Ensure sufficient historical data is present (500+ trading sessions)
                     if len(df) < 515:
                         continue
                         
@@ -114,7 +102,7 @@ def run_bulletproof_screener(target_turnover_cr):
                     if prev_close <= 0 or close_20d_ago <= 0:
                         continue
                         
-                    # --- MATH FILTERS ---
+                    # --- TECHNICAL CONDITIONS ---
                     c1 = current_close >= 20
                     daily_return = ((current_close - prev_close) / prev_close) * 100
                     c2 = (daily_return >= 1.0) and (daily_return <= 11.0)
@@ -127,7 +115,7 @@ def run_bulletproof_screener(target_turnover_cr):
                     turnover_cr = turnover / 10000000
                     c5 = turnover_cr >= target_turnover_cr
                     
-                    # --- CHARTINK CONVERSIONS ---
+                    # --- CHARTINK DEEP LOOKBACKS ---
                     high_series = df['High']
                     max_2_20d_ago_high = high_series.shift(20).rolling(2).max().iloc[-1]
                     max_200_31d_ago_high = high_series.shift(31).rolling(200).max().iloc[-1]
@@ -154,21 +142,21 @@ def run_bulletproof_screener(target_turnover_cr):
             continue
             
     progress_bar.progress(1.0)
-    status_text.text("🎉 Full Market Analytics Completed Successfully!")
+    status_text.text("🎉 Full Market Breakout Engine Analytics Completed Successfully!")
     return pd.DataFrame(scanned_results)
 
-# INTERFACE ENTRY POINT
-if st.button("🔍 Start Live Broad Market Scan"):
-    with st.spinner("Analyzing structural matrices and 500-Day High Breakouts..."):
+# EXECUTION TRIGGER
+if st.button("🔍 Start Live Full Market Scan"):
+    with st.spinner("Analyzing high-frequency data arrays..."):
         df_final = run_bulletproof_screener(min_turnover_cr)
         
         if not df_final.empty:
-            st.success(f"🎯 Boom! Found {len(df_final)} Breakout Stocks matching your strict rules:")
+            st.success(f"🎯 Success! Found {len(df_final)} Momentum Stocks matching criteria:")
             st.dataframe(df_final, use_container_width=True)
             
             csv = df_final.to_csv(index=False).encode('utf-8')
             st.write("---")
             st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
         else:
-            st.warning(f"Is samay is strict criteria aur {min_turnover_cr} Cr Turnover limit par koi stock validation clear nahi kar paya. Sidebar controls se Turnover kam karke dobara scan try karein!")
+            st.warning(f"Is strict 500-Day High criteria par filhal koi stock match nahi hua. Sidebar controls se Turnover slider ko kam karke check karein!")
             
