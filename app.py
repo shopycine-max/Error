@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor
+import urllib.request
 
 # Page configuration
 st.set_page_config(
@@ -27,29 +28,31 @@ st.caption("Created by Chandan kumar shaw | Powered by Live yFinance Data")
 
 # Sidebar configurations
 st.sidebar.header("⚙️ Scanner Settings")
-# "All NSE Stocks" option added here
 index_choice = st.sidebar.selectbox("Select Universe", ["Nifty 500", "Nifty 50", "Nifty Next 50", "All NSE Stocks"])
 run_scan = st.sidebar.button("🚀 Run Live Scan")
 
 @st.cache_data(ttl=3600)
 def load_nifty_symbols(universe_type):
     try:
+        # Headers added to prevent NSE from blocking the cloud request
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        
         if universe_type == "Nifty 50":
             url = "https://archives.nseindia.com/content/indices/ind_nifty50list.csv"
-            df = pd.read_csv(url)
         elif universe_type == "Nifty Next 50":
             url = "https://archives.nseindia.com/content/indices/ind_niftynext50list.csv"
-            df = pd.read_csv(url)
-        elif universe_type == "Nifty 500":
+        elif universe_type == "Nifty00":
             url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-            df = pd.read_csv(url)
         else:
-            # Fetching ALL listed equities directly from NSE
             url = "https://archives.nseindia.com/content/equities/EQUITY_L_market_data.csv"
-            df = pd.read_csv(url)
-            # Clean column names (remove spaces)
-            df.columns = df.columns.str.strip()
-            # Filter only main equities (EQ series) to avoid corporate bonds/SME junk
+        
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            df = pd.read_csv(response)
+            
+        df.columns = df.columns.str.strip()
+        
+        if universe_type == "All NSE Stocks":
             df = df[df['SERIES'] == 'EQ']
             df = df.rename(columns={'SYMBOL': 'Symbol', 'NAME OF COMPANY': 'Company Name'})
             df['Industry'] = 'NSE Equity'
@@ -58,7 +61,6 @@ def load_nifty_symbols(universe_type):
         return df[['Ticker', 'Symbol', 'Company Name', 'Industry']]
     except Exception as e:
         st.error(f"Error fetching symbols from NSE: {e}")
-        # Fallback minimal list if NSE link fails
         fallback_data = {
             'Ticker': ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS'],
             'Symbol': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'],
@@ -74,12 +76,10 @@ def process_ticker(ticker_info):
     industry = ticker_info['Industry']
     
     try:
-        # Download historical data (approx 2.5 years to safely get 500 trading days)
         df = yf.download(ticker, period="3y", progress=False, group_by='ticker')
         if df.empty or len(df) < 501:
             return None
             
-        # Clean MultiIndex columns if any
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.droplevel(0)
             
@@ -87,46 +87,38 @@ def process_ticker(ticker_info):
         high = df['High']
         volume = df['Volume']
         
-        # 1. Daily Close >= 20
         current_close = float(close.iloc[-1])
         if current_close < 20:
             return None
             
-        # 2. Daily % Change between 1% and 11%
         prev_close = float(close.iloc[-2])
         pct_change = ((current_close - prev_close) / prev_close) * 100
         if not (1 <= pct_change <= 11):
             return None
             
-        # 3. Daily Volume > 20 SMA of Volume
         current_volume = float(volume.iloc[-1])
         volume_sma20 = float(volume.rolling(20).mean().iloc[-1])
         if current_volume <= volume_sma20:
             return None
             
-        # 4. 20 days ago returns >= 3%
         close_20d_ago = float(close.iloc[-21])
         return_20d = ((current_close - close_20d_ago) / close_20d_ago) * 100
         if return_20d < 3:
             return None
             
-        # 5. Daily Close * Daily Volume > 500,000,000 (50 Crores turnover)
         turnover = current_close * current_volume
         if turnover <= 500000000:
             return None
             
-        # 6. Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High)
         max_2_20d_ago = float(high.shift(20).rolling(2).max().iloc[-1])
         max_200_31d_ago = float(high.shift(31).rolling(200).max().iloc[-1])
         if max_2_20d_ago < max_200_31d_ago:
             return None
             
-        # 7. Daily Close >= 1 day ago Max(500, High) [500-day Breakout]
         max_500_1d_ago = float(high.shift(1).rolling(500).max().iloc[-1])
         if current_close < max_500_1d_ago:
             return None
             
-        # 8. Market Cap Check (> 1000 Cr)
         t_meta = yf.Ticker(ticker)
         mcap = t_meta.info.get('marketCap', 0)
         mcap_crores = mcap / 10000000 if mcap else 0
@@ -155,7 +147,6 @@ if run_scan:
     matched_stocks = []
     stock_list = stocks_df.to_dict('records')
     
-    # Increased max_workers to 25 for handling the large number of total NSE stocks faster
     with ThreadPoolExecutor(max_workers=25) as executor:
         results = executor.map(process_ticker, stock_list)
         for i, res in enumerate(results):
@@ -180,7 +171,6 @@ if run_scan:
         csv_data = res_df.to_csv(index=False).encode('utf-8')
         st.download_button("Download CSV", data=csv_data, file_name="scanned_stocks.csv", mime="text/csv")
         
-        # Sector Breakdown Chart (Will show 'NSE Equity' for all stocks if complete list is selected)
         if index_choice != "All NSE Stocks":
             st.subheader("📈 Sector / Industry Distribution")
             industry_counts = res_df['Industry'].value_counts().reset_index()
