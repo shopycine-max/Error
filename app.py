@@ -59,7 +59,7 @@ def run_bulletproof_screener(target_turnover_cr):
         progress_bar.progress(min(i / total_stocks, 1.0))
         
         try:
-            # group_by='ticker' completely prevents dataframe column flattening bugs
+            # group_by='ticker' downloads structural data panels
             data = yf.download(batch, period="3y", progress=False, group_by='ticker', timeout=20)
             
             if data.empty:
@@ -67,10 +67,20 @@ def run_bulletproof_screener(target_turnover_cr):
                 
             for ticker in batch:
                 try:
-                    # Robust multi-index parsing
-                    if ticker in data.columns.levels[0]:
-                        df = data[ticker].dropna()
+                    df = pd.DataFrame()
+                    
+                    # --- FIXED: Ultra-Safe Multi-Format Column Parser ---
+                    if isinstance(data.columns, pd.MultiIndex):
+                        if ticker in data.columns.get_level_values(0):
+                            df = data[ticker].dropna()
+                        else:
+                            continue
                     else:
+                        # Fallback: If only 1 ticker was returned in the batch data array
+                        df = data.dropna()
+                    
+                    # Ensure all required matrix columns are present
+                    if df.empty or not all(col in df.columns for col in ['Close', 'High', 'Volume']):
                         continue
                     
                     # Ensure sufficient historical data is present (500+ trading sessions)
@@ -146,3 +156,4 @@ if st.button("🔍 Start Live Full Market Scan"):
                 st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
             else:
                 st.warning(f"Is strict 500-Day High criteria par filhal koi stock match nahi hua. Sidebar controls se Turnover slider ko kam karke check karein!")
+                    
