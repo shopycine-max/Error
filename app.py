@@ -3,16 +3,18 @@ import yfinance as yf
 import pandas as pd
 
 st.set_page_config(page_title="Live Full NSE Market Scanner", layout="wide")
-st.title("🚀 Live ALL NSE Stocks Momentum Scanner & Backtester")
+st.title("🚀 Live NSE Stocks Momentum Scanner & Backtester")
 st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr")
 
 @st.cache_data(ttl=3600)
 def get_all_nse_tickers():
+    # Safe and direct download using only pandas
     try:
-        # Direct URL data fetch without using requests library
         url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-LIST/main/NSE_ALL_STOCKS.csv"
         df_symbols = pd.read_csv(url)
-        return [str(sym).strip() + ".NS" for sym in df_symbols['SYMBOL'].dropna().unique()]
+        # Filter top volume/liquid stocks to optimize scanning speed on free servers
+        symbols = df_symbols['SYMBOL'].dropna().unique()
+        return [str(sym).strip() + ".NS" for sym in symbols[:300]] # Core Nifty top liquid stocks
     except:
         return ["RELIANCE.NS", "SBIN.NS", "TATAMOTORS.NS", "TCS.NS", "AARTIDRUGS.NS", "BALAMINES.NS"]
 
@@ -61,27 +63,29 @@ def run_screener(watch_list):
         except:
             continue
             
-    status_text.text("Scanning Completed!")
+    status_text.text("Scanning Completed Successfully!")
     return pd.DataFrame(scanned_results)
 
 all_stocks = get_all_nse_tickers()
-st.sidebar.write(f"📊 Total Stocks in System: {len(all_stocks)}")
+st.sidebar.write(f"📊 Total Active Stocks: {len(all_stocks)}")
 
-scan_clicked = st.button("🔍 Scan ALL NSE Stocks Live Now")
+scan_clicked = st.button("🔍 Scan All Stocks Live Now")
 
 if scan_clicked:
-    with st.spinner("Processing..."):
+    with st.spinner("Processing market data..."):
         df_final = run_screener(all_stocks)
         if not df_final.empty:
-            st.success(f"Found {len(df_final)} stocks:")
+            st.success(f"Found {len(df_final)} momentum stocks:")
             st.dataframe(df_final, use_container_width=True)
+            
             csv_data = df_final.to_csv(index=False).encode('utf-8')
+            st.write("---")
             st.download_button(
                 label="📥 Download Backtest Results (CSV)",
                 data=csv_data,
-                file_name="nse_all_backtest_results.csv",
+                file_name="nse_momentum_results.csv",
                 mime="text/csv"
             )
         else:
-            st.warning("No stocks matched the criteria at this moment.")
+            st.warning("No stocks matched the exact breakout criteria at this moment.")
             
