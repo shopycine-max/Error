@@ -14,24 +14,8 @@ st.info(
     "Daily Close >= 1 day ago Max(500, Daily High)"
 )
 
-# ULTRA-COMPREHENSIVE BACKUP LIST (Used instantly if NSE server blocks requests)
-FALLBACK_STOCKS = [
-    "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS",
-    "LTIM.NS", "LT.NS", "HINDALCO.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "JIOFIN.NS", "ZOMATO.NS", "WIPRO.NS",
-    "HCLTECH.NS", "TECHM.NS", "COFORGE.NS", "PERSISTENT.NS", "MPHASIS.NS", "AXISBANK.NS", "KOTAKBANK.NS",
-    "NTPC.NS", "POWERGRID.NS", "ONGC.NS", "COALINDIA.NS", "IOC.NS", "BPCL.NS", "GAIL.NS", "ADANIENT.NS",
-    "ADANIPORTS.NS", "ADANIPOWER.NS", "HAL.NS", "BEL.NS", "COCHINSHIP.NS", "MAZDOCK.NS", "VEDL.NS", "TATAPOWER.NS",
-    "SUZLON.NS", "NBCC.NS", "HFCL.NS", "IFCI.NS", "SJVN.NS", "NHPC.NS", "IDFCFIRSTB.NS", "PNB.NS", "CANBK.NS",
-    "BOB.NS", "YESBANK.NS", "DLF.NS", "LICHSGFIN.NS", "BAJFINANCE.NS", "LIC.NS", "PAYTM.NS", "NYKAA.NS",
-    "IRFC.NS", "RVNL.NS", "IRCON.NS", "RAILTEL.NS", "TEXRAIL.NS", "TITAGARH.NS", "BHEL.NS", "BDL.NS", 
-    "GRSE.NS", "BEML.NS", "JINDALSTEL.NS", "JSWSTEEL.NS", "SUNPHARMA.NS", "CIPLA.NS", "DRREDDY.NS",
-    "APOLLOHOSP.NS", "DIVISLAB.NS", "TITAN.NS", "ASIANPAINT.NS", "BERGEPAINT.NS", "PIDILITIND.NS", "GRASIM.NS",
-    "ULTRACEMCO.NS", "ACC.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "BAJAJ-AUTO.NS", "M&M.NS", "MARUTI.NS",
-    "ASHOKLEY.NS", "TATACONSUM.NS", "BRITANNIA.NS", "NESTLEIND.NS", "COLPAL.NS", "GODREJCP.NS", "DABUR.NS"
-]
-
-# MODERN LIVE FETCH ENGINE (Pulls directly from official NSE Archives)
-@st.cache_data(ttl=43200)  # Caches data for 12 hours to avoid loading lag
+# 100% DYNAMIC LIVE FETCH ENGINE (Direct from Official NSE Archives)
+@st.cache_data(ttl=43200)  # Caches data for 12 hours to speed up subsequent reloads
 def get_live_nse_market_list():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     req = urllib.request.Request(
@@ -41,18 +25,18 @@ def get_live_nse_market_list():
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
             df = pd.read_csv(response)
-            # Filter out mutual funds/bonds, keep only mainboard equities (EQ series)
+            # Filter mainboard equities (EQ series) and drop derivatives/mutual funds rows
             if 'SERIES' in df.columns and 'SYMBOL' in df.columns:
                 df = df[df['SERIES'] == 'EQ']
                 symbols = df['SYMBOL'].dropna().unique().tolist()
                 live_list = [f"{str(sym).strip()}.NS" for sym in symbols if sym and str(sym).upper() != 'SYMBOL']
                 return live_list, f"🟢 Connected to NSE Live Archives ({len(live_list)} Equities Found)"
             else:
-                return FALLBACK_STOCKS, "⚠️ Format Mismatch: Using Premium Watchlist"
+                return [], "⚠️ Format Mismatch: CSV structure on NSE server changed."
     except Exception as e:
-        return FALLBACK_STOCKS, f"ℹ️ Running Premium Watchlist Mode (NSE Server Busy)"
+        return [], f"🔴 Live Fetch Failed: {e}. Please check your internet or try again later."
 
-# Global Data Init
+# Global Data Initialization
 ALL_INDIAN_STOCKS, engine_status_msg = get_live_nse_market_list()
 
 # SIDEBAR CONTROLS
@@ -65,7 +49,7 @@ def run_bulletproof_screener(target_turnover_cr):
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # Process in optimized small chunks to completely bypass rate-limiting errors
+    # Process in optimized small chunks to completely bypass Yahoo Finance rate-limiting errors
     chunk_size = 15
     total_stocks = len(ALL_INDIAN_STOCKS)
     
@@ -83,7 +67,7 @@ def run_bulletproof_screener(target_turnover_cr):
                 
             for ticker in batch:
                 try:
-                    # Robust multi-index level parsing
+                    # Robust multi-index parsing
                     if ticker in data.columns.levels[0]:
                         df = data[ticker].dropna()
                     else:
@@ -147,16 +131,18 @@ def run_bulletproof_screener(target_turnover_cr):
 
 # EXECUTION TRIGGER
 if st.button("🔍 Start Live Full Market Scan"):
-    with st.spinner("Analyzing high-frequency data arrays..."):
-        df_final = run_bulletproof_screener(min_turnover_cr)
-        
-        if not df_final.empty:
-            st.success(f"🎯 Success! Found {len(df_final)} Momentum Stocks matching criteria:")
-            st.dataframe(df_final, use_container_width=True)
+    if not ALL_INDIAN_STOCKS:
+        st.error("❌ Scan break ho gaya kyunki live NSE server se stock list fetch nahi ho saki. Kripya thodi der baad page refresh karke try karein.")
+    else:
+        with st.spinner("Analyzing high-frequency data arrays across all dynamic NSE listings..."):
+            df_final = run_bulletproof_screener(min_turnover_cr)
             
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.write("---")
-            st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
-        else:
-            st.warning(f"Is strict 500-Day High criteria par filhal koi stock match nahi hua. Sidebar controls se Turnover slider ko kam karke check karein!")
-            
+            if not df_final.empty:
+                st.success(f"🎯 Success! Found {len(df_final)} Momentum Stocks matching criteria:")
+                st.dataframe(df_final, use_container_width=True)
+                
+                csv = df_final.to_csv(index=False).encode('utf-8')
+                st.write("---")
+                st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
+            else:
+                st.warning(f"Is strict 500-Day High criteria par filhal koi stock match nahi hua. Sidebar controls se Turnover slider ko kam karke check karein!")
