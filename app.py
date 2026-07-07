@@ -19,7 +19,7 @@ st.info(
 st.sidebar.markdown("## ⚙️ Filter Tuning")
 min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=1, max_value=100, value=10, step=1)
 
-# 🔄 STEP 1: DYNAMIC TICKER FETCHING (ALL INDIAN STOCKS REPLACED WITH LIVE NIFTY 500)
+# 🔄 STEP 1: DYNAMIC TICKER FETCHING (ALL INDIAN STOCKS REPLACED WITH LIVE NSE
 @st.cache_data(ttl=86400) # Cache list for 24 hours to keep app extremely snappy
 def get_live_nse_tickers():
     """
