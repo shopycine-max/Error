@@ -99,5 +99,5 @@ def process_ticker(ticker_info):
         if df.empty or len(df) < 501:
             return None
             
-        if isinstance(df.columns, pd.Multi)':'
+        if isinstance(df.columns, pd.Multi):
                       
