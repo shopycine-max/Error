@@ -2,8 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-st.set_page_config(page_title="Live Momentum Scanner", layout="wide")
-st.title("🚀 Live Momentum Buy Signal Scanner")
+st.set_page_config(page_title="Live Stock Scanner", layout="wide")
+st.title("🚀 Live Stock Scanner")
 st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr | Multi-Breakout")
 
 # Aap yahan apni marzi se aur bhi naye tickers (.NS ke saath) jod sakte hain
