@@ -328,8 +328,6 @@ ALL_INDIAN_STOCKS = [
     "ZSARACOM.NS", "ZUARI.NS", "ZUARIIND.NS", "ZYDUSLIFE.NS", "ZYDUSWELL.NS", "TIPS.NS"
 ]
 
-]
-
 # SIDEBAR DYNAMIC CONTROLS
 st.sidebar.markdown("## ⚙️ Filter Tuning")
 min_turnover_cr = st.sidebar.slider("Minimum Turnover (in Crores)", min_value=1, max_value=100, value=10, step=1)
