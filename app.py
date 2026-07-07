@@ -19,8 +19,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 ERROR09 - Chartink Cloned Live Dashboard")
-st.caption("Created by Chandan kumar shaw | Fully Verified & Indentation Fixed Engine")
+st.title("🚀 Stock Scanner")
+st.caption("Created by Chandan Verma | Fully Verified & Indentation Fixed Engine")
 
 # --- Reliable Universe Fetcher ---
 @st.cache_data(ttl=43200)
