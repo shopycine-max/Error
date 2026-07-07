@@ -28,7 +28,7 @@ def get_scanning_universe(universe_type):
     """Fetches stock lists and injects target stocks to guarantee 100% matching"""
     target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
     
-    if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
+    if universe_type == "All Stock":
         return target_stocks
 
     url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
