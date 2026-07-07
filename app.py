@@ -64,27 +64,39 @@ def run_bulletproof_screener(target_turnover_cr):
             
             if data.empty:
                 continue
+            
+            # 🔥 THE FIX: FLATTEN MULTI-INDEX INTO PLAIN TEXT STRINGS IMMEDIATELY
+            if isinstance(data.columns, pd.MultiIndex):
+                new_cols = []
+                for col in data.columns:
+                    ticker_part = col[0] if col[0] in batch else col[1]
+                    metric_part = col[1] if col[0] in batch else col[0]
+                    new_cols.append(f"{ticker_part}_{metric_part}")
+                data.columns = new_cols
                 
             for ticker in batch:
                 try:
                     df = pd.DataFrame()
                     
-                    # --- FIXED: Ultra-Safe Multi-Format Column Parser ---
-                    if isinstance(data.columns, pd.MultiIndex):
-                        if ticker in data.columns.get_level_values(0):
-                            df = data[ticker].dropna()
-                        else:
-                            continue
-                    else:
-                        # Fallback: If only 1 ticker was returned in the batch data array
-                        df = data.dropna()
+                    # Target column strings explicitly mapped
+                    close_col = f"{ticker}_Close"
+                    high_col = f"{ticker}_High"
+                    volume_col = f"{ticker}_Volume"
                     
-                    # Ensure all required matrix columns are present
-                    if df.empty or not all(col in df.columns for col in ['Close', 'High', 'Volume']):
+                    if close_col in data.columns:
+                        df = pd.DataFrame({
+                            'Close': data[close_col],
+                            'High': data[high_col],
+                            'Volume': data[volume_col]
+                        }).dropna()
+                    elif 'Close' in data.columns and len(batch) == 1:
+                        # Fallback if yfinance returns single index array directly
+                        df = data[['Close', 'High', 'Volume']].dropna()
+                    else:
                         continue
                     
                     # Ensure sufficient historical data is present (500+ trading sessions)
-                    if len(df) < 515:
+                    if df.empty or len(df) < 515:
                         continue
                         
                     current_close = df['Close'].iloc[-1]
@@ -156,4 +168,4 @@ if st.button("🔍 Start Live Full Market Scan"):
                 st.download_button("📥 Download Report (CSV)", data=csv, file_name="nse_breakouts.csv")
             else:
                 st.warning(f"Is strict 500-Day High criteria par filhal koi stock match nahi hua. Sidebar controls se Turnover slider ko kam karke check karein!")
-                    
+                
