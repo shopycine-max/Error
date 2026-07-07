@@ -13,7 +13,8 @@ import pandas as pd
 
 st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
 st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
-st.write("Formula Parameters: Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50 Cr")
+st.write("Formula Parameters: Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr |  Daily Close -  (  20 days ago Close ) /  20 days ago Close *  100 >=  3  |  Daily Max ( 2 ,  20 days ago High ) >=  Daily Max ( 200 ,  31 days ago High )  |  Daily Close >=  1 day ago Max ( 500 ,  Daily High")
+  ")
 
 # PRE-MAPPED HIGH MOMENTUM & BROAD MARKET LIST
 ALL_INDIAN_STOCKS = [
