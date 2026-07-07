@@ -3,10 +3,10 @@ import pandas as pd
 import yfinance as yf
 
 # Page Initialization
-st.set_page_config(page_title="NSE Pro Market Scanner", layout="wide")
-st.title("🚀 LIVE NSE BREAKOUT ENGINE (CHARTINK STYLE)")
+st.set_page_config(page_title="All time high", layout="wide")
+st.title("🚀 Stock Scanner")
 
-st.write("### 📊 Active Formula Engine:")
+st.write("### 📊 Active Stock:")
 st.info(
     "Price >= 20 | Daily Return 1% to 11% | Volume > 20 SMA | 20-Day Return >= 3% | Turnover > 50Cr | "
     "Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High) | "
