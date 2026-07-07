@@ -157,5 +157,5 @@ if run_scan:
     progress_bar = st.progress(0)
     
     matched_stocks = []
-    stock_list = stocks_df.to_dict('
+    stock_list = stocks_df.to_dict
     
