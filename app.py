@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
 
 st.set_page_config(page_title="Live Full NSE Market Scanner", layout="wide")
 st.title("🚀 Live ALL NSE Stocks Momentum Scanner & Backtester")
@@ -10,6 +9,7 @@ st.write("Formula: Price >= 20 | Return 1-11% | Volume > SMA20 | Turnover > 50Cr
 @st.cache_data(ttl=3600)
 def get_all_nse_tickers():
     try:
+        # Direct URL data fetch without using requests library
         url = "https://raw.githubusercontent.com/anirbanghoshsbi/NSE-LIST/main/NSE_ALL_STOCKS.csv"
         df_symbols = pd.read_csv(url)
         return [str(sym).strip() + ".NS" for sym in df_symbols['SYMBOL'].dropna().unique()]
