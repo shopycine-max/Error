@@ -428,7 +428,7 @@ def run_bulletproof_screener(target_turnover_cr):
     return pd.DataFrame(scanned_results)
 
 # SCAN ENGINE TRIGGER
-if st.button("🔍 Start Live Broad Market Scan"):
+if st.button("🔍 Scan"):
     with st.spinner("Processing deep high-frequency lookbacks..."):
         df_final = run_bulletproof_screener(min_turnover_cr)
         
