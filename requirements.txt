@@ -1,8 +1,7 @@
 websocket-client
-requests
 streamlit
 pandas
 yfinance 
-plotly.graph_objects 
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+graph_objects 
+ThreadPoolExecutor
+requests
