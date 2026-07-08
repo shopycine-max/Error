@@ -21,7 +21,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: RSI, EMA Trend, & Volume Shock Filters Added for Next-Day Momentum")
+st.caption("Ultimate Engine: RSI, Volume Shock, Price Action (No Wicks), 200-SMA & Auto-Targets")
 
 # --- Reliable Universe Fetcher ---
 @st.cache_data(ttl=43200)
@@ -83,7 +83,7 @@ def process_market_analytics(tickers, mode="live"):
             else:
                 df = data.dropna(subset=['Close']).copy()
 
-            if len(df) < 40: continue
+            if len(df) < 200: continue # Need at least 200 days for SMA
 
             # --- Base Metrics ---
             df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -91,8 +91,10 @@ def process_market_analytics(tickers, mode="live"):
             df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
             df['Turnover'] = df['Close'] * df['Volume']
             
-            # --- PRO UPGRADES: RSI & EMA ---
+            # --- PRO UPGRADES: RSI, EMA, SMA & Price Action ---
             df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+            df['SMA_200'] = df['Close'].rolling(200).mean() # Long Term Bull Filter
+            
             delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -104,32 +106,45 @@ def process_market_analytics(tickers, mode="live"):
             df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(500, min_periods=1).max()
             df['Next_Day_Return'] = df['Close'].shift(-1).pct_change() * 100
 
-            # --- UPGRADED Formula Evaluator ---
+            # --- ULTIMATE Formula Evaluator ---
             cond1 = df['Close'] >= 20
             cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 11.0)
-            cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) # Institutional Volume
+            cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
             cond4 = df['Return_20d'] >= 3.0
             cond5 = df['Turnover'] > 500000000
             cond6 = df['Max_2_High_20_Ago'] >= df['Max_200_High_31_Ago']
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
-            cond8 = df['RSI'] >= rsi_filter # Trend Strength
-            cond9 = df['Close'] > df['EMA_20'] # Price above 20 EMA
+            cond8 = df['RSI'] >= rsi_filter
+            cond9 = df['Close'] > df['EMA_20']
+            
+            # NEW FILTERS
+            cond10 = df['Close'] > df['SMA_200'] # Must be in a Long-term Uptrend
+            # Price Action: Close must be in the top 30% of today's candle (No Bearish Rejections)
+            cond11 = df['Close'] >= (df['High'] - (df['High'] - df['Low']) * 0.3) 
 
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7 & cond8 & cond9
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7 & cond8 & cond9 & cond10 & cond11
 
-            # --- Fixed live mode block ---
             if mode == "live" and df['Signal'].iloc[-1]:
                 vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
+                
+                # --- Auto Trade Setup Calculation ---
+                ltp = df['Close'].iloc[-1]
+                sl = df['Low'].iloc[-1] * 0.99 # SL is 1% below today's breakout low
+                risk = ltp - sl
+                target1 = ltp + (risk * 1.5) # 1:1.5 Risk Reward
+                target2 = ltp + (risk * 2.5) # 1:2.5 Risk Reward
+
                 results.append({
                     "Symbol": ticker.replace(".NS", ""),
-                    "LTP (₹)": round(df['Close'].iloc[-1], 2),
-                    "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
+                    "LTP (₹)": round(ltp, 2),
+                    "Target 1 (₹)": round(target1, 2),
+                    "Target 2 (₹)": round(target2, 2),
+                    "Stop Loss (₹)": round(sl, 2),
                     "RSI": round(df['RSI'].iloc[-1], 2),
                     "Vol Spike (x)": round(vol_spike, 1),
-                    "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2) # Custom Momentum Score
+                    "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
                 })
                 
-            # --- Fixed backtest mode block ---
             elif mode == "backtest":
                 history_slice = df.iloc[-44:-1] 
                 triggers = history_slice[history_slice['Signal'] == True]
@@ -153,10 +168,12 @@ with tab1:
         res_df = process_market_analytics(all_tickers, mode="live")
         
         if not res_df.empty:
-            res_df = res_df.sort_values(by="Score", ascending=False) # Rank by best momentum
+            res_df = res_df.sort_values(by="Score", ascending=False)
             res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-            st.success(f"🎉 Success! Found {len(res_df)} high-probability stocks.")
-            st.dataframe(res_df, use_container_width=True, hide_index=True)
+            st.success(f"🎉 Success! Found {len(res_df)} high-probability actionable stocks.")
+            
+            # Use dataframe styling to highlight buy/sell zones
+            st.dataframe(res_df.style.format(precision=2).background_gradient(subset=['Score'], cmap='Greens'), use_container_width=True, hide_index=True)
             
             # Interactive Chart for the top stock
             top_stock = res_df.iloc[0]['Symbol']
@@ -164,9 +181,14 @@ with tab1:
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
-                fig = go.Figure(data=[go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'])])
+                fig = go.Figure(data=[go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name='Price')])
                 fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange'), name='EMA 20'))
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
+                
+                # Add Target and Stoploss lines to the chart
+                fig.add_hline(y=res_df.iloc[0]['Target 1 (₹)'], line_dash="dot", line_color="green", annotation_text="Target 1")
+                fig.add_hline(y=res_df.iloc[0]['Stop Loss (₹)'], line_dash="dot", line_color="red", annotation_text="Stop Loss")
+                
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis with Trade Levels", height=600)
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Koi stock match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
@@ -195,4 +217,4 @@ with tab2:
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
             st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
-    
+                
