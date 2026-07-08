@@ -22,30 +22,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: Multi-Link Fallback, Cache Cleared & Full Market Scan")
+st.caption("Engine Upgraded: Pure Live NSE Universe Fetcher (No Test Stocks)")
 
-# --- NAYA ROBUST UNIVERSE FETCHER (Ab hamesha saare stocks aayenge) ---
+# --- PURE LIVE UNIVERSE FETCHER (No Hardcoded 5 Stocks) ---
 @st.cache_data(ttl=10800, show_spinner=False)
-def get_full_market_universe(universe_type):
-    # Yeh 5 stocks sirf Test/Demo mode ke liye hain
-    test_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
-    
-    # Agar user jaan-bujh kar sirf 5 stock wala option chune
-    if "Chartink" in universe_type:
-        return test_stocks
-
-    # 3 Alag-alag URLs ka backup system (Ek fail toh dusra pass)
+def get_pure_live_universe():
+    # Live NSE data sources (Official aur highly reliable automatic repositories)
     csv_urls = [
-        "https://raw.githubusercontent.com/anirban-m/indian-stock-market-datasets/main/ind_niftytotalmarket_list.csv",
-        "https://raw.githubusercontent.com/sanjitk/nse-stocks-list/master/nse_stocks.csv",
-        "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+        "https://archives.nseindia.com/content/equities/EQUITY_L.csv", # 1. Official Live NSE List
+        "https://raw.githubusercontent.com/anirban-m/indian-stock-market-datasets/main/ind_niftytotalmarket_list.csv", # 2. Live Backup Mirror
+        "https://raw.githubusercontent.com/sanjitk/nse-stocks-list/master/nse_stocks.csv" # 3. Secondary Backup Mirror
     ]
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
     
-    # Code bari-bari har link try karega
     for url in csv_urls:
         try:
             response = requests.get(url, headers=headers, timeout=12)
@@ -53,6 +45,7 @@ def get_full_market_universe(universe_type):
                 df = pd.read_csv(io.StringIO(response.text))
                 df.columns = df.columns.str.strip().str.upper()
                 
+                # Dynamic column mapping for Symbol/Ticker
                 sym_col = None
                 for col in df.columns:
                     if 'SYMBOL' in col or 'TICKER' in col:
@@ -61,27 +54,27 @@ def get_full_market_universe(universe_type):
                         
                 if sym_col:
                     nse_tickers = [str(sym).strip() + ".NS" for sym in df[sym_col].dropna() if len(str(sym).strip()) > 1]
-                    # Agar list mein 200 se zyada stocks hain, tabhi usko real list manega
+                    # Agar list sahi se download hui hai toh return karega
                     if len(nse_tickers) > 200: 
-                        return list(set(nse_tickers + test_stocks))
+                        return list(set(nse_tickers))
         except Exception:
-            continue # Ek fail hua toh skip karke agla link try karo
+            continue # Agar ek link down hai toh turant agla check karega
 
-    # Agar kismat kharab hui aur teeno link block ho gaye, toh kam se kam Top 50 stocks dega (Sirf 5 par nahi atakega)
-    nifty_backup = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "HINDUNILVR.NS", "LT.NS", "BAJFINANCE.NS", "TATAMOTORS.NS", "SUNPHARMA.NS", "MARUTI.NS", "KOTAKBANK.NS", "AXISBANK.NS", "NTPC.NS", "ONGC.NS", "TATASTEEL.NS", "ADANIENT.NS", "COALINDIA.NS", "BAJAJFINSV.NS", "M&M.NS", "ASIANPAINT.NS", "TITAN.NS"]
-    
-    return list(set(nifty_backup + test_stocks))
+    # Extreme safety fallback (Sirf tab chalega agar aapka internet completely down ho)
+    return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS"]
 
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
-universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["🌐 All Indian Stocks (NSE EQ)", "📸 Chartink Screenshot Test (5 Stocks)"])
+st.sidebar.info("🌐 **Universe Active:** All Live Indian Stocks (NSE EQ)")
+
+# Filters
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
 
-# Naye function ka istemal
-all_tickers = get_full_market_universe(universe_choice)
-st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
+# Load pure live tickers
+all_tickers = get_pure_live_universe()
+st.sidebar.write(f"Total Live Stocks Loaded: **{len(all_tickers)}**")
 
 # --- App Navigation Tabs ---
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
@@ -165,7 +158,7 @@ def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    st.info(f"⚡ Downloading 4-Year historical data for {len(tickers)} stocks from Yahoo Finance...")
+    st.info(f"⚡ Downloading 4-Year historical live data for {len(tickers)} stocks from Yahoo Finance...")
     
     try:
         raw_data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
@@ -213,7 +206,7 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Koi stock match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
+            st.warning("Koi stock criteria match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
 
 # --- TAB 2: Chartink Style Backtest View ---
 with tab2:
@@ -238,7 +231,5 @@ with tab2:
             
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
-        else:
-            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
+            st.
         
