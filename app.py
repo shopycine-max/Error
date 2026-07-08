@@ -453,7 +453,7 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Pure Indian market mein aaj is exact strict criteria par koi breakout stock match nahi hua. Aap filters ko halka sa adjust kar sakte hain.")
+            st.warning("No Data Found.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
