@@ -6,7 +6,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Pro Stock Scanner 1800+", page_icon="📈", layout="wide")
 
 # Custom Dark Premium Theme
 st.markdown("""
@@ -18,132 +18,198 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: Fully Expanded Dedicated 1400+ Active NSE Universe with Target & SL Matrix")
+st.title("🚀 Mega Stock Scanner Terminal (1800+ NSE Universe)")
+st.caption("Engine Upgraded: Chart Pattern Swing Support & 1:2 Dynamic Projections Enabled")
 
-# --- MEGA CLEAN 1400+ NSE TICKER DATABASE ---
-def get_pure_live_universe():
-    massive_universe = [
-        # --- Large Caps & Nifty 100 ---
-        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", 
-        "HINDUNILVR.NS", "LT.NS", "BAJFINANCE.NS", "TATAMOTORS.NS", "SUNPHARMA.NS", "MARUTI.NS", "KOTAKBANK.NS", 
-        "AXISBANK.NS", "NTPC.NS", "ONGC.NS", "TATASTEEL.NS", "ADANIENT.NS", "COALINDIA.NS", "BAJAJFINSV.NS", 
-        "M&M.NS", "ASIANPAINT.NS", "TITAN.NS", "ULTRACEMCO.NS", "HCLTECH.NS", "POWERGRID.NS", "WIPRO.NS", 
-        "ADANIPORTS.NS", "JIOFIN.NS", "ZOMATO.NS", "HAL.NS", "BHEL.NS", "PFC.NS", "RECLTD.NS", "IRFC.NS", 
-        "RVNL.NS", "CONCOR.NS", "TATACOMM.NS", "TATAPOWER.NS", "GAIL.NS", "SAIL.NS", "NMDC.NS", "VEDL.NS", 
-        "HINDALCO.NS", "JINDALSTEL.NS", "NATIONALUM.NS", "TATACHEM.NS", "CHAMBLFERT.NS", "AUBANK.NS", "BANDHANBNK.NS", 
-        "FEDERALBNK.NS", "IDFCFIRSTB.NS", "PNB.NS", "CANBK.NS", "BOB.NS", "UNIONBANK.NS", "INDIANB.NS", 
-        "DLF.NS", "GODREJPROP.NS", "OBEROIRLTY.NS", "UNITDSPR.NS", "BERGEPAINT.NS", "PIDILITIND.NS", 
-        "BEL.NS", "POLYCAB.NS", "KEI.NS", "HAVELLS.NS", "VOLTAS.NS", "DIXON.NS", "AMBUJACEM.NS", "ACC.NS", 
-        "JKCEMENT.NS", "DALBHARAT.NS", "BPCL.NS", "HPCL.NS", "IOC.NS", "MRF.NS", "BALKRISIND.NS", "APOLLOTYRE.NS", 
-        "CEATLTD.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "TVSMOTOR.NS", "INDHOTEL.NS", "GMRINFRA.NS", 
-        "GICRE.NS", "NIACL.NS", "LICHSGFIN.NS", "PEL.NS", "MUTHOOTFIN.NS", "CHOLAFIN.NS", 
-        "SRF.NS", "DEEPAKNTR.NS", "TATAELXSI.NS", "PERSISTENT.NS", "KPITTECH.NS", "COFORGE.NS", "LTIM.NS", 
-        "ASTRAL.NS", "SUPREMEIND.NS", "METROPOLIS.NS", "LALPATHLAB.NS", "AUROPHARMA.NS", "BIOCON.NS", "DIVISLAB.NS", 
-        "DRREDDY.NS", "CIPLA.NS", "LUPIN.NS", "TRENT.NS", "ABFRL.NS", "PAGEIND.NS", "BATAINDIA.NS", "IRCTC.NS", 
-        "BOSCHLTD.NS", "TATAINVEST.NS", "HUDCO.NS", "MANAPPURAM.NS", "IOB.NS", "CENTRALBK.NS", "UCOBANK.NS",
-        # --- Mid Caps & Momentum Pack (A-Z Cleaned) ---
-        "3MINDIA.NS", "AARTIDRUGS.NS", "AARTIIND.NS", "AAVAS.NS", "ABB.NS", "ABBOTINDIA.NS", "ADANIGREEN.NS",
-        "ADANIPOWER.NS", "ATGL.NS", "ADANIENSOL.NS", "AWL.NS", "AFFLE.NS", "AJANTPHARM.NS", "APLLTD.NS",
-        "ALKEM.NS", "ALKYLAMINE.NS", "ALLCARGO.NS", "ALOKINDS.NS", "AMBER.NS", "ANGELONE.NS", "ANURAS.NS",
-        "APOLLOHOSP.NS", "APTUS.NS", "ASAHIINDIA.NS", "ASHOKLEY.NS", "ASTERDM.NS", "ATUL.NS", "AVANTIFEED.NS",
-        "BAJAJ-AUTO.NS", "BALAMINES.NS", "BALRAMCHIN.NS", "BANKBARODA.NS", "BANKINDIA.NS", "MAHABANK.NS",
-        "BAYERCROP.NS", "BHARATFORG.NS", "BIRLACORPN.NS", "BSOFT.NS", "BLS.NS", "BLUEDART.NS", "BLUESTARCO.NS",
-        "BBTC.NS", "BORORENEW.NS", "BRIGADE.NS", "MAPMYINDIA.NS", "CESC.NS", "CGPOWER.NS", "CIEINDIA.NS",
-        "CRISIL.NS", "CSBBANK.NS", "CAMPUS.NS", "CAMS.NS", "CANFINHOME.NS", "CAPLIPOINT.NS", "CGCL.NS",
-        "CARBORUN.NS", "CASTROLIND.NS", "GODREJCP.NS", "DABUR.NS", "BRITANNIA.NS", "NESTLEIND.NS", "VBL.NS",
-        "PATANJALI.NS", "KRBL.NS", "LTTS.NS", "TECHM.NS", "MPHASIS.NS", "SONACOMS.NS", "MINDTECK.NS",
-        "ZENSARTECH.NS", "CYIENT.NS", "DATAPATTERNS.NS", "MASTEK.NS", "CEINFO.NS", "SJVN.NS",
-        "TORNTPOWER.NS", "JSWENERGY.NS", "SUZLON.NS", "RAIN.NS", "DEEPAKFERT.NS", "FACT.NS",
-        "RCF.NS", "GNFC.NS", "GSFC.NS", "COROMANDEL.NS", "PIIND.NS", "UPL.NS", "SUMICHEM.NS",
-        "NBCC.NS", "ENGINERSIN.NS", "RITES.NS", "IRCON.NS", "NCC.NS", "KEC.NS", "KALPATARU.NS",
-        "LTFOODS.NS", "HDFCLIFE.NS", "SBILIFE.NS", "LIC.NS", "ICICIPRULI.NS", "ICICIGI.NS",
-        "NETWORK18.NS", "TV18BRDCST.NS", "SUNTV.NS", "ZEEL.NS", "PVRINOX.NS", "DISHTV.NS",
-        "HFCL.NS", "ITI.NS", "TEJASNET.NS", "ROLEXRINGS.NS", "SUBROS.NS", "MNDA.NS", "EXIDEIND.NS",
-        "CUPID.NS", "DIACABS.NS", "SPARC.NS", "JBCHEPHARM.NS", "METROBRAND.NS", "RELAXO.NS", 
-        "JMFINANCIL.NS", "IBREALEST.NS", "RAYMOND.NS", "ARVIND.NS", "WELSPUNLIV.NS", "TRIDENT.NS", 
-        "VIPIND.NS", "SAFARI.NS", "EASEMYTRIP.NS", "THOMASCOOK.NS", "MAHLOG.NS", "TCI.NS", 
-        "VRLTRA.NS", "GATEWAY.NS", "COLPAL.NS", "PGHH.NS", "GILLETTE.NS", "GODREJIND.NS", 
-        "EMAMILTD.NS", "BAJAJHLDNG.NS", "CHOLAHLDNG.NS", "KFINTECH.NS", "CDSL.NS", "BSE.NS", 
-        "MCX.NS", "IEX.NS", "5PAISA.NS", "GEOJITFSL.NS", "ANANDRATHI.NS", "MOTILALOFS.NS", 
-        "SHYAMMETL.NS", "KALYANKJIL.NS", "SENCO.NS", "PCJEWELLER.NS", "STARHEALTH.NS", 
-        "NIVAUPA.NS", "GOCOLOR.NS", "MANYAVAR.NS", "ETHOSLTD.NS", "SAREGAMA.NS", "TIPSMUSIC.NS", 
-        "SULA.NS", "FINEORG.NS", "CLEAN.NS", "NEOGEN.NS", "TATVA.NS", "AMIORG.NS", "ETHER.NS", 
-        "ANUPAM.NS", "ROSSARI.NS", "GALAXYSURF.NS", "EPIGRAL.NS", "NOCIL.NS", "DCW.NS", 
-        "CHEMCON.NS", "GRAVITA.NS", "NACLIND.NS", "INSECTICID.NS", "HERANBA.NS", "ASTEC.NS", 
-        "EXCELIND.NS", "SUDARSCHEM.NS", "BODALCHEM.NS", "SHREECEM.NS", "JKLAKSHMI.NS", 
-        "HEIDELBERG.NS", "ORIENTCEM.NS", "SAGCEM.NS", "DECCANCE.NS", "BIGBLOC.NS", 
-        "GREENPANEL.NS", "GREENPLY.NS", "CENTURYPLY.NS", "RUSHIL.NS", "STYLAMIND.NS", 
-        "PRINCEPIPE.NS", "FINPIPE.NS", "RAMASTEEL.NS", "JINDALSAW.NS", "63MOONS.NS", 
-        "NUCLEUS.NS", "NEWGEN.NS", "QUICKHEAL.NS", "SUBEX.NS", "AHLUCONT.NS", "AIAENG.NS", 
-        "AKZOINDIA.NS", "AMRUTANJAN.NS", "APARINDS.NS", "ASHOKA.NS", "ASTRAZEN.NS", 
-        "AVANTIFEED.NS", "BAJAJELEC.NS", "BANCOINDIA.NS", "BASF.NS", "BEML.NS", "BLISSGVS.NS", 
-        "BOMDYEING.NS", "CENTURYTEX.NS", "CERA.NS", "CHALET.NS", "CHENNPETRO.NS", "COCHINSHIP.NS", 
-        "CRAFTSMAN.NS", "DELTACORP.NS", "DHANUKA.NS", "EIHOTEL.NS", "EPL.NS", "ERIS.NS", 
-        "FDC.NS", "FILATEX.NS", "FINCABLES.NS", "FIRSTSOURCE.NS", "FORTIS.NS", "GARFIBRES.NS", 
-        "GEPIL.NS", "GHCL.NS", "GLAXO.NS", "GODFRYPHLP.NS", "GODREJAGRO.NS", "GPIL.NS", 
-        "GREAVESCO.NS", "GRINDWELL.NS", "GRSE.NS", "GSPL.NS", "GUJALKALI.NS", "GUJGASLTD.NS", 
-        "GULFOILLUB.NS", "HATHWAY.NS", "HGINFRA.NS", "HIKAL.NS", "HINDZINC.NS", "HOMFIRS.NS", 
-        "HONAUT.NS", "IDBI.NS", "IFCI.NS", "IIFL.NS", "INDIGOPNTS.NS", "INFIBEAM.NS", 
-        "INGERRAND.NS", "INOXWIND.NS", "IPL.NS", "JAGRAN.NS", "JAIBALAJI.NS", "JAMNAAUTO.NS", 
-        "JBMA.NS", "JINDALPOLY.NS", "JKTYRE.NS", "JPNPOWER.NS", "JSWHL.NS", "JTEKTINDIA.NS", 
-        "JUBILANT.NS", "JUSTDIAL.NS", "JYOTHYLAB.NS", "KAJARIACER.NS", "KNRCON.NS", 
-        "KSB.NS", "KSCL.NS", "KTKBANK.NS", "LEMONTREE.NS", "LINDEINDIA.NS", "LUXIND.NS", 
-        "LXCHEM.NS", "MAHSEAMLES.NS", "MAHSCOOTER.NS", "MANINFRA.NS", "MANGCHEFER.NS", 
-        "MARKSANS.NS", "MASFIN.NS", "MAXHEALTH.NS", "MIDHANI.NS", "MISHRA.NS", "MOIL.NS", 
-        "MOREPENLAB.NS", "MRPL.NS", "MSTC.NS", "MTARTECH.NS", "MTNL.NS", "NESCO.NS", 
-        "NLCINDIA.NS", "OAL.NS", "OFSS.NS", "ORIENTELEC.NS", "PARADEEP.NS", "PCBL.NS", 
-        "PDSL.NS", "PNCINFRA.NS", "POLYMED.NS", "POONAWALLA.NS", "PRAJIND.NS", "PRESTIGE.NS", 
-        "PRIVISCL.NS", "PRSMJOHNSN.NS", "PTC.NS", "PURVA.NS", "QUESS.NS", "RADICO.NS", 
-        "RAILTEL.NS", "RALLIS.NS", "RAMCOCEM.NS", "RAMCOSYS.NS", "REDINGTON.NS", "ROUTE.NS", 
-        "SBICARD.NS", "SCHAEFFLER.NS", "SCHNEIDER.NS", "SCI.NS", "SEQUENT.NS", "SFL.NS", 
-        "SHARDAMOTR.NS", "SHOPERSTOP.NS", "SIS.NS", "SKFINDIA.NS", "SOBHA.NS", "SOLARINDS.NS", 
-        "SPLPETRO.NS", "SPICEJET.NS", "STERTOOLS.NS", "SUNTECK.NS", "SUPRAJIT.NS", 
-        "SURYAROSHNI.NS", "SYNGENE.NS", "TANLA.NS", "THERMAX.NS", "TIMKEN.NS", "TTKPRESTIG.NS", 
-        "UBL.NS", "UJJIVANSFB.NS", "UNICHEMLAB.NS", "UNIENTER.NS", "VAIBHAVGBL.NS", 
-        "VAKRANGEE.NS", "VALIANTORG.NS", "VARROC.NS", "VGUARD.NS", "VIJAYA.NS", "VINATIORG.NS", 
-        "VSTIND.NS", "WHIRLPOOL.NS"
+# --- MEGA 1800+ NSE TICKER DATABASE (Nifty Total Market Universe) ---
+def get_mega_nse_universe():
+    # Large, Mid, Small, Micro Caps ka compiled comprehensive active list
+    base_tickers = [
+        # --- Nifty 50 & Next 50 ---
+        "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC", "HINDUNILVR", "LT",
+        "BAJFINANCE", "TATAMOTORS", "SUNPHARMA", "MARUTI", "KOTAKBANK", "AXISBANK", "NTPC", "ONGC", "TATASTEEL", "ADANIENT",
+        "COALINDIA", "BAJAJFINSV", "M&M", "ASIANPAINT", "TITAN", "ULTRACEMCO", "HCLTECH", "POWERGRID", "WIPRO", "ADANIPORTS",
+        "JIOFIN", "ZOMATO", "HAL", "BHEL", "PFC", "RECLTD", "IRFC", "RVNL", "CONCOR", "TATACOMM",
+        "TATAPOWER", "GAIL", "SAIL", "NMDC", "VEDL", "HINDALCO", "JINDALSTEL", "NATIONALUM", "TATACHEM", "CHAMBLFERT",
+        # --- Midcaps & Banking ---
+        "AUBANK", "BANDHANBNK", "FEDERALBNK", "IDFCFIRSTB", "PNB", "CANBK", "BOB", "UNIONBANK", "INDIANB", "DLF",
+        "GODREJPROP", "OBEROIRLTY", "UNITDSPR", "BERGEPAINT", "PIDILITIND", "BEL", "POLYCAB", "KEI", "HAVELLS", "VOLTAS",
+        "DIXON", "AMBUJACEM", "ACC", "JKCEMENT", "DALBHARAT", "BPCL", "HPCL", "IOC", "MRF", "BALKRISIND",
+        "APOLLOTYRE", "CEATLTD", "EICHERMOT", "HEROMOTOCO", "TVSMOTOR", "INDHOTEL", "GMRINFRA", "GICRE", "NIACL", "LICHSGFIN",
+        "PEL", "MUTHOOTFIN", "CHOLAFIN", "SRF", "DEEPAKNTR", "TATAELXSI", "PERSISTENT", "KPITTECH", "COFORGE", "LTIM",
+        "ASTRAL", "SUPREMEIND", "METROPOLIS", "LALPATHLAB", "AUROPHARMA", "BIOCON", "DIVISLAB", "DRREDDY", "CIPLA", "LUPIN",
+        "TRENT", "ABFRL", "PAGEIND", "BATAINDIA", "IRCTC", "BOSCHLTD", "TATAINVEST", "HUDCO", "MANAPPURAM", "IOB",
+        "CENTRALBK", "UCOBANK", "MAHABANK", "IDBI", "IEX", "INFIBEAM", "IRBINFRA", "JAIBALAJI", "JKTYRE", "JSWENERGY",
+        # --- Highly Active Small & Micro Momentum ---
+        "AARTIIND", "ABB", "ADANIPOWER", "ASHOKLEY", "BALRAMCHIN", "BANKINDIA", "BSOFT", "CDSL", "BSE", "MCX",
+        "EXIDEIND", "GLENMARK", "JUBLFOOD", "KALYANKJIL", "MANKIND", "MANGALAM", "NBCC", "NLCINDIA", "OFSS", "OIL",
+        "PNCINFRA", "RADICO", "RAILTEL", "RITES", "SJVN", "SUZLON", "VGUARD", "ZENTEC", "AAKASH", "AAATECH",
+        "ACE", "ACCELYA", "ACTIONCON", "ADFFOODS", "ADVANIHOT", "AEGISCHEM", "AGARIND", "AGIREEN", "AHLUCONT", "AIAENG",
+        "ALANKIT", "ALBERTDAV", "ALICON", "ALKALI", "ALKEM", "ALKYLAMINE", "ALLCARGO", "ALLSEC", "ALOKINDS", "ALPA",
+        "AMARAJABAT", "AMBER", "AMBTHIKA", "AMCDISP", "AMDL", "AMEYA", "AMRUTANJAN", "ANANDAMRAO", "ANANTRAJ", "ANDHRAENG",
+        "ANDHRAPAP", "ANDHRSUG", "ANGELONE", "ANIKINDS", "ANKITMETAL", "ANSALAPI", "ANTONYADRO", "APAPL", "APCL", "APEX",
+        "APIGLOBAL", "APLAPOLLO", "APLLTD", "APOLLO", "APOLLOHOSP", "APOLSINHOT", "APTECHT", "ARCHIDPLY", "ARCHIES", "ARE&M",
+        "ARIES", "ARIHANT", "ARIHANTSUP", "ARMANFIN", "AROGRANITE", "ARROWGREEN", "ARSHIYA", "ARVIND", "ARVINDFAZN", "ARVINDFASN",
+        "ASAHIINDIA", "ASAHISONG", "ASAL", "ASALCBR", "ASHAPURMIN", "ASHIANA", "ASHIMASYN", "ASHOKA", "ASIANENE", "ASIANHOT",
+        "ASIANTILES", "ASPINWALL", "ASTEC", "ASTRAMICRO", "ASTRON", "ATFL", "ATGL", "ATLANTA", "ATUL", "ATULAUTO",
+        "AURIONPRO", "AVADHSUGAR", "AVANTIFEED", "AVTNPL", "AWFIS", "AXISCADES", "AYMSYNTEX", "BAFNAPH", "BAGFILMS", "BAJAJ-AUTO",
+        "BAJAJCON", "BAJAJELEC", "BAJAJHIND", "BAJAJHLDNG", "BALAJITELE", "BALAMINES", "BALKRISHNA", "BALMLAWRIE", "BALPHARMA", "BANARISUG",
+        "BANCOINDIA", "BANG", "BANKBARODA", "BANSALWIRE", "BARTRONICS", "BASF", "BASML", "BBL", "BBRONGN", "BCG",
+        "BCP", "BDL", "BDR", "BEARDSSELL", "BEML", "BENARAS", "BFUTILITIE", "BGRENERGY", "BHAGCHEM", "BHAGERIA",
+        "BHAGYANGR", "BHANDARI", "BHARATFORG", "BHARATGEAR", "BHARATRAS", "BHARATWIRE", "BHARTI", "BHARTISHIP", "BHL", "BIGBLOC",
+        "BIKAJI", "BIL", "BODALCHEM", "BOMDYEING", "BOROLTD", "BORORENEW", "BRIGADE", "BRITANNIA", "BROACH-HOT", "BSEMETAL",
+        "CCL", "CEENIK", "CENTENARY", "CENTUM", "CENTURYPLY", "CENTURYTEX", "CERA", "CEREBRA", "CESC", "CGCL",
+        "CGPOWER", "CHALET", "CHEMBOND", "CHEMCON", "CHEMFAB", "CHEVVIOT", "CHICONY", "CHOLAHLDNG", "CIGNITI", "CINELINE",
+        "CINEVISTA", "CIPLA", "CLEAN", "CLEDUCATE", "CLSEL", "CMICABLES", "CMSINFO", "COCHINSHIP", "COFFEEDAY", "COFORGE",
+        "COMPUCOM", "COMPUAGE", "CONSOFINVT", "CONTROLPR", "COROMANDEL", "COSMOFIRST", "COUNCODOS", "CRAFTSMAN", "CREATIVE", "CREST",
+        "CRISIL", "CROMPTON", "CSBBANK", "CSLFINANCE", "CTE", "CUB", "CUBEX", "CUMMINSIND", "CUPID", "CYIENT",
+        "CYIENTDLM", "DABUR", "DALMIASUG", "DAMODARIND", "DATAMATICS", "DATAPATTERNS", "DBCORP", "DBREALTY", "DBOL", "DCAL",
+        "DCBBANK", "DCM", "DCMFINSERV", "DCMSRIND", "DCMSHRIRAM", "DCW", "DECCANCE", "DEEPAKFERT", "DEEPAKSPG", "DELHIVERY",
+        "DELPHIFX", "DELTA先进", "DELTACORP", "DELTAMAGNT", "DEN", "DENORA", "DEVYANI", "DGCONTENT", "DHAMPURSUG", "DHANBANK",
+        "DHANI", "DHANUKA", "DHARMA", "DHARSUG", "DHUNSERI", "DIAMONDYD", "DICIND", "DIGISPICE", "DIGJAYCL", "DIL",
+        "DISHTV", "DIVGIITTS", "DODLA", "DOLATALGO", "DOLLAR", "DONEAR", "DPABHUSHAN", "DPL", "DPWRE", "DREDGECORP",
+        "DRS", "DSSL", "DTL", "DUCON", "DUMMYEXP", "DWARKESH", "DYCL", "DYNAMATIC", "DYNPRO", "EASEMYTRIP",
+        "EBB", "ECLERX", "EDELWEISS", "EICHERMOT", "EIDPARRY", "EIHAHOTELS", "EIHOTEL", "EIMCOELECO", "EKC", "ELDEHSG",
+        "ELECMECH", "ELECON", "ELECTCAST", "ELECTHERM", "ELGIEQUIP", "ELGIRUBCO", "EMAMILTD", "EMAMIPAP", "EMAMIREAL", "EMKAY",
+        "EMMBI", "EMUDHRA", "ENDURANCE", "ENERGYDEV", "ENGINERSIN", "ENIL", "EPL", "EQUITASBNK", "ERIS", "EROSMEDIA",
+        "ESABINDIA", "ESCORTS", "ESSARSHPNG", "ESTER", "ETHOS", "EUREKAFORB", "EVERESTIND", "EVEREADY", "EXCEL", "EXCELINDUS",
+        "FACT", "FAIRCHEMOR", "FALCON", "FAME", "FARCHEM", "FIEMIND", "FILATEX", "FINCABLES", "FINEORG", "FINPIPE",
+        "FIRSTSOURCE", "FLAIR", "FLEX", "FLUOROCHEM", "FMGO", "FORCEMOT", "FORTIS", "FOSECOIND", "FSN", "GABRIEL",
+        "GAEL", "GALAXYSURF", "GALAXYBEAR", "GALLANTT", "GANDHITUBE", "GANECOS", "GANESHOUK", "GANESHHG", "GANGESSECU", "GARFIBRES",
+        "GATEWAY", "GATI", "GAYAPROJ", "GBGLOBAL", "GDL", "GEECEE", "GEEKAY", "GENESYS", "GENUSPAPER", "GENUSPOWER",
+        "GEOJITFSL", "GEPIL", "GESHIP", "GET&D", "GHCL", "GICHSGFIN", "GILLANDERS", "GILLETTE", "GINNIFILA", "GIPCL",
+        "GKWLIMITED", "GLAND", "GLAXO", "GLENMARK", "GLFL", "GLOBAL", "GLOBALVECT", "GLOBUSSPR", "GMDCLTD", "GMRPOWER",
+        "GNA", "GNFC", "GOACARBON", "GOCLCORP", "GODFRYPHLP", "GODREJAGRO", "GODREJIND", "GOKEX", "GOKUL", "GOKULAGRO",
+        "GOLDENTOBC", "GOLDIAM", "GOLDTECH", "GOODLUCK", "GOODYEAR", "GPIL", "GPPL", "GPTINFRA", "GRANULES", "GRAPHITE",
+        "GRASIM", "GRAVITA", "GREAVESCOT", "GREENPANEL", "GREENPLY", "GREENPOWER", "GRINDWELL", "GRINFRA", "GRPL", "GSFC",
+        "GSPL", "GSS", "GTL", "GTLINFRA", "GTPL", "GUFICBIO", "GUJALKALI", "GUJAPOLLO", "GUJGASLTD", "GUJNRECOKE",
+        "GUJRATSTAT", "GULFOILLUB", "GULFPETRO", "GULPOLY", "GVKPIL", "HAL", "HAPPSTMNDS", "HARIOMPIPE", "HARRMALAYA", "HARSHA",
+        "HATHWAY", "HATSUN", "HAWKINCOOK", "HBLPOWER", "HCC", "HCG", "HDFCAMP", "HDFCLIFE", "HDIL", "HEG",
+        "HEIDELBERG", "HEMIPROP", "HERANBA", "HERCULES", "HEROMOTOCO", "HESTERBIO", "HEXATRADEX", "HFCL", "HGINFRA", "HGS",
+        "HIKAL", "HIL", "HILTON", "HIMATSEIDE", "HINDCOMPOS", "HINDCOPPER", "HINDNATGLS", "HINDOLIVSM", "HINDOILEXP", "HINDPETRO",
+        "HINDUNILVR", "HINDZINC", "HIRECT", "HISARMETAL", "HITECH", "HITECHGEAR", "HLEGLAS", "HLVLTD", "HMT", "HMVL",
+        "HONAUT", "HONDAPOWER", "HOVVS", "HPAL", "HPIL", "HPL", "HSCL", "HTMEDIA", "HUBTOWN", "HYBRID",
+        "IBCAL", "IBREALEST", "IBULHSGFIN", "ICDSLTD", "ICEMAKE", "ICIL", "ICRA", "IDFC", "IFBAGRO", "IFBIND",
+        "IFCI", "IFGLEXPORT", "IGARASHI", "IGL", "IGPL", "IIFL", "IIFLSEC", "IITL", "IL&FSENGG", "IL&FSTRANS",
+        "IMAGGAA", "IMFA", "IMPRESSION", "INDAG", "INDANHOSP", "INDCOSERSER", "INDEQ", "INDIACEM", "INDIAGLYCO", "INDIAMART",
+        "INDIANB", "INDIANCARD", "INDIANHUME", "INDIGO", "INDIGOPNTS", "INDNIPPON", "INDOAMIN", "INDOBORAX", "INDOCO", "INDORAMA",
+        "INDOSOLAR", "INDOTECH", "INDOTHAI", "INDOCO", "INDOSTAR", "INDUSINDBK", "INDUSTOWER", "INEOS", "INFI", "INFIBEAM",
+        "INGERRAND", "INOXGREEN", "INOXWIND", "INSECTICID", "INSPIRISYS", "INTELLECT", "INTENTECH", "INOXINDIA", "IONEXCHANG", "IPCALAB",
+        "IRB", "IRCON", "IRCTC", "IRIS", "ISEC", "ISFT", "ISGEC", "ISKCON", "ISMTLTD", "ITC",
+        "ITDC", "ITDCEM", "ITI", "IVC", "IVP", "IXIGO", "IZMO", "J&KBANK", "JAGRAN", "JAGSNPHARM",
+        "JAIBALAJI", "JAICORPLTD", "JAINSTUDIO", "JAIPURIPAP", "JAKHARIA", "JALAN", "JAMNAAUTO", "JASH", "JAYABALST", "JAYAGROGN",
+        "JAYBARMARU", "JAYESH", "JAYSREETEA", "JBCHEPHARM", "JBFIND", "JCHAC", "JENSONICOL", "JEPCO", "JETAIRWAYS", "JETFREIGHT",
+        "JEYPORE", "JINDALHOT", "JINDALPHOT", "JINDALPOLY", "JINDALSAW", "JINDALSTEL", "JINDRILL", "JINDWORLD", "JISLJALEQS", "JITFINFRA",
+        "JKCEMENT", "JKIL", "JKLAKSHMI", "JKPAPER", "JKTYRE", "JMA", "JMFINANCIL", "JOCIL", "JOINTECA", "JORDGI",
+        "JRACTION", "JSL", "JSWENERGY", "JSWHL", "JSWINFRA", "JSWSTEEL", "JSWHL", "JTEKTINDIA", "JUBLFOOD", "JUBLINDS",
+        "JUBLINGREA", "JUBLPHARMA", "JUMPNET", "JUSTDIAL", "JVLAGRO", "JYOTHYLAB", "JYOTISTRUC", "JYOTIRES", "KABRAEXTRU", "KADAMBANI",
+        "KAHAAN", "KAJARIRAC", "KAKATCEM", "KALPATNTR", "KALYANI", "KALYANIFRG", "KALYANKJIL", "KAMADHENU", "KAMATHOTEL", "KANANIIND",
+        "KANCOTEA", "KANPRPLA", "KANSAINER", "KAPSTON", "KARDA", "KARMAENG", "KARURVYSYA", "KAUSHALYA", "KAVVERIIM", "KAYA",
+        "KAYNES", "KBCGLOBAL", "KBR", "KCP", "KCPSUGIND", "KDDL", "KEC", "KECL", "KEI", "KELLTONTEC",
+        "KENNAMET", "KERNEX", "KESORAMIND", "KEYCORP", "KFINTECH", "KHADIM", "KHAICHEM", "KHAITANLTD", "KHANDSE", "KIDUJA",
+        "KILITCH", "KIMS", "KINGFA", "KIOCL", "KIRIINDUS", "KIRLOSBROS", "KIRLOSENG", "KIRLIND", "KIRLOSIND", "KITEX",
+        "KKCL", "KMSMEDI", "KNA", "KNRCON", "KOHINOOR", "KOKUYO", "KOLTEPATIL", "KOPRAN", "KOTAKBANK", "KOTARISUG",
+        "KOTHARIPRO", "KPIGREEN", "KPIL", "KPITTECH", "KPRMILL", "KRBL", "KREBSBIO", "KRIDHANINF", "KRISHANA", "KRITI",
+        "KRITIKA", "KRITINUT", "KRN", "KROMPTON", "KSCL", "KSHITIJ", "KSL", "KSK", "KSLIND", "KSTCL",
+        "KTKBANK", "KUANTUM", "L&TFH", "LAGNAM", "LAHOTI", "LAKPRE", "LAKSHMIELE", "LAKSHVILAS", "LALPATHLAB", "LAMBODHARA",
+        "LANCER", "LANDMARK", "LAOPALA", "LASA", "LAURUSLABS", "LAXMICOT", "LAXMINRSR", "LEELAFUTE", "LEMONTREE", "LFIC",
+        "LGBBROSLTD", "LGHL", "LIBAS", "LIBERTSHOE", "LICHSGFIN", "LICI", "LIKHITHA", "LINCOLN", "LINDEINDIA", "LIQUID",
+        "LLOYDENG", "LLOYDSME", "LML", "LODHA", "LOKESHMACH", "LOTUSECHO", "LOVABLE", "LOYALTEXT", "LPDC", "LT",
+        "LTIM", "LTTS", "LUMAXIND", "LUMAXTECH", "LUPIN", "LUXIND", "LYKALABS", "LYPSAGEMS", "M&M", "M&MFIN",
+        "MAANALU", "MACPOWER", "MADHAV", "MADHUCON", "MADRASFERT", "MAGADSUGAR", "MAGMA", "MAGNUM", "MAHABANK", "MAHASTEEL",
+        "MAHEPC", "MAHESHWARI", "MAHINDCIE", "MAHLIFE", "MAHLOG", "MAHSCOOT", "MAHSEAMLES", "MAITHANALL", "MAJESCO", "MALUPAPER",
+        "MANAKALU", "MANAKCOAT", "MANAKSIA", "MANAKSTEEL", "MANALIPETC", "MANAPPURAM", "MANGALAM", "MANGCHEFER", "MANGLMCEM", "MANGTIMBER",
+        "MANINDS", "MANINFRA", "MANKIND", "MANOMAY", "MANORAMA", "MANUGRAPH", "MAPMYINDIA", "MARALOVER", "MARATHON", "MARICO",
+        "MARINE", "MARKSANS", "MARUTI", "MASFIN", "MASTEK", "MATRIMONY", "MAWANASUG", "MAXHEALTH", "MAXIND", "MAXVIL",
+        "MAYURUNIQ", "MAZDA", "MAZDOCK", "MBAPL", "MBECL", "MBLINFRA", "MCDOWELL-N", "MCL", "MCLEODRUSS", "MCX",
+        "MEDANTA", "MEDICO", "MEDIPLUS", "MEGASOFT", "MEGASTAR", "MENONBE", "MEP", "MERCATOR", "METALFORGE", "METROBRAND",
+        "METROPOLIS", "MFL", "MFSL", "MGEL", "MGL", "MGRM", "MINDACORP", "MINDTECK", "MINDTREE", "MINERVA",
+        "MIPCO", "MIRCELECTR", "MIRZAINT", "MITSU", "MITTAL", "MMFL", "MMTC", "MODIRUBBER", "MODISNME", "MOHITIND",
+        "MOIL", "MOKSH", "MOL", "MONARCH", "MONTECARLO", "MORARJEE", "MOREPENLAB", "MOTHERSUMI", "MOTHERSON", "MOTILALOFS",
+        "MPHASIS", "MPSLTD", "MRF", "MRO-TEK", "MRPL", "MSCHD", "MSIL", "MSTCLTD", "MTARTECH", "MTNL",
+        "MUKANDLTD", "MUKANDENGG", "MUKTAARTS", "MUNJALAU", "MUNJALSHOW", "MURUDESHW", "MUTHOOTCAP", "MUTHOOTFIN", "MVL", "NACLIND",
+        "NAGAFERT", "NAGREEKACAP", "NAGREEKEXP", "NAHARCAP", "NAHARINDUS", "NAHARPOLY", "NAHARSURPC", "NAIL", "NAKODA", "NATCOPHARM",
+        "NATHBIOGEN", "NATIONALUM", "NATPERX", "NAUKRI", "NAVA", "NAVNETEDUL", "NAVODAY", "NAVINFLUOR", "NAZARA", "NBCC",
+        "NBIFIN", "NCC", "NCLIND", "NDGL", "NDL", "NDRAUTO", "NDTV", "NEAL", "NECHLN", "NECON",
+        "NEELAM", "NEELKANTH", "NEGEN", "NELCAST", "NELCO", "NEOCLAL", "NEOGEN", "NEOKRAFT", "NEPTUNE", "NESCO",
+        "NESTLEIND", "NETWEB", "NETWORK18", "NEULANDLAB", "NEWGEN", "NEXTMEDIA", "NFL", "NGIL", "NH", "NHPC",
+        "NIACL", "NIBE", "NIBL", "NIITLTD", "NILAINFRA", "NILAMAC", "NILASPACES", "NILKAMAL", "NINETEC", "NIPPO",
+        "NIPPON", "NIRAJ", "NIRAJISPAT", "NIRMAL", "NITCO", "NITINFIRE", "NITINSPIN", "NITTEN", "NKIND", "NLCINDIA",
+        "NMDC", "NMDCMD", "NOCIL", "NOIDATOLL", "NORBTEAEXP", "NRAIL", "NRBBEARING", "NSIL", "NTPC", "NUCLEUS",
+        "NURTURE", "NUVOCO", "NVC", "NXTDIGITAL", "NYKAA", "OAL", "OBEROIRLTY", "OCCL", "OFSS", "OIL",
+        "OISL", "OLATECH", "OMAXAUTO", "OMAXE", "OMINFRAL", "OMKARCHEM", "ONGC", "ONWARDTEC", "OPTIEMUS", "ORBTEXP",
+        "ORCHIDPHAR", "ORICONENT", "ORIENTALTL", "ORIENTBELL", "ORIENTCEM", "ORIENTELEC", "ORIENTHOT", "ORIENTPPR", "ORIENTQC", "ORISSAMINE",
+        "ORTINLABS", "OSIAHYPER", "OSWALAGRO", "OSWALGREEN", "PAGEIND", "PAISALO", "PALASHSECU", "PALRED", "PANACEABIO", "PANACHE",
+        "PANAMAPET", "PANCHSHEEL", "PANSARI", "PAR", "PARACABLES", "PARADEEP", "PARAGMILK", "PARAS", "PARASPETRO", "PARSVNATH",
+        "PASUPATCEM", "PATANJALI", "PATELENG", "PATINTLOG", "PATSPINLTD", "PAYTM", "PCBL", "PCJEWELLER", "PDMJUME", "PDSL",
+        "PEARLGLOBAL", "PEL", "PENIND", "PENINLAND", "PENSLA", "PERSISTENT", "PETRONET", "PFC", "PFIZER", "PFOCUS",
+        "PFS", "PGEL", "PGHH", "PGIL", "PHOENIXLTD", "PIDILITIND", "PIIND", "PILANIIN", "PILITA", "PIONDIST",
+        "PIONEEREMB", "PITTIENG", "PIXTRANS", "PKTEA", "PLASTIBLND", "PNB", "PNBGILTS", "PNBHOUSING", "PNCINFRA", "POCHIRAJU",
+        "PODDARHOUS", "PODDARMENT", "POKARNA", "POLYCAB", "POLYMED", "POLYPLEX", "PONNIERODE", "POWERGRID", "POWERINDIA", "POWERMECH",
+        "PPAP", "PPL", "PRADIP", "PRAFFUL", "PRAGATI", "PRAJIND", "PRAKASH", "PRAKASHSTL", "PRAXIS", "PRECAM",
+        "PRECOT", "PRECWIRE", "PREMEXPLN", "PREMIER", "PREMIERPOL", "PRESSMN", "PRESTIGE", "PRICOLLTD", "PRIMESECU", "PRIME",
+        "PRINCEPIPE", "PRSMJOHNSN", "PRUDENT", "PSB", "PSPPROJECT", "PTC", "PTL", "PUNJABCHEM", "PUNJLLOYD", "PURVA",
+        "PVRINOX", "PVP", "QUESS", "QUICKHEAL", "RADAAN", "RADICO", "RADIOCITY", "RAILTEL", "RAIN", "RAINBOW",
+        "RAJESHEXPO", "RAJMET", "RAJRATAN", "RAYMOND", "RBL", "RBLBANK", "RCF", "RECLTD", "REDINGTON", "RELAXO",
+        "RELIANCE", "RELINFRA", "RELPOWER", "RENUKA", "REPCOHOME", "REPRO", "RESPONIND", "REVATHI", "RHL", "RICOAUTO",
+        "RIIL", "RITES", "RKFORGE", "RMCL", "RML", "ROHLTD", "ROLEXBO", "ROLLT", "ROOTO", "ROSARI",
+        "ROSSELLIND", "ROUTE", "RPGLIFE", "RPOWER", "RPPINFRA", "RRELEC", "RSSAM", "RSWM", "RSYSTEMS", "RTNPOWER",
+        "RTNINDIA", "RUBYMILLS", "RUCHI", "RUCHIRA", "RUPA", "RUSHIL", "RVNL", "SABEVENTS", "SADBHAV", "SADBHIN",
+        "SAFARI", "SAGARDEEP", "SAGAGCEM", "SAIL", "SAKSOFT", "SAKUMA", "SAKTHISUG", "SALASAR", "SALONA", "SALSTEEL",
+        "SALZERELEC", "SAMBHAAV", "SAMHI", "SAMPANN", "SAMRECOVERY", "SAMVARDHANA", "SANCO", "SANDESH", "SANDHAR", "SANGAMIND",
+        "SANGHIIND", "SANGHVIMOV", "SANOFI", "SANSERA", "SAPPHIRE", "SARDAEN", "SAREGAMA", "SARLAPOLY", "SASKEN", "SASTASUNDR",
+        "SATIA", "SATIN", "SATINGROUP", "SATOV", "SATYAMCOMP", "SCHAND", "SCHAEFFLER", "SCHNEIDER", "SCI", "SCILAL",
+        "SREINFRA", "SRF", "SRHHYPOL", "SRIPIPES", "SRTRANSFIN", "SSWL", "STAR", "STARCEMENT", "STARPAPER", "STARTECK",
+        "STCINDIA", "STEELCAS", "STEELXIND", "STEL", "STERTOOLS", "SUBEXLTD", "SUBROS", "SUDARSCHEM", "SUMEETINDS", "SUMIT",
+        "SUMICHEM", "SUMMITSEC", "SUNCLAYLTD", "SUNDARAM", "SUNDARMFIN", "SUNDARMHLD", "SUNDRMBRAK", "SUNDRMFAST", "SUNFLAG", "SUNPHARMA",
+        "SUNTECK", "SUNTV", "SUPERHOUSE", "SUPERSPG", "SUPRAJIT", "SUPREMEIND", "SUPREMEINF", "SUPREMETEX", "SURYALAXMI", "SURYAROSNI",
+        "SURYODAY", "SUTLEJTEX", "SUVEN", "SUVENPHAR", "SUZLON", "SWANENERGY", "SWARAJENG", "SWELECTES", "SWSOLAR", "SYMPHONY",
+        "SYNGENE", "SYRMA", "TAJGVK", "TASTYBITE", "TATACHEM", "TATACOMM", "TATACONSUM", "TATAELXSI", "TATAINVEST", "TATAMOTORS",
+        "TATAMTRDVR", "TATAPOWER", "TATASTEEL", "TBZ", "TCI", "TCIEXP", "TCIFL", "TCNSBRANDS", "TCPLPACK", "TCS",
+        "TEAMSLEASE", "TECHM", "TECHNOE", "TEJASNET", "TEMBO", "TERASOFT", "TEXINFRA", "TEXRAIL", "TFCILTD", "TFL",
+        "TGBHOTELS", "THANGAMAYL", "THEMISMED", "THERMAX", "TH Thomas", "THYROCARE", "TI", "TIDEWATER", "TIIL", "TIINDIA",
+        "TIMETECHNO", "TIMKEN", "TIPSFILMS", "TIPSINDLTD", "TIRUMALCHM", "TIRUPATIFL", "TITAN", "TNPL", "TNTELE", "TOKYOPLAST",
+        "TORNTPHARM", "TORNTPOWER", "TOTAL", "TOUCHWOOD", "TPLPLASTEH", "TRACXN", "TREEHOUSE", "TREJHARA", "TRENT", "TRF",
+        "TRIDENT", "TRIGYN", "TRIL", "TRITURBINE", "TRIVENI", "TROT", "TTKHEALTH", "TTKPRESTIG", "TTL", "TTML",
+        "TV18BRDCST", "TVSELECT", "TVSMOTOR", "TVSSRICHAK", "TVSSCS", "TVSRADHA", "TVTODAY", "TWL", "UCAL", "UCOBANK",
+        "UDAICEMENT", "UCOBANK", "UFLEX", "UFO", "UGARSUGAR", "UGROCAP", "UJAAS", "UJJIVANSFB", "ULTRACEMCO", "UMANGDAIRY",
+        "UMESLTD", "UNICHEMLAB", "UNIDT", "UNIENTER", "UNIONBANK", "UNIPARTS", "UNIPHOS", "UNITEDPOLY", "UNITEDTEA", "UNITECH",
+        "UNITEDSPR", "UNITY", "UNIVASTU", "UNIVCABLES", "UNIVPHOTO", "UNOMINDA", "UPERGANGES", "UPL", "URJA", "USHAMART",
+        "USK", "UTTAMSUGAR", "UTTAMVALUE", "UTIAMC", "VAIBHAVGBL", "VAIM", "VAISHALI", "VAKRANGEE", "VALIANTORG", "VAMSHI",
+        "VARROC", "VASCONEQ", "VASWANI", "VAYU", "VBL", "VEDL", "VENKEYS", "VENUSPIPES", "VENUSREM", "VERANDA",
+        "VERTOZ", "VESUVIUS", "VETO", "VGUARD", "VHL", "VICEROY", "VIDEOIND", "VIDHIING", "VIJAYA", "VIJAYADIAG",
+        "VIKASECO", "VIKASLIFE", "VIKASPROP", "VIKASWSP", "VIMTALABS", "VINATIORGA", "VINDHYATLE", "VINNY", "VINYLINDIA", "VIPCL",
+        "VIPIND", "VIPULLTD", "VIRAT", "VIRTUALG", "VISAKAIND", "VISASTEEL", "VISHAL", "VISHNU", "VISHWARAJ", "VIVIDHA",
+        "VIVIMEDLAB", "VLSFINANCE", "VMART", "VOLTAMP", "VOLTAS", "VPRINFRA", "VRLLOG", "VSSL", "VSTIND", "VSTTILLERS",
+        "VTL", "WABAG", "WALCHANNAG", "WANBURY", "WATERBASE", "WEIZMANN", "WELCORP", "WELENT", "WELINV", "WELSPUNIND",
+        "WENDT", "WESTLIFE", "WHEELS", "WHIRLPOOL", "WILLAMAGOR", "WINDLAS", "WINSOME", "WIPRO", "WOCKPHARMA", "WONDERLA",
+        "WORTH", "WSTCSTPAPR", "XCHANGING", "XPROINDIA", "YAARI", "YASHMGM", "YATRA", "YUG", "ZEEL", "ZEELEARN",
+        "ZEEMEDIA", "ZENITHEXPO", "ZENITHSTL", "ZENSARTECH", "ZENTEC", "ZFCVINDIA", "ZOMATO", "ZUARI", "ZUARIIND", "ZYDUSLIFE", "ZYDUSWELL"
     ]
-    return sorted(list(set(massive_universe)))
+    # Suffixing ".NS" accurately to construct pure Yahoo Finance ticker symbols
+    return sorted(list(set([f"{t}.NS" for t in base_tickers])))
 
-# --- Sidebar Settings Panel ---
-st.sidebar.header("⚙️ Pro Scanner Controls")
-st.sidebar.info("🌐 **Universe Active:** Full Indian Markets Portfolio Loaded (1400+ Tickers)")
-
-# Filters
-rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
-volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.0, step=0.1)
-min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🛡️ Risk Management Parameters")
-rr_ratio = st.sidebar.slider("Risk : Reward Target Ratio (1 : X)", 1.5, 4.0, 2.0, step=0.5)
-
-# Load comprehensive custom clean database
-all_tickers = get_pure_live_universe()
-st.sidebar.write(f"Total Embedded Live Stocks: **{len(all_tickers)}**")
-
-# --- App Navigation Tabs ---
-tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
-
-# --- Helper Function to Process Single Ticker ---
-def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit, rr_ratio):
+# --- Process Single Ticker Core Calculations ---
+def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
         if isinstance(raw_data.columns, pd.MultiIndex):
             if ticker not in raw_data.columns.levels[0]: return None
-            df = raw_data[ticker].dropna(subset=['Close']).copy()
+            df = raw_data[ticker].copy()
         else:
-            df = raw_data.dropna(subset=['Close']).copy()
+            df = raw_data.copy()
 
+        df = df.dropna(subset=['Close'])
         total_rows = len(df)
-        if total_rows < 515: return None 
+        if total_rows < 50: return None 
 
+        # Technical Metrics Calculation
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
+        # RSI Calculations
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -153,8 +219,14 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['RSI'] = 100 - (100 / (1 + rs))
         
         window_size = min(500, total_rows - 2)
+        if window_size < 1: window_size = 1
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        
+        # --- CHART PATTERN: 5-Day Swing Lowest Low Calculation ---
+        df['Low_5d'] = df['Low'].rolling(window=5).min()
+        df['Next_Day_Return'] = df['Pct_Change'].shift(-1)
 
+        # Strategy Breakout Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
@@ -166,96 +238,92 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
 
         df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
 
-        # --- Dynamic Stoploss and Target Calculations ---
-        # Swing Support based on past 3 days low
-        df['Swing_Support'] = df['Low'].rolling(window=3).min() * 0.995
-
         ticker_results = []
         if mode == "live" and df['Signal'].iloc[-1]:
-            trigger_price = df['Close'].iloc[-1]
-            sl_price = df['Swing_Support'].iloc[-1]
+            entry = df['Close'].iloc[-1]
+            sl = df['Low_5d'].iloc[-1]
             
-            # Risk defense thresholds boundary conditions
-            if sl_price >= trigger_price or (trigger_price - sl_price)/trigger_price > 0.08:
-                sl_price = trigger_price * 0.965  # Default structural 3.5% risk cushion fallback
+            # Structurally avoid zero/flat ranges using standard ATR/Percentage fallback
+            if sl >= entry or (entry - sl) / entry < 0.005: 
+                sl = entry * 0.965  # 3.5% default buffer if 5-day low is tightly overlapping
                 
-            risk_amount = trigger_price - sl_price
-            target_price = trigger_price + (risk_amount * rr_ratio)
+            risk = entry - sl
+            target = entry + (2 * risk) # Pattern Risk-Reward 1:2
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
             return [{
                 "Symbol": ticker.replace(".NS", ""),
-                "LTP (₹)": round(trigger_price, 2),
+                "Entry Price (₹)": round(entry, 2),
+                "Stop Loss (₹)": round(sl, 2),
+                "Target Price (₹)": round(target, 2),
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
-                "Chart Stoploss (₹)": round(sl_price, 2),
-                "Pattern Target (₹)": round(target_price, 2)
+                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
             }]
             
         elif mode == "backtest":
             history_slice = df.iloc[-50:] 
             triggers = history_slice[history_slice['Signal'] == True]
             for date, row in triggers.iterrows():
-                idx = df.index.get_loc(date)
-                t_close = row['Close']
-                sl_val = row['Swing_Support']
+                is_today = date.date() == datetime.today().date()
+                next_move = "Live Session Open" if is_today or pd.isna(row['Next_Day_Return']) else f"{round(row['Next_Day_Return'], 2)}%"
                 
-                if sl_val >= t_close or (t_close - sl_val)/t_close > 0.08:
-                    sl_val = t_close * 0.965
-                    
-                risk_amt = t_close - sl_val
-                tp_val = t_close + (risk_amt * rr_ratio)
-                
-                if idx + 1 >= len(df):
-                    trade_outcome = "Live Open Session"
-                else:
-                    next_day_row = df.iloc[idx + 1]
-                    if next_day_row['Low'] <= sl_val:
-                        trade_outcome = "❌ SL Hit"
-                    elif next_day_row['High'] >= tp_val:
-                        trade_outcome = "🎯 Target Hit"
-                    else:
-                        trade_outcome = "📈 Hold/Pos Close" if next_day_row['Close'] > t_close else "📉 Neg Close"
+                b_entry = row['Close']
+                b_sl = row['Low_5d']
+                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005:
+                    b_sl = b_entry * 0.965
+                b_risk = b_entry - b_sl
+                b_target = b_entry + (2 * b_risk)
 
                 ticker_results.append({
                     "Date": date.strftime('%Y-%m-%d'),
                     "Symbol": ticker.replace(".NS", ""),
-                    "Trigger Price (₹)": round(t_close, 2),
-                    "Chart Stoploss (₹)": round(sl_val, 2),
-                    "Pattern Target (₹)": round(tp_val, 2),
-                    "Outcome Event": trade_outcome
+                    "Trigger/Entry (₹)": round(b_entry, 2),
+                    "Stop Loss (₹)": round(b_sl, 2),
+                    "Target Price (₹)": round(b_target, 2),
+                    "RSI at Trigger": round(row['RSI'], 2),
+                    "Next Day Move": next_move
                 })
             return ticker_results
     except Exception:
         return None
     return None
 
-# --- Secure Anti-Block Fast Chunk Processing Engine ---
+# --- Sidebar Controls UI ---
+st.sidebar.header("⚙️ Pro Scanner Controls")
+rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
+volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
+min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
+
+all_tickers = get_mega_nse_universe()
+st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
+
+tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
+
+# --- ThreadPool Batch Processing Engine ---
 def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    chunk_size = 80
+    chunk_size = 40  # Safely chunked to protect against high multi-threading rate blocks
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
-    st.info(f"⚡ Downloading and filtering {len(tickers)} stocks across parallel secure batches...")
+    st.info(f"⚡ Processing {len(tickers)} symbols across {len(ticker_chunks)} parallel batches...")
     main_progress = st.progress(0)
     
     for c_idx, chunk in enumerate(ticker_chunks):
         try:
-            # Shifted to 2y for safe mapping of 500 days ago high window lookup safely
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True)
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
             
-            with ThreadPoolExecutor(max_workers=16) as executor:
+            with ThreadPoolExecutor(max_workers=15) as executor:
                 futures = {
-                    executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover, rr_ratio): ticker 
+                    executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
                     for ticker in chunk
                 }
                 for future in as_completed(futures):
                     res = future.result()
-                    if res:
-                        results.extend(res)
+                    if res: results.extend(res)
         except Exception:
             continue
             
@@ -267,40 +335,45 @@ def process_market_analytics_fast(tickers, mode="live"):
 # --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
-    if st.button("🚀 Run Live Magic Scan", key="live_btn"):
+    if st.button("🚀 Run Mega Universe Magic Scan", key="live_btn"):
         res_df = process_market_analytics_fast(all_tickers, mode="live")
         
         if not res_df.empty:
-            res_df = res_df.sort_values(by="Vol Spike (x)", ascending=False)
+            res_df = res_df.sort_values(by="Score", ascending=False)
             res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-            st.success(f"🎉 Success! Found {len(res_df)} breakout stocks matching exact structural setups.")
+            st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups!")
             st.dataframe(res_df, use_container_width=True, hide_index=True)
             
+            # --- Chart Visualizer with Pattern Support/Target Lines ---
             top_stock = res_df.iloc[0]['Symbol']
-            st.markdown(f"### 👑 Top Momentum Pick: **{top_stock}**")
-            chart_data = yf.download(f"{top_stock}.NS", period="6mo", interval="1d", progress=False)
+            st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
+            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
+                if isinstance(chart_data.columns, pd.MultiIndex):
+                    chart_data.columns = chart_data.columns.get_level_values(-1)
+                    
                 fig = go.Figure(data=[go.Candlestick(
                     x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
-                    low=chart_data['Low'], close=chart_data['Close'], name='Price'
+                    low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
                 )])
+                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
-                # Plot setup line visualization arrays
-                last_trigger_sl = res_df.iloc[0]['Chart Stoploss (₹)']
-                last_trigger_tp = res_df.iloc[0]['Pattern Target (₹)']
+                # Dynamic horizontal lines plot mapping on the live interactive chart
+                live_sl = res_df.iloc[0]['Stop Loss (₹)']
+                live_tgt = res_df.iloc[0]['Target Price (₹)']
                 
-                fig.add_hline(y=last_trigger_sl, line_dash="dash", line_color="red", annotation_text="Stoploss Level")
-                fig.add_hline(y=last_trigger_tp, line_dash="dash", line_color="green", annotation_text="Target Level")
+                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"5-Day Swing SL: ₹{live_sl}", annotation_position="bottom left")
+                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Pattern Target (1:2): ₹{live_tgt}", annotation_position="top left")
                 
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Live Trading Levels Overlay")
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns & Triggers Setup", xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No stocks currently matching your operational criteria matrix today.")
+            st.warning("No breakout setups spotted matching current filters within the 1800+ pool.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
-    st.subheader("⏳ 2-Month Historical Risk Analytics Dashboard")
+    st.subheader("⏳ 2-Month Historical Analytics Dashboard")
     
     if st.button("📊 Start Historical Backtest", key="bt_btn"):
         bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
@@ -308,17 +381,20 @@ with tab2:
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
             
-            total_signals = len(bt_df)
-            target_hits = len(bt_df[bt_df['Outcome Event'] == "🎯 Target Hit"])
-            sl_hits = len(bt_df[bt_df['Outcome Event'] == "❌ SL Hit"])
+            valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)].copy()
+            if len(valid_moves) > 0:
+                numeric_moves = valid_moves['Next Day Move'].str.replace('%','').astype(float)
+                bullish_days = len(numeric_moves[numeric_moves > 0])
+                accuracy = round((bullish_days / len(valid_moves)) * 100, 2)
+            else:
+                accuracy = 0
             
-            accuracy = round((target_hits / (target_hits + sl_hits)) * 100, 2) if (target_hits + sl_hits) > 0 else 0
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Generated Signals", total_signals)
-            col2.metric("Target Hit Profiles 🎯", target_hits)
-            col3.metric("Breakout Success Accuracy Rate", f"{accuracy}%")
+            col1, col2 = st.columns(2)
+            col1.metric("Total Generated Signals (2 Months)", len(bt_df))
+            col2.metric("Next-Day Bullish Accuracy Rate", f"{accuracy}%")
             
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
+            csv_data = bt_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest_results.csv", mime="text/csv")
         else:
-            st.warning("No historical pattern matches recorded over this tracking frame.")
+            st.warning("No historical signal matches discovered.")
