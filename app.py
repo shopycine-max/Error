@@ -104,5 +104,5 @@ def process_market_analytics(tickers, mode="live"):
             # RSI
             delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0,
+            loss = (-delta.where(delta < 0,)
             
