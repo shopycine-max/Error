@@ -338,5 +338,5 @@ with tab2:
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 EXPORT AUDIT LOG SHEET (CSV)", data=csv_data, file_name="alpha_audit_report.csv", mime="text/csv")
         else:
-            st.warning("No Record Match.")
-            
+            st.warning("No historical dataset match found for this configuration profile.")
+                            
