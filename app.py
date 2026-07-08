@@ -5,80 +5,95 @@ import plotly.graph_objects as go
 import requests
 import io
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
-# --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner", layout="wide")
+# --- Config ---
+st.set_page_config(page_title="Institutional Scanner", layout="wide", page_icon="📈")
+st.markdown("""<style>.stApp { background-color: #0e1117; } .metric-card { padding: 10px; border-radius: 5px; background: #161b22; }</style>""", unsafe_allow_html=True)
 
-st.title("🚀 Advanced Stock Scanner (Fixed Version)")
+st.title("🚀 Institutional Grade Stock Scanner")
+st.sidebar.header("⚙️ Configuration")
 
-# --- Scanner Engine ---
-def calculate_metrics(df):
-    """
-    Safely calculates indicators. 
-    Handles cases where data is too short or empty.
-    """
-    if df.empty or len(df) < 200:
-        return None
-
+# --- Optimized Data Fetching ---
+@st.cache_data(ttl=86400) # Cache for 24h
+def get_all_nse_tickers():
+    url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
     try:
-        # Ensure numeric columns
-        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-        df['High'] = pd.to_numeric(df['High'], errors='coerce')
-        df['Low'] = pd.to_numeric(df['Low'], errors='coerce')
-        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+        df = pd.read_csv(url)
+        return [str(s).strip() + ".NS" for s in df['Symbol']]
+    except:
+        return ["RELIANCE.NS", "TCS.NS", "INFY.NS"]
+
+# --- Core Logic Engine ---
+def analyze_stock(ticker):
+    try:
+        # Download data
+        df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+        if len(df) < 50: return None
         
-        # Calculations
-        df['Pct_Change'] = df['Close'].pct_change() * 100
+        # Ensure column format
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        
+        # Indicators
+        df['EMA20'] = df['Close'].ewm(span=20).mean()
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-        df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+        df['ATR'] = (df['High'] - df['Low']).rolling(14).mean()
         
-        # RSI Calculation (Safety: avoiding Division by Zero)
+        # RSI
         delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        df['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, 0.001))))
         
-        # Avoid ZeroDivisionError by replacing 0 with a very small number
-        rs = gain / loss.replace(0, 0.0001)
-        df['RSI'] = 100 - (100 / (1 + rs))
+        # Current Metrics
+        ltp = df['Close'].iloc[-1]
+        vol = df['Volume'].iloc[-1]
+        vol_sma = df['Vol_SMA20'].iloc[-1]
+        rsi = df['RSI'].iloc[-1]
         
-        # Chartink Logic
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(500, min_periods=1).max()
-        
-        return df
-    except Exception:
+        # Strategy: Breakout + Volume Spike + Trend
+        if (ltp > df['EMA20'].iloc[-1]) and (vol > vol_sma * 1.5) and (rsi > 55):
+            return {
+                "Symbol": ticker.replace(".NS", ""),
+                "LTP": round(ltp, 2),
+                "Vol Spike": round(vol / vol_sma, 1),
+                "RSI": round(rsi, 1),
+                "StopLoss (ATR)": round(ltp - (df['ATR'].iloc[-1] * 2), 2),
+                "Trend": "Bullish"
+            }
+    except:
         return None
+    return None
 
-# --- Main UI ---
-ticker_input = st.text_input("Enter Ticker (e.g., RELIANCE.NS)", "RELIANCE.NS")
+# --- UI Layout ---
+tab1, tab2 = st.tabs(["⚡ Live Screener", "🔍 Watchlist & Charting"])
 
-if st.button("🚀 Analyze"):
-    try:
-        # Using Ticker Object for absolute stability
-        stock = yf.Ticker(ticker_input)
-        df = stock.history(period="2y")
+with tab1:
+    col1, col2 = st.columns([1, 3])
+    limit = col1.slider("Limit Stocks", 10, 500, 50)
+    if col1.button("🚀 Execute Scan"):
+        tickers = get_all_nse_tickers()[:limit]
+        results = []
         
-        processed_df = calculate_metrics(df)
+        progress = st.progress(0)
+        # Using Parallel Processing
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            data = list(executor.map(analyze_stock, tickers))
+            
+        results = [d for d in data if d is not None]
         
-        if processed_df is not None:
-            st.success("Data processed successfully!")
-            
-            # Show Last Row Stats
-            latest = processed_df.iloc[-1]
-            col1, col2, col3 = st.columns(3)
-            col1.metric("LTP", round(latest['Close'], 2))
-            col2.metric("RSI", round(latest['RSI'], 2))
-            col3.metric("Volume", int(latest['Volume']))
-            
-            # Plot
-            fig = go.Figure(data=[go.Candlestick(x=processed_df.index,
-                            open=processed_df['Open'],
-                            high=processed_df['High'],
-                            low=processed_df['Low'],
-                            close=processed_df['Close'])])
-            st.plotly_chart(fig, use_container_width=True)
+        if results:
+            res_df = pd.DataFrame(results)
+            st.dataframe(res_df, use_container_width=True)
         else:
-            st.error("Data insufficient or Ticker symbol wrong.")
-            
-    except Exception as e:
-        st.error(f"Critical Error: {e}")
+            st.warning("No setup found. Increase the limit or try later.")
+
+with tab2:
+    st.subheader("Interactive Chart")
+    ticker_input = st.text_input("Enter Ticker", "RELIANCE.NS")
+    if ticker_input:
+        chart_df = yf.download(ticker_input, period="1y", interval="1d", progress=False)
+        fig = go.Figure(data=[go.Candlestick(x=chart_df.index, open=chart_df['Open'], high=chart_df['High'], low=chart_df['Low'], close=chart_df['Close'])])
+        fig.update_layout(template="plotly_dark", height=500)
+        st.plotly_chart(fig, use_container_width=True)
         
