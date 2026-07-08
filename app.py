@@ -133,7 +133,7 @@ def process_market_analytics(tickers, mode="live"):
                 triggers = history_slice[history_slice['Signal'] == True]
                 for date, row in triggers.iterrows():
                     results.append
-                        "Date": date.strftime('%Y-%m-%d'),
+                        Date": date.strftime('%Y-%m-%d'),
                         "Symbol": ticker.replace(".NS", ""),
                         "Trigger Price (₹)": round(row['Close'], 2),
                         "RSI at Trigger": round(row['RSI'], 2),
