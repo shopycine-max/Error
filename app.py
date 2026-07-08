@@ -9,7 +9,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner Pro Max", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Pro Stock Scanner", page_icon="📈", layout="wide")
 
 # Custom Dark Premium Theme
 st.markdown("""
@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: Next-Day Momentum Precision Filters & Market Trend Alignment Enabled")
+st.caption("Engine Upgraded: Standard RSI, Fixed Filters & Multi-Threaded Processing")
 
 # --- Reliable Hardcoded Universe (Bypasses NSE Cloud Block) ---
 @st.cache_data(ttl=43200)
@@ -57,15 +57,18 @@ def get_scanning_universe(universe_type):
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "🌐 Total All NSE Stocks (2000+)"])
-rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 60) # Increased default for sharper momentum
-volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 5.0, 2.0, step=0.1) # Upgraded to 2.0x for real breakout
-min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=5) # Filter penny illiquid stocks
+rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
+volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.3, step=0.1)
+min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=5)
 
 all_tickers = get_scanning_universe(universe_choice)
 st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
 
+# --- App Navigation Tabs ---
+tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
+
 # --- Helper Function to Process Single Ticker ---
-def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit, market_bullish):
+def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
         if isinstance(raw_data.columns, pd.MultiIndex):
             if ticker not in raw_data.columns.levels[0]: return None
@@ -73,8 +76,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         else:
             df = raw_data.dropna(subset=['Close']).copy()
 
-        total_rows = len(df)
-        if total_rows < 40: return None 
+        if len(df) < 250: return None # Minimum data needed for 200-period checks
 
         # --- Base Metrics ---
         df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -83,7 +85,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['Turnover'] = df['Close'] * df['Volume']
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
-        # --- STANDARD WILDER'S RSI ---
+        # --- STANDARD WILDER'S RSI (TradingView Standard Fix) ---
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -92,66 +94,44 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        # --- UPGRADE 1: CLOSE NEAR HIGH (Buying Pressure) ---
-        # Ensures buyers didn't leave profit booking at the end of the day
-        df['Day_Range'] = df['High'] - df['Low']
-        df['Close_From_High'] = df['High'] - df['Close']
-        cond_close_high = df['Close_From_High'] <= (df['Day_Range'] * 0.25) # Close must be in top 25% of day's range
-
-        # --- FIXED CHARTINK HIGH BREAKOUT LOGIC ---
-        window_size = min(500, total_rows - 2)
-        if window_size < 1: window_size = 1
-        
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        # --- Chartink Breakout Logic Check ---
+        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=min(500, len(df)-1), min_periods=1).max()
         df['Next_Day_Return'] = df['Close'].shift(-1).pct_change() * 100
 
         # --- ADJUSTED FORMULA EVALUATOR ---
-        cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 2.0) & (df['Pct_Change'] <= 16.0) # Tweaked for real momentum entry
-        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 3.0 
-        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
-        cond8 = df['RSI'] >= rsi_filter 
-        cond9 = df['Close'] > df['EMA_20'] 
+        cond1 = df['Close'] >= 20 # Minimum share price
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) # Normal strong day
+        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) # Volume shock
+        cond4 = df['Return_20d'] >= 3.0 # Basic 20-day trend
+        cond5 = df['Turnover'] > (turnover_limit * 10000000) # Dynamic Turnover filter (₹ Crores)
+        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] # Multi-month high breakout
+        cond8 = df['RSI'] >= rsi_filter # RSI Filter
+        cond9 = df['Close'] > df['EMA_20'] # Above short term support
 
-        # Combine old filters with new Price Action Filter
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond_close_high
-        
-        # UPGRADE 2: Market Regime Check (Only applies filters tightly if Market is bad)
-        if not market_bullish and mode == "live":
-            # If Nifty is bearish, increase criteria strictness: volume shock must be higher
-            df['Signal'] = df['Signal'] & (df['Volume'] > (df['Vol_SMA20'] * (volume_multiplier + 0.5)))
+        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
 
         ticker_results = []
         if mode == "live" and df['Signal'].iloc[-1]:
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
-            # Next-Day momentum rank calculation score
-            close_per = ((df['Close'].iloc[-1] - df['Low'].iloc[-1]) / (df['Day_Range'].iloc[-1] + 1e-5)) * 100
-            
             return [{
                 "Symbol": ticker.replace(".NS", ""),
                 "LTP (₹)": round(df['Close'].iloc[-1], 2),
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
-                "Close near High (%)": round(close_per, 1),
-                "Momentum Score": round((df['RSI'].iloc[-1] * 0.4) + (vol_spike * 5) + (close_per * 0.3), 2)
+                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
             }]
             
         elif mode == "backtest":
-            history_slice = df.iloc[-50:] 
+            history_slice = df.iloc[-44:-1] 
             triggers = history_slice[history_slice['Signal'] == True]
             for date, row in triggers.iterrows():
-                is_today = date.date() == datetime.today().date()
-                next_move = "Live / Open Session" if is_today or pd.isna(row['Next_Day_Return']) else f"{round(row['Next_Day_Return'], 2)}%"
-                
                 ticker_results.append({
                     "Date": date.strftime('%Y-%m-%d'),
                     "Symbol": ticker.replace(".NS", ""),
                     "Trigger Price (₹)": round(row['Close'], 2),
                     "RSI at Trigger": round(row['RSI'], 2),
-                    "Next Day Move": next_move
+                    "Next Day Move (%)": round(row['Next_Day_Return'], 2) if not pd.isna(row['Next_Day_Return']) else "Open Session"
                 })
             return ticker_results
     except Exception:
@@ -162,35 +142,22 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
 def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
-    # --- UPGRADE 3: Market Regime Detection (Nifty 50 Check) ---
-    market_bullish = True
-    try:
-        nifty = yf.download("^NSEI", period="20d", interval="1d", progress=False)
-        if not nifty.empty:
-            nifty['EMA_5'] = nifty['Close'].ewm(span=5, adjust=False).mean()
-            if nifty['Close'].iloc[-1] < nifty['EMA_5'].iloc[-1]:
-                market_bullish = False # Nifty is under short-term pressure
-    except Exception:
-        pass
-
     results = []
-    st.info("⚡ Downloading 4-Year historical data chunks from Yahoo Finance...")
+    st.info("⚡ Downloading historical data chunks from Yahoo Finance...")
     
     try:
-        raw_data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
+        # Fetching 2 years data in bulk
+        raw_data = yf.download(tickers, period="2y", interval="1d", progress=False, group_by='ticker')
     except Exception as e:
         st.error(f"Bulk Data Fetch Error: {e}")
         return pd.DataFrame()
 
     st.info("🧠 Processing and Analyzing technical filters in parallel...")
-    if not market_bullish and mode == "live":
-        st.warning("⚠️ Market Warning: Nifty 50 short term EMA ke neeche chal raha hai. Filters tighten kar diye gaye hain.")
-
     progress_bar = st.progress(0)
     
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover, market_bullish): ticker 
+            executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
             for ticker in tickers
         }
         
@@ -203,9 +170,6 @@ def process_market_analytics_fast(tickers, mode="live"):
     progress_bar.empty()
     return pd.DataFrame(results)
 
-# --- App Navigation Tabs ---
-tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
-
 # --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
@@ -213,13 +177,13 @@ with tab1:
         res_df = process_market_analytics_fast(all_tickers, mode="live")
         
         if not res_df.empty:
-            res_df = res_df.sort_values(by="Momentum Score", ascending=False)
+            res_df = res_df.sort_values(by="Score", ascending=False)
             res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-            st.success(f"🎉 Success! Found {len(res_df)} perfect next-day momentum stocks.")
+            st.success(f"🎉 Success! Found {len(res_df)} high-probability stocks.")
             st.dataframe(res_df, use_container_width=True, hide_index=True)
             
             top_stock = res_df.iloc[0]['Symbol']
-            st.markdown(f"### 👑 Top Next-Day Pick: **{top_stock}** (Highest Momentum Score)")
+            st.markdown(f"### 👑 Top Pick: **{top_stock}**")
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
@@ -228,23 +192,20 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Koi stock match nahi hua. Momentum filters high hain. Sidebar se parameters thode customize karein.")
+            st.warning("Koi stock match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
 
 # --- TAB 2: Chartink Style Backtest View ---
 with tab2:
     st.subheader("⏳ 2-Month Historical Analytics Dashboard")
+    
     if st.button("📊 Start Historical Backtest", key="bt_btn"):
         bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
         
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
-            
-            valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)]
-            if len(valid_moves) > 0:
-                bullish_days = len(valid_moves[valid_moves['Next Day Move'].str.replace('%','').astype(float) > 0])
-                accuracy = round((bullish_days / len(valid_moves)) * 100, 2)
-            else:
-                accuracy = 0
+            valid_moves = bt_df[bt_df['Next Day Move (%)'] != "Open Session"]
+            bullish_days = len(valid_moves[valid_moves['Next Day Move (%)'].astype(float) > 0])
+            accuracy = round((bullish_days / len(valid_moves)) * 100, 2) if len(valid_moves) > 0 else 0
             
             col1, col2 = st.columns(2)
             col1.metric("Total Generated Signals (2 Months)", len(bt_df))
@@ -254,5 +215,5 @@ with tab2:
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
-            st.warning("No Record Match.")
-        
+            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
+    
