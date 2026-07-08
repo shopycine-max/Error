@@ -60,4 +60,4 @@ def download_data_in_chunks(tickers, period="1y"):
             data = yf.download(batch, period=period, interval="1d", progress=False, group_by='ticker', auto_adjust=True)
             if isinstance(data.columns, pd.MultiIndex):
                 for ticker in batch:
-                    if ticker in data.columns.levels
+                    if ticker in data.columns.levels:
