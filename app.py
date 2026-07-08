@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: Fixed Backtest Current Data & Multi-Threaded Processing")
+st.caption("Engine Upgraded: Fixed 500-Day Rolling High Bug & Safe Filtering Logic")
 
 # --- Reliable Hardcoded Universe (Bypasses NSE Cloud Block) ---
 @st.cache_data(ttl=43200)
@@ -76,6 +76,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         else:
             df = raw_data.dropna(subset=['Close']).copy()
 
+        # Pehle check karein ki data available hai ya nahi
         total_rows = len(df)
         if total_rows < 40: return None 
 
@@ -86,7 +87,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['Turnover'] = df['Close'] * df['Volume']
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
-        # --- STANDARD WILDER'S RSI ---
+        # --- STANDARD WILDER'S RSI (TradingView Standard Fix) ---
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -96,6 +97,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['RSI'] = 100 - (100 / (1 + rs))
         
         # --- FIXED CHARTINK HIGH BREAKOUT LOGIC ---
+        # Agar stock naya hai ya total rows 500 se kam hain, toh available history ka max lega taaki crash na ho
         window_size = min(500, total_rows - 2)
         if window_size < 1: window_size = 1
         
@@ -108,7 +110,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 3.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
+        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] # Real Multi-month high breakout
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
 
@@ -127,19 +129,15 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
             }]
             
         elif mode == "backtest":
-            # FIXED SLICING: Ab yeh end tak yaani AAJ tak ka poora data scan karega
-            history_slice = df.iloc[-50:] 
+            history_slice = df.iloc[-44:-1] 
             triggers = history_slice[history_slice['Signal'] == True]
             for date, row in triggers.iterrows():
-                is_today = date.date() == datetime.today().date()
-                next_move = "Live / Open Session" if is_today or pd.isna(row['Next_Day_Return']) else f"{round(row['Next_Day_Return'], 2)}%"
-                
                 ticker_results.append({
                     "Date": date.strftime('%Y-%m-%d'),
                     "Symbol": ticker.replace(".NS", ""),
                     "Trigger Price (₹)": round(row['Close'], 2),
                     "RSI at Trigger": round(row['RSI'], 2),
-                    "Next Day Move": next_move
+                    "Next Day Move (%)": round(row['Next_Day_Return'], 2) if not pd.isna(row['Next_Day_Return']) else "Open Session"
                 })
             return ticker_results
     except Exception:
@@ -154,6 +152,7 @@ def process_market_analytics_fast(tickers, mode="live"):
     st.info("⚡ Downloading 4-Year historical data chunks from Yahoo Finance...")
     
     try:
+        # Period badalkar 4y kiya taaki 500-day window ke liye sahi data mile
         raw_data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
     except Exception as e:
         st.error(f"Bulk Data Fetch Error: {e}")
@@ -210,14 +209,9 @@ with tab2:
         
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
-            
-            # Filter calculation to handle percentage accuracy for historic rows safely
-            valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)]
-            if len(valid_moves) > 0:
-                bullish_days = len(valid_moves[valid_moves['Next Day Move'].str.replace('%','').astype(float) > 0])
-                accuracy = round((bullish_days / len(valid_moves)) * 100, 2)
-            else:
-                accuracy = 0
+            valid_moves = bt_df[bt_df['Next Day Move (%)'] != "Open Session"]
+            bullish_days = len(valid_moves[valid_moves['Next Day Move (%)'].astype(float) > 0])
+            accuracy = round((bullish_days / len(valid_moves)) * 100, 2) if len(valid_moves) > 0 else 0
             
             col1, col2 = st.columns(2)
             col1.metric("Total Generated Signals (2 Months)", len(bt_df))
@@ -228,4 +222,4 @@ with tab2:
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
             st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
-                
+            
