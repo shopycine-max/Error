@@ -88,6 +88,7 @@ def process_market_analytics(tickers, mode="live"):
         return pd.DataFrame()
 
     try:
+        # Download historical bulk data
         data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
     except Exception as e:
         st.error(f"Data Fetch Error: {e}")
@@ -99,13 +100,13 @@ def process_market_analytics(tickers, mode="live"):
         progress_bar.progress((idx + 1) / len(tickers))
         
         try:
+            # Multi-index or single tracker parsing
             if len(tickers) > 1:
-                if ticker in data.columns.levels[0]:
-                    df = data[ticker].dropna(subset=['Close'])
-                else:
+                if ticker not in data.columns.levels[0]:
                     continue
+                df = data[ticker].dropna(subset=['Close']).copy()
             else:
-                df = data.dropna(subset=['Close'])
+                df = data.dropna(subset=['Close']).copy()
 
             if len(df) < 510:
                 continue
@@ -134,25 +135,25 @@ def process_market_analytics(tickers, mode="live"):
 
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7
 
-            if mode == "live" and df['Signal'].iloc[-1]:
-                ltp = df['Close'].iloc[-1]
-                t_min = round(ltp * 1.01, 2)
-                t_max = round(ltp * 1.03, 2)
-                
-                results.append({
-                    "Stock Name": get_clean_name(ticker),
-                    "Symbol": ticker.replace(".NS", ""),
-                    "LTP (₹)": round(ltp, 2),
-                    "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
-                    "Tomorrow Outlook": "🔥 Highly Bullish",
-                    "Expected Target Zone": f"₹{t_min} - ₹{t_max}",
-                    "Turnover (Cr)": round(df['Turnover'].iloc[-1] / 10000000, 2)
-                })
-                
-            elif mode == "backtest":
+            # Mode evaluation separated inside flat formatting to avoid indent slips
+            if mode == "live":
+                if df['Signal'].iloc[-1]:
+                    ltp = df['Close'].iloc[-1]
+                    t_min = round(ltp * 1.01, 2)
+                    t_max = round(ltp * 1.03, 2)
+                    results.append({
+                        "Stock Name": get_clean_name(ticker),
+                        "Symbol": ticker.replace(".NS", ""),
+                        "LTP (₹)": round(ltp, 2),
+                        "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
+                        "Tomorrow Outlook": "🔥 Highly Bullish",
+                        "Expected Target Zone": f"₹{t_min} - ₹{t_max}",
+                        "Turnover (Cr)": round(df['Turnover'].iloc[-1] / 10000000, 2)
+                    })
+
+            if mode == "backtest":
                 history_slice = df.iloc[-44:-1] 
                 triggers = history_slice[history_slice['Signal'] == True]
-                
                 for date, row in triggers.iterrows():
                     results.append({
                         "Date": date.strftime('%Y-%m-%d'),
@@ -161,6 +162,7 @@ def process_market_analytics(tickers, mode="live"):
                         "Trigger Price (₹)": round(row['Close'], 2),
                         "Next Day Move (%)": round(row['Next_Day_Return'], 2) if not pd.isna(row['Next_Day_Return']) else "Open Session"
                     })
+
         except Exception:
             continue
 
