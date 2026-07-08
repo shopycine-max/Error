@@ -453,7 +453,7 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No Data Found.")
+            st.warning("Pure Indian market mein aaj is exact strict criteria par koi breakout stock match nahi hua. Aap filters ko halka sa adjust kar sakte hain.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
@@ -480,4 +480,4 @@ with tab2:
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
-            st.warning("No Record Found.")
+            st.warning("Pichle 2 mahino mein is criteria par koi records nahi mile.")
