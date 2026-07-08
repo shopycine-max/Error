@@ -213,14 +213,13 @@ def process_market_analytics_fast(tickers, mode="live"):
                 
     return pd.DataFrame(results), market_bullish
 
-# --- 6. Advanced Interactive Charting (MultiIndex Error Solved) ---
+# --- 6. Advanced Interactive Charting ---
 def render_pro_chart(symbol):
     df = yf.download(f"{symbol}.NS", period="6mo", interval="1d", progress=False)
     if df.empty: 
         st.warning(f"Data not available for {symbol}")
         return
     
-    # --- FIX: MultiIndex Flattening ---
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.droplevel(1)
     
@@ -281,7 +280,8 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.button("🚀 EXECUTE ALPHA MOMENTUM DISCOVERY", key="live_btn"):
-        with St.spinner("Processing technical matrix against live ticks..."):
+        # --- FIXED: 'St.spinner' changed to small 'st.spinner' ---
+        with st.spinner("Processing technical matrix against live ticks..."):
             res_df, _ = process_market_analytics_fast(all_tickers, mode="live")
             
         if not res_df.empty:
@@ -344,3 +344,4 @@ with tab2:
             st.download_button("📥 EXPORT AUDIT LOG SHEET (CSV)", data=csv_data, file_name="alpha_audit_report.csv", mime="text/csv")
         else:
             st.warning("No historical dataset match found for this configuration profile.")
+        
