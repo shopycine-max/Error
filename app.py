@@ -49,6 +49,36 @@ def get_scanning_universe(universe_type):
         pass
     return target_stocks
 
+@st.cache_data(ttl=86400) # 24 ghante ke liye cache
+def get_all_nse_tickers():
+    # NSE ki official equity list ka link
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        df = pd.read_csv(io.StringIO(response.text))
+        # Symbol column ko filter karke .NS lagana
+        tickers = [str(sym).strip() + ".NS" for sym in df['SYMBOL'].unique()]
+        return tickers
+    except Exception as e:
+        st.error("NSE list fetch karne mein error aaya.")
+        return []
+
+# 1. Threaded download for speed
+data = yf.download(tickers, period="6mo", interval="1d", 
+                   progress=False, group_by='ticker', threads=True)
+
+# 2. Batch Processing (Memory management)
+# 2000 stocks ek baar mein load karne se app crash ho sakti hai. 
+# Isliye hum ise chunk mein karenge:
+def run_full_scan(all_tickers):
+    # Process in chunks of 100 for stability
+    chunk_size = 100
+    final_results = []
+    for i in range(0, len(all_tickers), chunk_size):
+        chunk = all_tickers[i:i+chunk_size]
+        # Yahan upar wala logic run karein...
+
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "Nifty 500 + Targets"])
