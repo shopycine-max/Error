@@ -159,4 +159,114 @@ def analyze_single_ticker(ticker, df, mode, vol_mult, rsi_filt, t_limit):
                 "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
             }]
             
-        elif mode == "backtest
+        elif mode == "backtest":
+            triggers = df.iloc[-45:][df['Signal'] == True]
+            for date, row in triggers.iterrows():
+                idx = df.index.get_loc(date)
+                if idx + 1 >= len(df):
+                    trade_outcome = "Open Session"
+                    pnl = "0.0%"
+                else:
+                    next_day_row = df.iloc[idx + 1]
+                    t_close = row['Close']
+                    
+                    sl_val = row['Swing_Support']
+                    if sl_val >= t_close or (t_close - sl_val)/t_close > 0.08:
+                        sl_val = t_close * 0.965
+                        
+                    risk_amt = t_close - sl_val
+                    tp_val = t_close + (risk_amt * rr_ratio)
+                    
+                    if next_day_row['Low'] <= sl_val:
+                        trade_outcome = "❌ SL Hit (Support Violated)"
+                        pnl = f"-{round(((t_close - sl_val)/t_close)*100, 2)}%"
+                    elif next_day_row['High'] >= tp_val:
+                        trade_outcome = "🎯 Target Hit (Pattern Done)"
+                        pnl = f"+{round(((tp_val - t_close)/t_close)*100, 2)}%"
+                    else:
+                        day_return = ((next_day_row['Close'] - t_close) / t_close) * 100
+                        trade_outcome = "📈 Closed Positive" if day_return > 0 else "📉 Closed Negative"
+                        pnl = f"{round(day_return, 2)}%"
+
+                results.append({
+                    "Date": date.strftime('%Y-%m-%d'),
+                    "Symbol": ticker.replace(".NS", ""),
+                    "Trigger Price (₹)": round(row['Close'], 2),
+                    "Pattern Target (₹)": round(t_close + ((t_close - sl_val if sl_val < t_close else t_close*0.035) * rr_ratio), 2),
+                    "Chart Stoploss (₹)": round(sl_val if sl_val < t_close else t_close*0.965, 2),
+                    "Outcome": trade_outcome,
+                    "P&L (%)": pnl
+                })
+            return results
+    except:
+        return None
+    return None
+
+# --- Hyper-Velocity Engine ---
+def process_market_analytics_fast(tickers, mode="live"):
+    if not tickers: return pd.DataFrame()
+
+    results = []
+    chunk_size = 95 
+    ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
+    
+    st.info(f"⚡ Processing {len(tickers)} stocks via high-speed chart architecture...")
+    main_progress = st.progress(0)
+    
+    for c_idx, chunk in enumerate(ticker_chunks):
+        try:
+            raw_data = yf.download(chunk, period="1y", interval="1d", progress=False, group_by='ticker', threads=True)
+            
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                futures = {}
+                for ticker in chunk:
+                    try:
+                        if isinstance(raw_data.columns, pd.MultiIndex):
+                            if ticker in raw_data.columns.levels[0]:
+                                futures[executor.submit(analyze_single_ticker, ticker, raw_data[ticker], mode, volume_multiplier, rsi_filter, min_turnover)] = ticker
+                        else:
+                            futures[executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover)] = ticker
+                    except:
+                        continue
+                
+                for future in as_completed(futures):
+                    res = future.result()
+                    if res: results.extend(res)
+        except:
+            continue
+            
+        main_progress.progress((c_idx + 1) / len(ticker_chunks))
+                
+    main_progress.empty()
+    return pd.DataFrame(results)
+
+# --- UI Render Logic ---
+with tab1:
+    st.subheader("⚡ Live Structural Breakout Radar (Dynamic SL/TP)")
+    if st.button("🚀 Run Live Magic Scan", key="live_btn"):
+        res_df = process_market_analytics_fast(all_tickers, mode="live")
+        if not res_df.empty:
+            res_df = res_df.sort_values(by="Score", ascending=False)
+            res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
+            st.success(f"🎉 Success! Found {len(res_df)} breakout setups with chart-mapped risk levels.")
+            st.dataframe(res_df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No structural breakouts found right now. Try relaxing your filters.")
+
+with tab2:
+    st.subheader("⏳ Structural Backtest Performance Dashboard")
+    if st.button("📊 Start Historical Backtest", key="bt_btn"):
+        bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
+        if not bt_df.empty:
+            bt_df = bt_df.sort_values(by="Date", ascending=False)
+            total_trades = len(bt_df[bt_df['Outcome'] != "Open Session"])
+            target_hits = len(bt_df["🎯 Target Hit" in str(x) for x in bt_df['Outcome']])
+            
+            accuracy = round((target_hits / total_trades) * 100, 2) if total_trades > 0 else 0
+            
+            col1, col2 = st.columns(2)
+            col1.metric("Total Pattern Signals Generated", total_trades)
+            col2.metric("Chart Target Success Rate🎯", f"{accuracy}%")
+            st.dataframe(bt_df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No structural data points recorded inside this session.")
