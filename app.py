@@ -279,7 +279,7 @@ with tab1:
 
         # --- NAYAA CHART SECTION: CHART 2 (कल के लिए Next-Day Breakout Radar) ---
         st.markdown("---")
-        st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor (कल के लिए स्पेशल वॉचलिस्ट)")
+        st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
         
         # Continuation Score के हिसाब से सबसे मजबूत स्टॉक ढूंढें जो कल भाग सकता है
         future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
