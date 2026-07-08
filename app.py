@@ -63,7 +63,8 @@ def get_scanning_universe(universe_type):
 
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
-universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "Nifty 500 + Targets"])
+universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "🌐 All Indian Stocks (NSE EQ)"])
+                                                                  
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 50, 75, 60)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.5, step=0.1)
 
