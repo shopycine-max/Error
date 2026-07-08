@@ -201,7 +201,7 @@ with tab2:
 
 # Modification example inside your loop:
 # Assuming df is ready:
-df['BB_Width'] = (df['Close'].rolling(20).std() * 2) / df['Close'].rolling(20).mean()
+df['BB_Width'] = (['Close'].rolling(20).std() * 2) / df['Close'].rolling(20).mean()
 
 # New Condition:
 cond10 = df['BB_Width'] > 0.02 # Yahan aap condition set kar sakte hain
