@@ -137,5 +137,5 @@ def process_market_analytics(tickers, mode="live"):
                         "Symbol": ticker.replace(".NS", ""),
                         "Trigger Price (₹)": round(row['Close'], 2),
                         "RSI at Trigger": round(row['RSI'], 2),
-                        "Next Day Move (%)": round(row['Next_Day_Return'],
+                        "Next Day Move (%)": round (row['Next_Day_Return')],
             
