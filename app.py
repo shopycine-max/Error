@@ -1,91 +1,88 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import plotly.express as px
+import numpy as np
 
-# Page Config
-st.set_page_config(page_title="ERROR09 - Bullish Scanner", layout="wide")
+# Page Configuration
+st.set_page_config(layout="wide", page_title="ERROR09 Scanner")
 
-# UI Styling
-st.title("🚀 ERROR09 - Live Bullish Breakout Scanner")
-st.markdown("---")
-
-# List of Stocks (You can expand this list)
-tickers = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
-
-def calculate_scanner(tickers):
-    data = yf.download(tickers, period="1y", interval="1d", progress=False, group_by='ticker')
-    results = []
+def get_scanned_data(tickers):
+    # Fetch Data
+    # Hum 550 days ka data lete hain taaki 500 days ka max rolling window calculate ho sake
+    data = yf.download(tickers, period="2y", interval="1d", group_by='ticker', progress=False)
+    
+    final_results = []
     
     for ticker in tickers:
         try:
-            # Handle Single vs Multi-ticker download
+            # Data cleaning
             df = data[ticker].dropna() if len(tickers) > 1 else data.dropna()
+            if len(df) < 500: continue
             
-            # --- CALCULATING INDICATORS ---
-            df['Pct_Change'] = df['Close'].pct_change() * 100
+            # --- FORMULA TRANSLATION ---
+            # 1. Volume > SMA(Volume, 20)
             df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-            df['Return_20d'] = df['Close'].pct_change(20) * 100
+            
+            # 2. Daily % Change (1 candle ago)
+            df['Pct_Change'] = df['Close'].pct_change() * 100
+            
+            # 3. 20 Days Return >= 3%
+            df['Ret_20d'] = ((df['Close'] - df['Close'].shift(20)) / df['Close'].shift(20)) * 100
+            
+            # 4. Turnover (Close * Volume) > 50Cr (500,000,000)
             df['Turnover'] = df['Close'] * df['Volume']
             
-            # Complex Filters
-            df['Max_2_High_20_Ago'] = df['High'].shift(20).rolling(2).max()
-            df['Max_200_High_31_Ago'] = df['High'].shift(31).rolling(200).max()
-            df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(500).max()
+            # 5. Max(2, 20 days ago High) >= Max(200, 31 days ago High)
+            df['Max_2_20_Ago'] = df['High'].shift(20).rolling(2).max()
+            df['Max_200_31_Ago'] = df['High'].shift(31).rolling(200).max()
+            
+            # 6. Close >= 1 day ago Max(500, Daily High)
+            df['Max_500_1_Ago'] = df['High'].shift(1).rolling(500).max()
+            
+            # --- COMBINED SIGNAL ---
+            # Formula: Close>=20 AND %Change(1-11) AND Vol>SMA20 AND Ret20d>=3 AND Turnover>50cr AND Condition5 AND Condition6
+            df['Signal'] = (
+                (df['Close'] >= 20) &
+                (df['Pct_Change'] >= 1) & (df['Pct_Change'] <= 11) &
+                (df['Volume'] > df['Vol_SMA20']) &
+                (df['Ret_20d'] >= 3) &
+                (df['Turnover'] > 500000000) &
+                (df['Max_2_20_Ago'] >= df['Max_200_31_Ago']) &
+                (df['Close'] >= df['Max_500_1_Ago'])
+            )
             
             # Next Day Move for Accuracy
-            df['Next_Day_Move'] = df['Close'].shift(-1) - df['Close']
+            df['Next_Day_Return'] = ((df['Close'].shift(-1) - df['Close']) / df['Close']) * 100
             
-            # --- APPLYING FILTERS ---
-            c1 = df['Close'] >= 20
-            c2 = (df['Pct_Change'] >= 1) & (df['Pct_Change'] <= 11)
-            c3 = df['Volume'] > df['Vol_SMA20']
-            c4 = df['Return_20d'] >= 3
-            c5 = df['Turnover'] > 500000000
-            c6 = df['Max_2_High_20_Ago'] >= df['Max_200_High_31_Ago']
-            c7 = df['Close'] >= df['Max_500_High_1d_Ago']
-            
-            df['Signal'] = c1 & c2 & c3 & c4 & c5 & c6 & c7
-            
-            # --- ACCURACY LOGIC ---
-            history = df.iloc[-45:] # 2 month backtest
-            signals = history[history['Signal'] == True]
-            accuracy = 0
-            if len(signals) > 0:
-                wins = len(signals[signals['Next_Day_Move'] > 0])
-                accuracy = (wins / len(signals)) * 100
-            
-            # Append Results
+            # --- ANALYTICS ---
+            # If Signal is true today
             if df['Signal'].iloc[-1]:
-                results.append({
+                # Backtest Accuracy Calculation (Last 2 months)
+                hist = df.iloc[-45:]
+                signals = hist[hist['Signal'] == True]
+                acc = 0
+                if len(signals) > 0:
+                    acc = (len(signals[signals['Next_Day_Return'] > 0]) / len(signals)) * 100
+                
+                final_results.append({
                     "Stock": ticker.replace(".NS", ""),
                     "LTP": round(df['Close'].iloc[-1], 2),
-                    "Accuracy Rate": f"{round(accuracy, 2)}%",
-                    "Status": "🔥 Bullish Signal"
+                    "Accuracy": f"{round(acc, 2)}%",
+                    "Status": "✅ Breakout"
                 })
-        except:
+        except Exception:
             continue
-    return pd.DataFrame(results)
-
-# --- UI & LOGIC ---
-if st.button("🚀 Run Live Scan"):
-    with st.spinner('Analyzing Markets...'):
-        df_results = calculate_scanner(tickers)
-        
-        if not df_results.empty:
-            st.success(f"Found {len(df_results)} matching stocks!")
-            st.dataframe(df_results, use_container_width=True)
             
-            # Visualizing the Signals
-            fig = px.bar(df_results, x="Stock", y="LTP", color="Accuracy Rate", title="Bullish Candidates")
-            st.plotly_chart(fig)
-        else:
-            st.warning("Aaj koi stock criteria match nahi kiya.")
+    return pd.DataFrame(final_results)
 
-# --- Backtest Section ---
-st.markdown("---")
-st.subheader("📊 2-Month Historical Log Sheet")
-if st.button("Check Historical Logs"):
-    # Here you can display a full table of past signals
-    st.info("Showing past 60 days signals...")
-    
+# UI Implementation
+st.title("📈 ERROR09 - Chartink Logic Scanner")
+tickers = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+
+if st.button("🚀 Run Scanner"):
+    df = get_scanned_data(tickers)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.write("Abhi koi stock formula match nahi kar raha hai.")
+        
