@@ -26,7 +26,11 @@ st.caption("Engine Upgraded: RSI, EMA Trend, & Volume Shock Filters Added for Ne
 # --- Reliable Universe Fetcher ---
 @st.cache_data(ttl=43200)
 def get_scanning_universe(universe_type):
+    target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
     
+    if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
+        return target_stocks
+
     url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
     headers = {'User-Agent': 'Mozilla/5.0'}
     
