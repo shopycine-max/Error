@@ -159,4 +159,3 @@ def process_market_analytics(tickers, mode="live"):
                 triggers = history_slice[history_slice['Signal'] == True]
                 for date, row in triggers.iterrows():
                     results.append({
-                        
