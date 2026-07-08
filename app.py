@@ -6,6 +6,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import io
+import time
 
 # --- Page Configurations ---
 st.set_page_config(page_title="Mega Stock Scanner 2400+", page_icon="📈", layout="wide")
@@ -21,26 +22,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Mega Stock Scanner Terminal (2400+ NSE Live Universe)")
-st.caption("Engine Upgraded: Dynamic NSE Auto-Fetch, Chart Pattern Swing Support & 1:2 Dynamic Projections Enabled")
+st.caption("Engine Upgraded: Dynamic NSE Auto-Fetch, Anti-Ban Protection & 1:2 Dynamic Projections")
 
 # --- DYNAMIC 2400+ NSE TICKER DATABASE FETCH ---
-@st.cache_data(ttl=86400) # Caches the data for 24 hours so it doesn't download on every click
+@st.cache_data(ttl=86400)
 def get_mega_nse_universe():
     try:
-        # Fetching directly from NSE Official Master List
         url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         response = requests.get(url, headers=headers, timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
-        # Filtering only active Standard Equities (EQ)
         df = df[df['SERIES'] == 'EQ']
         tickers = df['SYMBOL'].tolist()
-        
-        # Append .NS for Yahoo Finance compatibility
         return sorted(list(set([f"{t}.NS" for t in tickers if isinstance(t, str)])))
     except Exception as e:
-        # Solid Fallback List in case NSE server blocks the cloud IP temporarily
         st.warning("⚠️ NSE Server timeout. Using Fallback Top 200 Stocks list.")
         fallback = ["RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC", "LT", "BAJFINANCE", "TATAMOTORS", "SUNPHARMA", "NTPC", "ZOMATO", "JIOFIN", "SUZLON", "RVNL", "IREDA", "IRFC", "HAL"]
         return sorted(list(set([f"{t}.NS" for t in fallback])))
@@ -48,9 +44,8 @@ def get_mega_nse_universe():
 # --- Process Single Ticker Core Calculations ---
 def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
-        # Robust MultiIndex handling for newest yfinance updates
+        # Robust MultiIndex handling
         if isinstance(raw_data.columns, pd.MultiIndex):
-            # Try both level 0 and level 1 to find the ticker
             if ticker in raw_data.columns.get_level_values(1):
                 df = raw_data.xs(ticker, axis=1, level=1).copy()
             elif ticker in raw_data.columns.get_level_values(0):
@@ -61,10 +56,8 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
             df = raw_data.copy()
 
         df = df.dropna(subset=['Close'])
-        total_rows = len(df)
-        if total_rows < 50: return None 
+        if len(df) < 50: return None 
 
-        # Technical Metrics Calculation
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -80,15 +73,13 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        window_size = min(500, total_rows - 2)
-        if window_size < 1: window_size = 1
+        window_size = max(1, min(500, len(df) - 2))
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         
-        # --- CHART PATTERN: 5-Day Swing Lowest Low Calculation ---
         df['Low_5d'] = df['Low'].rolling(window=5).min()
         df['Next_Day_Return'] = df['Pct_Change'].shift(-1)
 
-        # Strategy Breakout Filters
+        # Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
@@ -105,12 +96,11 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
             entry = df['Close'].iloc[-1]
             sl = df['Low_5d'].iloc[-1]
             
-            # Structurally avoid zero/flat ranges using standard ATR/Percentage fallback
             if sl >= entry or (entry - sl) / entry < 0.005: 
-                sl = entry * 0.965  # 3.5% default buffer
+                sl = entry * 0.965  
                 
             risk = entry - sl
-            target = entry + (2 * risk) # Pattern Risk-Reward 1:2
+            target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
             return [{
@@ -152,51 +142,47 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         return None
     return None
 
-# --- Sidebar Controls UI ---
+# --- Sidebar Controls ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
 
-# Load the dynamic mega universe
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"🟢 Active Stocks Loaded: **{len(all_tickers)}**")
-st.sidebar.caption("(List auto-updates directly from NSE servers)")
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
-# --- ThreadPool Batch Processing Engine ---
 def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
-
     results = []
-    chunk_size = 40  # Safely chunked to protect against connection drops
+    chunk_size = 40  
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
-    st.info(f"⚡ Processing {len(tickers)} symbols across {len(ticker_chunks)} batches. (Takes 1-3 minutes for mega scan)...")
-    main_progress = st.progress(0)
+    st.info(f"⚡ Processing {len(tickers)} symbols... Please wait.")
+    main_progress = st.progress(0.0)
     
     for c_idx, chunk in enumerate(ticker_chunks):
         try:
             raw_data = yf.download(chunk, period="2y", interval="1d", progress=False)
             
             with ThreadPoolExecutor(max_workers=15) as executor:
-                futures = {
-                    executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
-                    for ticker in chunk
-                }
+                futures = {executor.submit(analyze_single_ticker, t, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): t for t in chunk}
                 for future in as_completed(futures):
                     res = future.result()
                     if res: results.extend(res)
+            
+            # Anti-ban sleep logic to prevent yfinance block
+            time.sleep(0.5) 
+            
         except Exception:
             continue
             
-        main_progress.progress((c_idx + 1) / len(ticker_chunks))
+        main_progress.progress(min((c_idx + 1) / len(ticker_chunks), 1.0))
                 
     main_progress.empty()
     return pd.DataFrame(results)
 
-# --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
     if st.button("🚀 Run Full 2400+ Stocks Scan", key="live_btn"):
@@ -208,19 +194,13 @@ with tab1:
             st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups!")
             st.dataframe(res_df, use_container_width=True, hide_index=True)
             
-            # --- Chart Visualizer FIX APPLIED HERE ---
             top_stock = res_df.iloc[0]['Symbol']
             st.markdown(f"### 👑 Top Ranked Setup: **{top_stock}**")
             
-            # Fix: Using Ticker().history() directly instead of yf.download() completely avoids the KeyError bug
             ticker_obj = yf.Ticker(f"{top_stock}.NS")
             chart_data = ticker_obj.history(period="3mo", interval="1d")
             
             if not chart_data.empty:
-                # Ensure no multi-index columns just in case
-                if isinstance(chart_data.columns, pd.MultiIndex):
-                    chart_data.columns = chart_data.columns.get_level_values(0)
-
                 fig = go.Figure(data=[go.Candlestick(
                     x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
                     low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
@@ -236,18 +216,15 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Price Action & Triggers", xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No breakout setups spotted matching current filters within the 2400+ active pool.")
+            st.warning("No breakout setups spotted matching current filters today.")
 
-# --- TAB 2: Historical Backtest View ---
 with tab2:
     st.subheader("⏳ 2-Month Historical Analytics Dashboard")
-    
     if st.button("📊 Start Mega Backtest (Takes Time)", key="bt_btn"):
         bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
         
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
-            
             valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)].copy()
             if len(valid_moves) > 0:
                 numeric_moves = valid_moves['Next Day Move'].str.replace('%','').astype(float)
@@ -262,6 +239,6 @@ with tab2:
             
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="mega_backtest_results.csv", mime="text/csv")
+            st.download_button("📥 Download Backtest Sheet", data=csv_data, file_name="mega_backtest.csv", mime="text/csv")
         else:
             st.warning("No historical signal matches discovered.")
