@@ -132,7 +132,7 @@ def process_market_analytics(tickers, mode="live"):
                 history_slice = df.iloc[-44:-1] 
                 triggers = history_slice[history_slice['Signal'] == True]
                 for date, row in triggers.iterrows():
-                    results.append(
+                    results.append
                         "Date": date.strftime('%Y-%m-%d'),
                         "Symbol": ticker.replace(".NS", ""),
                         "Trigger Price (₹)": round(row['Close'], 2),
