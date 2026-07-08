@@ -42,7 +42,6 @@ def get_scanning_universe(universe_type):
     if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
         return target_stocks
 
-    # Modernized alternate link to avoid 404 errors from NSE main archive
     url = "https://niftyindices.com/IndexConstituentList/ind_nifty500list.csv"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
@@ -59,7 +58,6 @@ def get_scanning_universe(universe_type):
     except Exception:
         pass
         
-    # Standard Backup URL if the first one fails
     try:
         backup_url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         res = requests.get(backup_url, headers=headers, timeout=10)
@@ -138,7 +136,6 @@ def process_market_analytics(tickers, mode="live"):
 
             if mode == "live" and df['Signal'].iloc[-1]:
                 ltp = df['Close'].iloc[-1]
-                # Predicting a standard 1% to 3% momentum target window for tomorrow
                 t_min = round(ltp * 1.01, 2)
                 t_max = round(ltp * 1.03, 2)
                 
