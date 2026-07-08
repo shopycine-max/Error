@@ -77,3 +77,12 @@ def process_market_analytics(tickers, mode="live"):
     try:
         data = yf.download(tickers
                            
+# --- Core Scanner Engine ---
+def 
+        data = yf.download(tickers, period="2y", interval="1d", progress=False)
+    except Exception as e:
+        st.error("Data Fetch Error: " + str(e))
+        return pd.DataFrame()
+
+    progress_bar = st.progress(0, text="Scanning Market Data...")
+    
