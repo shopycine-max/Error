@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: Fixed 500-Day Rolling High Bug & Safe Filtering Logic")
+st.caption("Engine Upgraded: Standard RSI, Fixed Filters & Multi-Threaded Processing")
 
 # --- Reliable Hardcoded Universe (Bypasses NSE Cloud Block) ---
 @st.cache_data(ttl=43200)
@@ -59,7 +59,7 @@ st.sidebar.header("⚙️ Pro Scanner Controls")
 universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "🌐 Total All NSE Stocks (2000+)"])
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.3, step=0.1)
-min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
+min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=5)
 
 all_tickers = get_scanning_universe(universe_choice)
 st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
@@ -76,9 +76,7 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         else:
             df = raw_data.dropna(subset=['Close']).copy()
 
-        # Pehle check karein ki data available hai ya nahi
-        total_rows = len(df)
-        if total_rows < 40: return None 
+        if len(df) < 250: return None # Minimum data needed for 200-period checks
 
         # --- Base Metrics ---
         df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -96,23 +94,19 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        # --- FIXED CHARTINK HIGH BREAKOUT LOGIC ---
-        # Agar stock naya hai ya total rows 500 se kam hain, toh available history ka max lega taaki crash na ho
-        window_size = min(500, total_rows - 2)
-        if window_size < 1: window_size = 1
-        
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        # --- Chartink Breakout Logic Check ---
+        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=min(500, len(df)-1), min_periods=1).max()
         df['Next_Day_Return'] = df['Close'].shift(-1).pct_change() * 100
 
         # --- ADJUSTED FORMULA EVALUATOR ---
-        cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
-        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 3.0 
-        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] # Real Multi-month high breakout
-        cond8 = df['RSI'] >= rsi_filter 
-        cond9 = df['Close'] > df['EMA_20'] 
+        cond1 = df['Close'] >= 20 # Minimum share price
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) # Normal strong day
+        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) # Volume shock
+        cond4 = df['Return_20d'] >= 3.0 # Basic 20-day trend
+        cond5 = df['Turnover'] > (turnover_limit * 10000000) # Dynamic Turnover filter (₹ Crores)
+        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] # Multi-month high breakout
+        cond8 = df['RSI'] >= rsi_filter # RSI Filter
+        cond9 = df['Close'] > df['EMA_20'] # Above short term support
 
         df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
 
@@ -149,11 +143,11 @@ def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    st.info("⚡ Downloading 4-Year historical data chunks from Yahoo Finance...")
+    st.info("⚡ Downloading historical data chunks from Yahoo Finance...")
     
     try:
-        # Period badalkar 4y kiya taaki 500-day window ke liye sahi data mile
-        raw_data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
+        # Fetching 2 years data in bulk
+        raw_data = yf.download(tickers, period="2y", interval="1d", progress=False, group_by='ticker')
     except Exception as e:
         st.error(f"Bulk Data Fetch Error: {e}")
         return pd.DataFrame()
@@ -222,4 +216,4 @@ with tab2:
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
             st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
-            
+    
