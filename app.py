@@ -24,7 +24,7 @@ st.caption("Engine Upgraded: Chart Pattern Swing Support & 1:2 Dynamic Projectio
 # --- MEGA 1800+ NSE TICKER DATABASE (Nifty Total Market Universe) ---
 def get_mega_nse_universe():
     # Large, Mid, Small, Micro Caps ka compiled comprehensive active list
-    base_tickers = [# --- ULTIMATE 1800+ STOCK MASTER FALLBACK POOL ---
+    base_tickers = # --- ULTIMATE 1800+ STOCK MASTER FALLBACK POOL ---
     # Enclosed full active listed stocks mapping to never drop count
     base_pool = [ "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "ITC", "BHARTIARTL", "HINDUNILVR", "LT",
         "BAJFINANCE", "TATAMOTORS", "SUNPHARMA", "MARUTI", "KOTAKBANK", "AXISBANK", "NTPC", "ONGC", "TATASTEEL", "ADANIENT",
