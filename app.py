@@ -210,7 +210,7 @@ with tab2:
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
             total_trades = len(bt_df[bt_df['Outcome'] != "Open Session"])
-            target_hits = len(bt_df["🎯 Target Hit" in str(x) for x in bt_df['Outcome']])
+            target_hits = len(bt_df ,["🎯 Target Hit" in str(x) for x in bt_df['Outcome']])
             
             accuracy = round((target_hits / total_trades) * 100, 2) if total_trades > 0 else 0
             
