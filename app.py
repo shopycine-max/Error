@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 import requests
 import io
 from datetime import datetime
-import warnings
 
 # --- Page Configurations ---
 st.set_page_config(page_title="Pro Stock Scanner", page_icon="📈", layout="wide")
@@ -195,13 +194,4 @@ with tab2:
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
-            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
-# Import (agar use karna chahein)
-# from ta.trend import ADXIndicator 
-
-# Modification example inside your loop:
-# Assuming df is ready:
-df['BB_Width'] = (['Close'].rolling(20).std() * 2) / df['Close'].rolling(20).mean()
-
-# New Condition:
-cond10 = df['BB_Width'] > 0.02 # Yahan aap condition set kar sakte hain
+            st.warning("No Record Match.")
