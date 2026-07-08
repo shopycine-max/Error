@@ -27,7 +27,7 @@ st.caption("Engine Upgraded: Next-Day Momentum Precision Filters & Market Trend 
 # --- Reliable Hardcoded Universe (Bypasses NSE Cloud Block) ---
 @st.cache_data(ttl=43200)
 def get_scanning_universe(universe_type):
-    target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+    target_stocks = ["THANGAMAYAL.NS", "IOLCOP.NS", "JKBANK.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
     
     if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
         return target_stocks
