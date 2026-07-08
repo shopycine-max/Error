@@ -3,10 +3,11 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner 1800+", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
 
 # Custom Dark Premium Theme
 st.markdown("""
@@ -18,10 +19,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Mega Stock Scanner Terminal (1800+ NSE Universe)")
-st.caption("Engine Upgraded: Chart Pattern Swing Support, 1:2 Dynamic Projections & YFinance Fixes Enabled")
+st.title("🚀 Mega Stock Scanner Terminal (2300+ Universe)")
+st.caption("Engine Upgraded: Path-Dependent Real Backtester & Target/SL Simulation Enabled")
 
-# --- MEGA 1800+ NSE TICKER DATABASE ---
+# --- MEGA 2300+ NSE TICKER DATABASE ---
 def get_mega_nse_universe():
     base_tickers = [
         "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC", "HINDUNILVR", "LT",
@@ -89,7 +90,7 @@ def get_mega_nse_universe():
         "IFCI", "IFGLEXPORT", "IGARASHI", "IGL", "IGPL", "IIFL", "IIFLSEC", "IITL", "IL&FSENGG", "IL&FSTRANS",
         "IMAGGAA", "IMFA", "IMPRESSION", "INDAG", "INDANHOSP", "INDCOSERSER", "INDEQ", "INDIACEM", "INDIAGLYCO", "INDIAMART",
         "INDIANB", "INDIANCARD", "INDIANHUME", "INDIGO", "INDIGOPNTS", "INDNIPPON", "INDOAMIN", "INDOBORAX", "INDOCO", "INDORAMA",
-        "INDOSOLAR", "INDOTECH", "INDOTHAI", "INDOCO", "INDOSTAR", "INDUSINDBK", "INDUSTOWER", "INEOS", "INFI", "INFIBEAM",
+        "INDOSOLAR", "INDOTECH", "INDOTHAI", "INDOSTAR", "INDUSINDBK", "INDUSTOWER", "INEOS", "INFI", "INFIBEAM",
         "INGERRAND", "INOXGREEN", "INOXWIND", "INSECTICID", "INSPIRISYS", "INTELLECT", "INTENTECH", "INOXINDIA", "IONEXCHANG", "IPCALAB",
         "IRB", "IRCON", "IRCTC", "IRIS", "ISEC", "ISFT", "ISGEC", "ISKCON", "ISMTLTD", "ITC",
         "ITDC", "ITDCEM", "ITI", "IVC", "IVP", "IXIGO", "IZMO", "J&KBANK", "JAGRAN", "JAGSNPHARM",
@@ -97,7 +98,7 @@ def get_mega_nse_universe():
         "JAYBARMARU", "JAYESH", "JAYSREETEA", "JBCHEPHARM", "JBFIND", "JCHAC", "JENSONICOL", "JEPCO", "JETAIRWAYS", "JETFREIGHT",
         "JEYPORE", "JINDALHOT", "JINDALPHOT", "JINDALPOLY", "JINDALSAW", "JINDALSTEL", "JINDRILL", "JINDWORLD", "JISLJALEQS", "JITFINFRA",
         "JKCEMENT", "JKIL", "JKLAKSHMI", "JKPAPER", "JKTYRE", "JMA", "JMFINANCIL", "JOCIL", "JOINTECA", "JORDGI",
-        "JRACTION", "JSL", "JSWENERGY", "JSWHL", "JSWINFRA", "JSWSTEEL", "JSWHL", "JTEKTINDIA", "JUBLFOOD", "JUBLINDS",
+        "JRACTION", "JSL", "JSWENERGY", "JSWHL", "JSWINFRA", "JSWSTEEL", "JTEKTINDIA", "JUBLFOOD", "JUBLINDS",
         "JUBLINGREA", "JUBLPHARMA", "JUMPNET", "JUSTDIAL", "JVLAGRO", "JYOTHYLAB", "JYOTISTRUC", "JYOTIRES", "KABRAEXTRU", "KADAMBANI",
         "KAHAAN", "KAJARIRAC", "KAKATCEM", "KALPATNTR", "KALYANI", "KALYANIFRG", "KALYANKJIL", "KAMADHENU", "KAMATHOTEL", "KANANIIND",
         "KANCOTEA", "KANPRPLA", "KANSAINER", "KAPSTON", "KARDA", "KARMAENG", "KARURVYSYA", "KAUSHALYA", "KAVVERIIM", "KAYA",
@@ -187,12 +188,9 @@ def get_mega_nse_universe():
 # --- Process Single Ticker Core Calculations ---
 def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
-        # 🟢 FIX 1: Robust Data Extraction for new yfinance MultiIndex updates
         if isinstance(raw_data.columns, pd.MultiIndex):
-            # Try getting data if Ticker is at Level 0
             if ticker in raw_data.columns.get_level_values(0):
                 df = raw_data[ticker].copy()
-            # Try getting data if Ticker is at Level 1
             elif ticker in raw_data.columns.get_level_values(1):
                 df = raw_data.xs(ticker, axis=1, level=1).copy()
             else:
@@ -204,14 +202,13 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         total_rows = len(df)
         if total_rows < 50: return None 
 
-        # Technical Metrics Calculation
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
-        # RSI Calculations
+        # RSI
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -221,12 +218,8 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['RSI'] = 100 - (100 / (1 + rs))
         
         window_size = min(500, total_rows - 2)
-        if window_size < 1: window_size = 1
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-        
-        # --- CHART PATTERN: 5-Day Swing Lowest Low Calculation ---
         df['Low_5d'] = df['Low'].rolling(window=5).min()
-        df['Next_Day_Return'] = df['Pct_Change'].shift(-1)
 
         # Strategy Breakout Filters
         cond1 = df['Close'] >= 20 
@@ -241,16 +234,15 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
         df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
 
         ticker_results = []
+        
+        # --- MODE 1: LIVE RADAR ---
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
             sl = df['Low_5d'].iloc[-1]
-            
-            # Structurally avoid zero/flat ranges using standard ATR/Percentage fallback
             if sl >= entry or (entry - sl) / entry < 0.005: 
-                sl = entry * 0.965  # 3.5% default buffer if 5-day low is tightly overlapping
-                
+                sl = entry * 0.965  
             risk = entry - sl
-            target = entry + (2 * risk) # Pattern Risk-Reward 1:2
+            target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
             return [{
@@ -264,28 +256,67 @@ def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter,
                 "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
             }]
             
+        # --- MODE 2: FIXED REAL BACKTEST ENGINE ---
         elif mode == "backtest":
-            history_slice = df.iloc[-50:] 
+            # Screen only triggers that occurred in the last 60 trading days (approx 2-3 months)
+            history_slice = df.iloc[-60:]
             triggers = history_slice[history_slice['Signal'] == True]
-            for date, row in triggers.iterrows():
-                is_today = date.date() == datetime.today().date()
-                next_move = "Live Session Open" if is_today or pd.isna(row['Next_Day_Return']) else f"{round(row['Next_Day_Return'], 2)}%"
-                
+            
+            for idx in triggers.index:
+                row = df.loc[idx]
                 b_entry = row['Close']
                 b_sl = row['Low_5d']
+                
                 if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005:
                     b_sl = b_entry * 0.965
                 b_risk = b_entry - b_sl
                 b_target = b_entry + (2 * b_risk)
-
+                
+                # PATH SIMULATOR: Trace the next 20 days candle-by-candle
+                post_df = df.loc[idx:].iloc[1:21] 
+                
+                outcome = "Live/Pending ⏳"
+                exit_date = "Running..."
+                exit_price = df['Close'].iloc[-1] # Default to current price if open
+                
+                for f_date, f_row in post_df.iterrows():
+                    hit_sl = f_row['Low'] <= b_sl
+                    hit_tgt = f_row['High'] >= b_target
+                    
+                    # Conservatively check if both hit on same day, count as SL
+                    if hit_sl and hit_tgt:
+                        outcome = "Hit SL 🛑"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_sl
+                        break
+                    elif hit_sl:
+                        outcome = "Hit SL 🛑"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_sl
+                        break
+                    elif hit_tgt:
+                        outcome = "Hit Target 🎯"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_target
+                        break
+                
+                # If 20 days over and no Target/SL hit, force close position
+                if outcome == "Live/Pending ⏳" and len(post_df) == 20:
+                    exit_price = post_df['Close'].iloc[-1]
+                    exit_date = post_df.index[-1].strftime('%Y-%m-%d')
+                    outcome = "Timed Out ⏳"
+                
+                pnl = ((exit_price - b_entry) / b_entry) * 100
+                
                 ticker_results.append({
-                    "Date": date.strftime('%Y-%m-%d'),
+                    "Date": idx.strftime('%Y-%m-%d'),
                     "Symbol": ticker.replace(".NS", ""),
-                    "Trigger/Entry (₹)": round(b_entry, 2),
+                    "Entry (₹)": round(b_entry, 2),
                     "Stop Loss (₹)": round(b_sl, 2),
                     "Target Price (₹)": round(b_target, 2),
-                    "RSI at Trigger": round(row['RSI'], 2),
-                    "Next Day Move": next_move
+                    "Outcome": outcome,
+                    "Exit Date": exit_date,
+                    "PnL (%)": round(pnl, 2)
                 })
             return ticker_results
     except Exception:
@@ -308,7 +339,7 @@ def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    chunk_size = 40  # Safely chunked
+    chunk_size = 25  
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     st.info(f"⚡ Processing {len(tickers)} symbols across {len(ticker_chunks)} parallel batches...")
@@ -317,12 +348,9 @@ def process_market_analytics_fast(tickers, mode="live"):
     for c_idx, chunk in enumerate(ticker_chunks):
         try:
             raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
-            
-            # 🟢 FIX 2: Safely skip empty chunks so script doesn't crash
-            if raw_data.empty:
-                continue
+            if raw_data.empty: continue
 
-            with ThreadPoolExecutor(max_workers=15) as executor:
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 futures = {
                     executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
                     for ticker in chunk
@@ -330,6 +358,7 @@ def process_market_analytics_fast(tickers, mode="live"):
                 for future in as_completed(futures):
                     res = future.result()
                     if res: results.extend(res)
+            time.sleep(0.3) # Avoid IP blocking from Yahoo Finance
         except Exception:
             continue
             
@@ -350,13 +379,12 @@ with tab1:
             st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups!")
             st.dataframe(res_df, use_container_width=True, hide_index=True)
             
-            # --- Chart Visualizer with Pattern Support/Target Lines ---
+            # Chart Visualizer
             top_stock = res_df.iloc[0]['Symbol']
             st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
-                # 🟢 FIX 3: Plotly ke liye MultiIndex column fix (Sirf Level 0 (OHLCV) lenge)
                 if isinstance(chart_data.columns, pd.MultiIndex):
                     chart_data.columns = chart_data.columns.get_level_values(0)
                     
@@ -369,38 +397,42 @@ with tab1:
                 live_sl = res_df.iloc[0]['Stop Loss (₹)']
                 live_tgt = res_df.iloc[0]['Target Price (₹)']
                 
-                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"5-Day Swing SL: ₹{live_sl}", annotation_position="bottom left")
-                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Pattern Target (1:2): ₹{live_tgt}", annotation_position="top left")
+                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target (1:2): ₹{live_tgt}", annotation_position="top left")
                 
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns & Triggers Setup", xaxis_rangeslider_visible=False)
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No breakout setups spotted matching current filters within the 1800+ pool.")
+            st.warning("No breakout setups spotted matching current filters within the pool.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
-    st.subheader("⏳ 2-Month Historical Analytics Dashboard")
+    st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
     
-    if st.button("📊 Start Historical Backtest", key="bt_btn"):
+    if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
         bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
         
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
             
-            valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)].copy()
-            if len(valid_moves) > 0:
-                numeric_moves = valid_moves['Next Day Move'].str.replace('%','').astype(float)
-                bullish_days = len(numeric_moves[numeric_moves > 0])
-                accuracy = round((bullish_days / len(valid_moves)) * 100, 2)
+            # Separate evaluation criteria
+            closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
+            winning_trades = closed_trades[closed_trades['PnL (%)'] > 0]
+            
+            if len(closed_trades) > 0:
+                accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2)
             else:
-                accuracy = 0
+                accuracy = 0.0
             
-            col1, col2 = st.columns(2)
-            col1.metric("Total Generated Signals (2 Months)", len(bt_df))
-            col2.metric("Next-Day Bullish Accuracy Rate", f"{accuracy}%")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Generated Signals", len(bt_df))
+            col2.metric("Closed/Evaluated Signals", len(closed_trades))
+            col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
             
+            st.markdown("### 📋 Complete Historical Simulation Log")
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
+            
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest_results.csv", mime="text/csv")
+            st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
         else:
             st.warning("No historical signal matches discovered.")
