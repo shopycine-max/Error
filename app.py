@@ -4,11 +4,10 @@ import yfinance as yf
 import requests
 import io
 
-# Setup
-st.set_page_config(layout="wide")
-st.title("📈 Stock Scanner: Name & Accuracy Tracker")
+# Page Config
+st.set_page_config(page_title="ERROR09 - Accuracy Scanner", layout="wide")
 
-# 1. Name Mapping
+# Mapping for Names
 STOCK_NAME_MAP = {
     "CUPID": "Cupid Limited",
     "DIACABS": "Diamond Power",
@@ -21,46 +20,54 @@ def get_clean_name(symbol):
     sym = symbol.replace(".NS", "")
     return STOCK_NAME_MAP.get(sym, sym)
 
-# 2. Scanner Engine
-def run_scan(tickers):
-    final_data = []
+# Scanner Logic with Per-Stock Accuracy
+def process_market_analytics(tickers):
+    results = []
+    
+    # Download data
     data = yf.download(tickers, period="2y", progress=False, group_by='ticker')
     
     for ticker in tickers:
         try:
+            # Data selection
             df = data[ticker].dropna() if len(tickers) > 1 else data.dropna()
             
             # Indicators
             df['SMA20'] = df['Volume'].rolling(20).mean()
             df['Signal'] = (df['Close'] >= 20) & (df['Volume'] > df['SMA20']) & (df['Close'] > df['High'].shift(1).rolling(200).max())
+            df['Next_Day_Return'] = ((df['Close'].shift(-1) - df['Close']) / df['Close']) * 100
             
-            # Calculate Accuracy (Historical 2 Month Win Rate)
+            # --- CALCULATE ACCURACY FOR THIS SPECIFIC STOCK ---
             history = df.iloc[-45:] # Last 2 months
             signals = history[history['Signal'] == True]
             
-            acc_rate = "0%"
+            accuracy_rate = 0
             if len(signals) > 0:
-                wins = len(signals[signals['Close'].shift(-1) > signals['Close']])
-                acc_rate = f"{int((wins/len(signals))*100)}%"
+                wins = len(signals[signals['Next_Day_Return'] > 0])
+                accuracy_rate = (wins / len(signals)) * 100
             
-            # Check Today's Signal
+            # If today is a signal, add to results
             if df['Signal'].iloc[-1]:
-                final_data.append({
+                results.append({
                     "Stock Name": get_clean_name(ticker),
-                    "Accuracy Rate": acc_rate,
+                    "Accuracy Rate": f"{accuracy_rate:.1f}%", # New Column
                     "LTP": round(df['Close'].iloc[-1], 2),
                     "Status": "🔥 Bullish Tomorrow"
                 })
         except:
             continue
-    return pd.DataFrame(final_data)
+            
+    return pd.DataFrame(results)
 
-# 3. UI
-if st.button("🚀 Scan Stocks"):
-    df = run_scan(["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"])
+# UI Display
+st.title("🚀 ERROR09 - Live Bullish Scanner")
+if st.button("🔍 Run Live Scan"):
+    tickers = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+    df = process_market_analytics(tickers)
+    
     if not df.empty:
-        # Yeh raha aapka desired output table
-        st.table(df) 
+        # Displaying Table with Name and Accuracy
+        st.dataframe(df, use_container_width=True)
     else:
-        st.warning("No signal today.")
+        st.warning("Koi bullish signal nahi mila.")
         
