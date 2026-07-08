@@ -31,23 +31,35 @@ def get_scanning_universe(universe_type):
     if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
         return target_stocks
 
-    url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # All Indian Stocks (NSE Equity List) URL
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L_MARKET_DATA.csv"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             df = pd.read_csv(io.StringIO(response.text))
             df.columns = df.columns.str.strip()
-            nse_tickers = [str(sym).strip() + ".NS" for sym in df['Symbol'].dropna()]
+            
+            # Sirf Regular Stocks ('EQ') filter kar rahe hain (Sovereign Gold Bonds, Mutual Funds etc. hatane ke liye)
+            if 'SERIES' in df.columns and 'SYMBOL' in df.columns:
+                df = df[df['SERIES'] == 'EQ']
+                nse_tickers = [str(sym).strip() + ".NS" for sym in df['SYMBOL'].dropna()]
+            else:
+                nse_tickers = [str(sym).strip() + ".NS" for sym in df['SYMBOL'].dropna()]
             
             for stock in target_stocks:
                 if stock not in nse_tickers:
                     nse_tickers.append(stock)
             return nse_tickers
-    except Exception:
-        pass
+    except Exception as e:
+        st.sidebar.error(f"Error fetching all stocks: {e}")
+        
     return target_stocks
+
+
+    
+            
 
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
