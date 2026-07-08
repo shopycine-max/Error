@@ -337,7 +337,7 @@ def get_scanning_universe(universe_type):
     "XTGLOBAL.NS", "YASHO.NS", "YATHARTH.NS", "YATRA.NS", "YESBANK.NS", "YUKEN.NS", "ZAGGLE.NS", 	
     "ZEEL.NS", "ZEELEARN.NS", "ZEEMEDIA.NS", "ZENITHEXPO.NS", "ZENITHSTL.NS", "ZENSARTECH.NS", 	
 	
-    "ZSARACOM.NS", "ZUARI.NS", "ZUARIIND.NS", "ZYDUSLIFE.NS", "ZYDUSWELL.NS", "TIPS.NS"	"]
+    "ZSARACOM.NS", "ZUARI.NS", "ZUARIIND.NS", "ZYDUSLIFE.NS", "ZYDUSWELL.NS", "TIPS.NS" ]
     
     if universe_type == "📸 Chartink Screenshot Test (5 Stocks)":
         return target_stocks
