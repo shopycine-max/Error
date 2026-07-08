@@ -170,4 +170,4 @@ with tab2:
             st.download_button("📥 Export Backtest Data to CSV", data=csv, file_name="backtest_report.csv", mime="text/csv")
         else:
             st.warning("Pichle 2 mahino mein is filter criteria par koi historical triggers nahi mile.")
-            
+        
