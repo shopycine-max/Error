@@ -231,5 +231,7 @@ with tab2:
             
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.
-        
+            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
+        else:
+            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
+    
