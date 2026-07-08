@@ -227,4 +227,4 @@ with tab2:
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
         else:
-            st.warning("Pichle 2 mahino mein is strict criteria
+            st.warning("No Record Match.")
