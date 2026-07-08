@@ -30,19 +30,16 @@ def get_mega_nse_universe():
     """Fetches the complete list of all 2300+ listed stocks directly from NSE official records"""
     try:
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-        # Adding browser headers to prevent NSE blocking the request
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code == 200:
             df = pd.read_csv(io.StringIO(response.text))
-            # Clean and format tickers for yfinance
             tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL'])]
             return sorted(list(set(tickers)))
     except Exception as e:
         st.sidebar.error(f"Live NSE fetch failed: {e}. Using core fallback universe.")
         
-    # Super fallback list if NSE server times out
     fallback = ["RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC"]
     return [f"{t}.NS" for t in fallback]
 
@@ -94,6 +91,13 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
+            # --- कल के ब्रेकआउट की संभावना (Continuation Score) ---
+            # यह देखता है कि आज क्लोजिंग दिन के हाई के कितने पास हुई है (Strong Multi-day Close)
+            day_high = df['High'].iloc[-1]
+            day_low = df['Low'].iloc[-1]
+            day_range = day_high - day_low
+            close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
+            
             return [{
                 "Symbol": ticker.replace(".NS", ""),
                 "Entry Price (₹)": round(entry, 2),
@@ -102,7 +106,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
-                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2)
+                "Continuation Score (%)": round(close_pos, 1),  # हाई के पास क्लोज = हाई स्कोर
+                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10) + (close_pos / 2), 2)
             }]
             
         elif mode == "backtest":
@@ -169,7 +174,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 # --- OPTIMIZED CACHED BULK DOWNLOADER ---
 @st.cache_data(ttl=1800, show_spinner=False)
 def download_all_market_data(tickers):
-    """Downloads and caches 2 years of historical data in chunks to prevent server bans."""
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
@@ -206,15 +210,12 @@ rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
 
-# Dynamic Universe Loading
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
-# Session States initialization
 if 'live_results' not in st.session_state: st.session_state.live_results = pd.DataFrame()
 if 'bt_results' not in st.session_state: st.session_state.bt_results = pd.DataFrame()
 
-# One-time bulk pull trigger
 if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state.master_market_data = download_all_market_data(all_tickers)
@@ -252,7 +253,7 @@ with tab1:
         st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
         st.dataframe(res_df, use_container_width=True, hide_index=True)
         
-        # Chart Visualizer
+        # --- CHART 1: standard Live Candlestick ---
         top_stock = res_df.iloc[0]['Symbol']
         st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
         chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
@@ -275,13 +276,58 @@ with tab1:
             
             fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
+
+        # --- NAYAA CHART SECTION: CHART 2 (कल के लिए Next-Day Breakout Radar) ---
+        st.markdown("---")
+        st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor (कल के लिए स्पेशल वॉचलिस्ट)")
+        
+        # Continuation Score के हिसाब से सबसे मजबूत स्टॉक ढूंढें जो कल भाग सकता है
+        future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
+        top_future_stock = future_df.iloc[0]['Symbol']
+        top_future_score = future_df.iloc[0]['Continuation Score (%)']
+        
+        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है (यह आज अपने दिन के उच्चतम स्तर के बिल्कुल करीब बंद हुआ है)।")
+        
+        f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
+        if not f_chart_data.empty:
+            if isinstance(f_chart_data.columns, pd.MultiIndex):
+                f_chart_data.columns = f_chart_data.columns.get_level_values(0)
+                
+            # कल की संभावित एंट्री और ट्रिगर जोन
+            today_close = f_chart_data['Close'].iloc[-1]
+            today_high = f_chart_data['High'].iloc[-1]
+            tomorrow_trigger = today_high + (today_high * 0.002) # आज के हाई से थोड़ा सा ऊपर बफर
+            tomorrow_target_1 = today_close + (today_close * 0.02) # कल का पहला 2% का क्विक टारगेट
+            
+            fig_future = go.Figure()
+            
+            # Candlestick chart
+            fig_future.add_trace(go.Candlestick(
+                x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
+                low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
+            ))
+            
+            # कल के लेवल्स ड्रा करना
+            fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
+                                 annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
+            fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
+                                 annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
+            
+            fig_future.update_layout(
+                template="plotly_dark", 
+                title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
+                xaxis_rangeslider_visible=False,
+                paper_bgcolor='#0d1117',
+                plot_bgcolor='#161b22'
+            )
+            st.plotly_chart(fig_future, use_container_width=True)
+            
     else:
         st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
     st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
-    
     if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
         with st.spinner("Simulating multi-day paths for every trigger..."):
             st.session_state.bt_results = compute_analytics_on_cached_pool(mode="backtest")
@@ -289,10 +335,8 @@ with tab2:
     bt_df = st.session_state.bt_results
     if not bt_df.empty:
         bt_df = bt_df.sort_values(by="Date", ascending=False)
-        
         closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
         winning_trades = closed_trades[closed_trades['PnL (%)'] > 0]
-        
         accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2) if len(closed_trades) > 0 else 0.0
         
         col1, col2, col3 = st.columns(3)
