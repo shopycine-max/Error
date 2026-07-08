@@ -19,19 +19,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Mega Stock Scanner Terminal (1800+ NSE Universe)")
-st.caption("Engine Upgraded: Chart Pattern Swing Support & 1:2 Dynamic Projections Enabled")
+st.caption("Engine Upgraded: Chart Pattern Swing Support, 1:2 Dynamic Projections & YFinance Fixes Enabled")
 
-# --- MEGA 1800+ NSE TICKER DATABASE (Nifty Total Market Universe) ---
+# --- MEGA 1800+ NSE TICKER DATABASE ---
 def get_mega_nse_universe():
-    # Large, Mid, Small, Micro Caps ka compiled comprehensive active list
     base_tickers = [
-        # --- Nifty 50 & Next 50 ---
         "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC", "HINDUNILVR", "LT",
         "BAJFINANCE", "TATAMOTORS", "SUNPHARMA", "MARUTI", "KOTAKBANK", "AXISBANK", "NTPC", "ONGC", "TATASTEEL", "ADANIENT",
         "COALINDIA", "BAJAJFINSV", "M&M", "ASIANPAINT", "TITAN", "ULTRACEMCO", "HCLTECH", "POWERGRID", "WIPRO", "ADANIPORTS",
         "JIOFIN", "ZOMATO", "HAL", "BHEL", "PFC", "RECLTD", "IRFC", "RVNL", "CONCOR", "TATACOMM",
         "TATAPOWER", "GAIL", "SAIL", "NMDC", "VEDL", "HINDALCO", "JINDALSTEL", "NATIONALUM", "TATACHEM", "CHAMBLFERT",
-        # --- Midcaps & Banking ---
         "AUBANK", "BANDHANBNK", "FEDERALBNK", "IDFCFIRSTB", "PNB", "CANBK", "BOB", "UNIONBANK", "INDIANB", "DLF",
         "GODREJPROP", "OBEROIRLTY", "UNITDSPR", "BERGEPAINT", "PIDILITIND", "BEL", "POLYCAB", "KEI", "HAVELLS", "VOLTAS",
         "DIXON", "AMBUJACEM", "ACC", "JKCEMENT", "DALBHARAT", "BPCL", "HPCL", "IOC", "MRF", "BALKRISIND",
@@ -40,7 +37,6 @@ def get_mega_nse_universe():
         "ASTRAL", "SUPREMEIND", "METROPOLIS", "LALPATHLAB", "AUROPHARMA", "BIOCON", "DIVISLAB", "DRREDDY", "CIPLA", "LUPIN",
         "TRENT", "ABFRL", "PAGEIND", "BATAINDIA", "IRCTC", "BOSCHLTD", "TATAINVEST", "HUDCO", "MANAPPURAM", "IOB",
         "CENTRALBK", "UCOBANK", "MAHABANK", "IDBI", "IEX", "INFIBEAM", "IRBINFRA", "JAIBALAJI", "JKTYRE", "JSWENERGY",
-        # --- Highly Active Small & Micro Momentum ---
         "AARTIIND", "ABB", "ADANIPOWER", "ASHOKLEY", "BALRAMCHIN", "BANKINDIA", "BSOFT", "CDSL", "BSE", "MCX",
         "EXIDEIND", "GLENMARK", "JUBLFOOD", "KALYANKJIL", "MANKIND", "MANGALAM", "NBCC", "NLCINDIA", "OFSS", "OIL",
         "PNCINFRA", "RADICO", "RAILTEL", "RITES", "SJVN", "SUZLON", "VGUARD", "ZENTEC", "AAKASH", "AAATECH",
@@ -65,7 +61,7 @@ def get_mega_nse_universe():
         "CRISIL", "CROMPTON", "CSBBANK", "CSLFINANCE", "CTE", "CUB", "CUBEX", "CUMMINSIND", "CUPID", "CYIENT",
         "CYIENTDLM", "DABUR", "DALMIASUG", "DAMODARIND", "DATAMATICS", "DATAPATTERNS", "DBCORP", "DBREALTY", "DBOL", "DCAL",
         "DCBBANK", "DCM", "DCMFINSERV", "DCMSRIND", "DCMSHRIRAM", "DCW", "DECCANCE", "DEEPAKFERT", "DEEPAKSPG", "DELHIVERY",
-        "DELPHIFX", "DELTA先进", "DELTACORP", "DELTAMAGNT", "DEN", "DENORA", "DEVYANI", "DGCONTENT", "DHAMPURSUG", "DHANBANK",
+        "DELPHIFX", "DELTACORP", "DELTAMAGNT", "DEN", "DENORA", "DEVYANI", "DGCONTENT", "DHAMPURSUG", "DHANBANK",
         "DHANI", "DHANUKA", "DHARMA", "DHARSUG", "DHUNSERI", "DIAMONDYD", "DICIND", "DIGISPICE", "DIGJAYCL", "DIL",
         "DISHTV", "DIVGIITTS", "DODLA", "DOLATALGO", "DOLLAR", "DONEAR", "DPABHUSHAN", "DPL", "DPWRE", "DREDGECORP",
         "DRS", "DSSL", "DTL", "DUCON", "DUMMYEXP", "DWARKESH", "DYCL", "DYNAMATIC", "DYNPRO", "EASEMYTRIP",
@@ -167,7 +163,7 @@ def get_mega_nse_universe():
         "SYNGENE", "SYRMA", "TAJGVK", "TASTYBITE", "TATACHEM", "TATACOMM", "TATACONSUM", "TATAELXSI", "TATAINVEST", "TATAMOTORS",
         "TATAMTRDVR", "TATAPOWER", "TATASTEEL", "TBZ", "TCI", "TCIEXP", "TCIFL", "TCNSBRANDS", "TCPLPACK", "TCS",
         "TEAMSLEASE", "TECHM", "TECHNOE", "TEJASNET", "TEMBO", "TERASOFT", "TEXINFRA", "TEXRAIL", "TFCILTD", "TFL",
-        "TGBHOTELS", "THANGAMAYL", "THEMISMED", "THERMAX", "TH Thomas", "THYROCARE", "TI", "TIDEWATER", "TIIL", "TIINDIA",
+        "TGBHOTELS", "THANGAMAYL", "THEMISMED", "THERMAX", "THYROCARE", "TI", "TIDEWATER", "TIIL", "TIINDIA",
         "TIMETECHNO", "TIMKEN", "TIPSFILMS", "TIPSINDLTD", "TIRUMALCHM", "TIRUPATIFL", "TITAN", "TNPL", "TNTELE", "TOKYOPLAST",
         "TORNTPHARM", "TORNTPOWER", "TOTAL", "TOUCHWOOD", "TPLPLASTEH", "TRACXN", "TREEHOUSE", "TREJHARA", "TRENT", "TRF",
         "TRIDENT", "TRIGYN", "TRIL", "TRITURBINE", "TRIVENI", "TROT", "TTKHEALTH", "TTKPRESTIG", "TTL", "TTML",
@@ -186,15 +182,21 @@ def get_mega_nse_universe():
         "WORTH", "WSTCSTPAPR", "XCHANGING", "XPROINDIA", "YAARI", "YASHMGM", "YATRA", "YUG", "ZEEL", "ZEELEARN",
         "ZEEMEDIA", "ZENITHEXPO", "ZENITHSTL", "ZENSARTECH", "ZENTEC", "ZFCVINDIA", "ZOMATO", "ZUARI", "ZUARIIND", "ZYDUSLIFE", "ZYDUSWELL"
     ]
-    # Suffixing ".NS" accurately to construct pure Yahoo Finance ticker symbols
     return sorted(list(set([f"{t}.NS" for t in base_tickers])))
 
 # --- Process Single Ticker Core Calculations ---
 def analyze_single_ticker(ticker, raw_data, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
+        # 🟢 FIX 1: Robust Data Extraction for new yfinance MultiIndex updates
         if isinstance(raw_data.columns, pd.MultiIndex):
-            if ticker not in raw_data.columns.levels[0]: return None
-            df = raw_data[ticker].copy()
+            # Try getting data if Ticker is at Level 0
+            if ticker in raw_data.columns.get_level_values(0):
+                df = raw_data[ticker].copy()
+            # Try getting data if Ticker is at Level 1
+            elif ticker in raw_data.columns.get_level_values(1):
+                df = raw_data.xs(ticker, axis=1, level=1).copy()
+            else:
+                return None
         else:
             df = raw_data.copy()
 
@@ -306,7 +308,7 @@ def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    chunk_size = 40  # Safely chunked to protect against high multi-threading rate blocks
+    chunk_size = 40  # Safely chunked
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     st.info(f"⚡ Processing {len(tickers)} symbols across {len(ticker_chunks)} parallel batches...")
@@ -316,6 +318,10 @@ def process_market_analytics_fast(tickers, mode="live"):
         try:
             raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
             
+            # 🟢 FIX 2: Safely skip empty chunks so script doesn't crash
+            if raw_data.empty:
+                continue
+
             with ThreadPoolExecutor(max_workers=15) as executor:
                 futures = {
                     executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
@@ -350,8 +356,9 @@ with tab1:
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
+                # 🟢 FIX 3: Plotly ke liye MultiIndex column fix (Sirf Level 0 (OHLCV) lenge)
                 if isinstance(chart_data.columns, pd.MultiIndex):
-                    chart_data.columns = chart_data.columns.get_level_values(-1)
+                    chart_data.columns = chart_data.columns.get_level_values(0)
                     
                 fig = go.Figure(data=[go.Candlestick(
                     x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
@@ -359,7 +366,6 @@ with tab1:
                 )])
                 fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
-                # Dynamic horizontal lines plot mapping on the live interactive chart
                 live_sl = res_df.iloc[0]['Stop Loss (₹)']
                 live_tgt = res_df.iloc[0]['Target Price (₹)']
                 
