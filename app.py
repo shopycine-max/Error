@@ -152,5 +152,68 @@ def process_market_analytics_fast(tickers, mode="live"):
         st.error(f"Bulk Data Fetch Error: {e}")
         return pd.DataFrame()
 
-    st.info("🧠 Processing and Analyzing
+    
+    st.info("🧠 Processing and Analyzing technical filters in parallel...")
+    progress_bar = st.progress(0)
+    
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = {
+            executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
+            for ticker in tickers
+        }
         
+        for idx, future in enumerate(as_completed(futures)):
+            progress_bar.progress((idx + 1) / len(tickers))
+            res = future.result()
+            if res:
+                results.extend(res)
+                
+    progress_bar.empty()
+    return pd.DataFrame(results)
+
+# --- TAB 1: Live Scanning View ---
+with tab1:
+    st.subheader("⚡ Live Momentum Breakout Radar")
+    if st.button("🚀 Run Live Magic Scan", key="live_btn"):
+        res_df = process_market_analytics_fast(all_tickers, mode="live")
+        
+        if not res_df.empty:
+            res_df = res_df.sort_values(by="Score", ascending=False)
+            res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
+            st.success(f"🎉 Success! Found {len(res_df)} high-probability stocks.")
+            st.dataframe(res_df, use_container_width=True, hide_index=True)
+            
+            top_stock = res_df.iloc[0]['Symbol']
+            st.markdown(f"### 👑 Top Pick: **{top_stock}**")
+            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+            
+            if not chart_data.empty:
+                fig = go.Figure(data=[go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'])])
+                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange'), name='EMA 20'))
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Koi stock match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
+
+# --- TAB 2: Chartink Style Backtest View ---
+with tab2:
+    st.subheader("⏳ 2-Month Historical Analytics Dashboard")
+    
+    if st.button("📊 Start Historical Backtest", key="bt_btn"):
+        bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
+        
+        if not bt_df.empty:
+            bt_df = bt_df.sort_values(by="Date", ascending=False)
+            valid_moves = bt_df[bt_df['Next Day Move (%)'] != "Open Session"]
+            bullish_days = len(valid_moves[valid_moves['Next Day Move (%)'].astype(float) > 0])
+            accuracy = round((bullish_days / len(valid_moves)) * 100, 2) if len(valid_moves) > 0 else 0
+            
+            col1, col2 = st.columns(2)
+            col1.metric("Total Generated Signals (2 Months)", len(bt_df))
+            col2.metric("Next-Day Bullish Accuracy Rate", f"{accuracy}%")
+            
+            st.dataframe(bt_df, use_container_width=True, hide_index=True)
+            csv_data = bt_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
+        else:
+            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
