@@ -3,3 +3,6 @@ pandas
 yfinance
 plotly
 requests
+websocket-client
+plotly
+
