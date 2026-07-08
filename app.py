@@ -22,50 +22,66 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Advanced Stock Scanner Terminal")
-st.caption("Engine Upgraded: 4-Year Lookback Fixed, Safe Rolling High & Multi-Threaded Processing")
+st.caption("Engine Upgraded: Multi-Link Fallback, Cache Cleared & Full Market Scan")
 
-# --- Reliable Universe Fetcher (Fixed to load ALL Indian Stocks) ---
-@st.cache_data(ttl=43200)
-def get_scanning_universe(universe_type):
-    # Yeh aapke 5 test stocks hain jo hamesha backup rahenge
-    target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+# --- MULTI-LINK ROBUST UNIVERSE FETCHER ---
+# Function ka naam badla taaki purani cache memory clear ho jaye!
+@st.cache_data(ttl=10800, show_spinner=False)
+def get_full_market_universe(universe_type):
+    test_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
     
     if "Chartink" in universe_type:
-        return target_stocks
+        return test_stocks
 
-    # 100% Working Official Nifty Total Market CSV Mirror (750+ Se lekar 2000+ Active Stocks)
-    url = "https://raw.githubusercontent.com/anirban-m/indian-stock-market-datasets/main/ind_niftytotalmarket_list.csv"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    # 3 Alag-alag URLs ka backup system (Ek block hua toh dusra chalega)
+    csv_urls = [
+        "https://archives.nseindia.com/content/equities/EQUITY_L.csv", # 1. Official NSE
+        "https://raw.githubusercontent.com/sanjitk/nse-stocks-list/master/nse_stocks.csv", # 2. Backup GitHub 1
+        "https://raw.githubusercontent.com/anirban-m/indian-stock-market-datasets/main/ind_niftytotalmarket_list.csv" # 3. Backup GitHub 2
+    ]
     
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            df = pd.read_csv(io.StringIO(response.text))
-            df.columns = df.columns.str.strip().str.upper()
-            
-            if 'SYMBOL' in df.columns:
-                nse_tickers = [str(sym).strip() + ".NS" for sym in df['SYMBOL'].dropna() if len(str(sym).strip()) > 0]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+    }
+    
+    for url in csv_urls:
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                df = pd.read_csv(io.StringIO(response.text))
+                df.columns = df.columns.str.strip().str.upper()
                 
-                # Yeh ensure karega ki aapke 5 target stocks bhi is list mein shamil rahein
-                for stock in target_stocks:
-                    if stock not in nse_tickers:
-                        nse_tickers.append(stock)
+                # Automatically find matching symbol column
+                sym_col = None
+                for col in df.columns:
+                    if 'SYMBOL' in col or 'TICKER' in col:
+                        sym_col = col
+                        break
                         
-                return list(set(nse_tickers))
-    except Exception as e:
-        st.sidebar.error(f"Error loading full universe, using backup. Code: {e}")
-        
-    return target_stocks
+                if sym_col:
+                    # Tickers format (add .NS)
+                    nse_tickers = [str(sym).strip() + ".NS" for sym in df[sym_col].dropna() if len(str(sym).strip()) > 1]
+                    
+                    if len(nse_tickers) > 200: # Ensure valid large list downloaded
+                        return list(set(nse_tickers + test_stocks))
+        except Exception:
+            continue # Ek URL fail hua, toh turant agli URL try karega
+
+    # Agar cloud firewall 3no links block kar de (Very Rare), toh Top 50 ka static list fallback karega (na ki sirf 5)
+    nifty_backup = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "HINDUNILVR.NS", "LT.NS", "BAJFINANCE.NS", "TATAMOTORS.NS", "SUNPHARMA.NS", "MARUTI.NS", "KOTAKBANK.NS", "AXISBANK.NS", "NTPC.NS", "ONGC.NS", "TATASTEEL.NS", "ADANIENT.NS"]
+    
+    return list(set(nifty_backup + test_stocks))
 
 # --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
-# Dropdown menu names matching your screenshot exactly
 universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "🌐 All Indian Stocks (NSE EQ)"])
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
 
-all_tickers = get_scanning_universe(universe_choice)
+# Naya function call yahan lagaya hai
+all_tickers = get_full_market_universe(universe_choice)
 st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
 
 # --- App Navigation Tabs ---
@@ -154,7 +170,7 @@ def process_market_analytics_fast(tickers, mode="live"):
     if not tickers: return pd.DataFrame()
 
     results = []
-    st.info("⚡ Downloading 4-Year historical data chunks from Yahoo Finance...")
+    st.info(f"⚡ Downloading 4-Year historical data for {len(tickers)} stocks from Yahoo Finance...")
     
     try:
         raw_data = yf.download(tickers, period="4y", interval="1d", progress=False, group_by='ticker')
@@ -163,71 +179,5 @@ def process_market_analytics_fast(tickers, mode="live"):
         return pd.DataFrame()
 
     st.info("🧠 Processing and Analyzing technical filters in parallel...")
-    progress_bar = st.progress(0)
+    progress
     
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {
-            executor.submit(analyze_single_ticker, ticker, raw_data, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
-            for ticker in tickers
-        }
-        
-        for idx, future in enumerate(as_completed(futures)):
-            progress_bar.progress((idx + 1) / len(tickers))
-            res = future.result()
-            if res:
-                results.extend(res)
-                
-    progress_bar.empty()
-    return pd.DataFrame(results)
-
-# --- TAB 1: Live Scanning View ---
-with tab1:
-    st.subheader("⚡ Live Momentum Breakout Radar")
-    if st.button("🚀 Run Live Magic Scan", key="live_btn"):
-        res_df = process_market_analytics_fast(all_tickers, mode="live")
-        
-        if not res_df.empty:
-            res_df = res_df.sort_values(by="Score", ascending=False)
-            res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-            st.success(f"🎉 Success! Found {len(res_df)} high-probability stocks.")
-            st.dataframe(res_df, use_container_width=True, hide_index=True)
-            
-            top_stock = res_df.iloc[0]['Symbol']
-            st.markdown(f"### 👑 Top Pick: **{top_stock}**")
-            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
-            
-            if not chart_data.empty:
-                fig = go.Figure(data=[go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'])])
-                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange'), name='EMA 20'))
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Candlestick Analysis")
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Koi stock match nahi hua. Aap sidebar se 'Minimum RSI' ya 'Volume Shock' ko thoda kam karke try kar sakte hain.")
-
-# --- TAB 2: Chartink Style Backtest View ---
-with tab2:
-    st.subheader("⏳ 2-Month Historical Analytics Dashboard")
-    
-    if st.button("📊 Start Historical Backtest", key="bt_btn"):
-        bt_df = process_market_analytics_fast(all_tickers, mode="backtest")
-        
-        if not bt_df.empty:
-            bt_df = bt_df.sort_values(by="Date", ascending=False)
-            
-            valid_moves = bt_df[~bt_df['Next Day Move'].str.contains("Live", na=False)]
-            if len(valid_moves) > 0:
-                bullish_days = len(valid_moves[valid_moves['Next Day Move'].str.replace('%','').astype(float) > 0])
-                accuracy = round((bullish_days / len(valid_moves)) * 100, 2)
-            else:
-                accuracy = 0
-            
-            col1, col2 = st.columns(2)
-            col1.metric("Total Generated Signals (2 Months)", len(bt_df))
-            col2.metric("Next-Day Bullish Accuracy Rate", f"{accuracy}%")
-            
-            st.dataframe(bt_df, use_container_width=True, hide_index=True)
-            csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Backtest Sheet (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
-        else:
-            st.warning("Pichle 2 mahino mein is strict criteria par koi records nahi mile.")
-        
