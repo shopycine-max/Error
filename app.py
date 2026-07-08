@@ -66,7 +66,7 @@ with st.sidebar.expander("📊 Volume & Price Filters", expanded=True):
     min_price = st.number_input("Minimum Stock Price (₹)", value=20)
 
 all_tickers = get_scanning_universe(universe_choice)
-st.sidebar.success(f"Total Stocks Loaded: **{len(all_tickers)}**")
+st.sidebar.success("Total Stocks Loaded: **" + str(len(all_tickers)) + "**")
 
 # --- Core Scanner Engine ---
 def process_market_analytics(tickers, mode="live"):
@@ -75,13 +75,5 @@ def process_market_analytics(tickers, mode="live"):
         return pd.DataFrame()
 
     try:
-        data = yf.download(tickers, period="2y", interval="1d", progress=False)
-    except Exception as e:
-        st.error(f"Data Fetch Error: {e}")
-        return pd.DataFrame()
-
-    progress_bar = st.progress(0, text="Scanning Market Data...")
-    
-    for idx, ticker in enumerate(tickers):
-        progress_bar.progress((idx + 1) / len(tickers), text=f"Analyzing {
-            
+        data = yf.download(tickers
+                           
