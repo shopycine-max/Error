@@ -71,10 +71,10 @@ st.sidebar.success(f"Total Stocks Loaded: **{len(all_tickers)}**")
 # --- Core Scanner Engine ---
 def process_market_analytics(tickers, mode="live"):
     results = []
-    if not tickers: return pd.DataFrame()
+    if not tickers: 
+        return pd.DataFrame()
 
     try:
-        # Fetch all data at once efficiently
         data = yf.download(tickers, period="2y", interval="1d", progress=False)
     except Exception as e:
         st.error(f"Data Fetch Error: {e}")
@@ -83,27 +83,5 @@ def process_market_analytics(tickers, mode="live"):
     progress_bar = st.progress(0, text="Scanning Market Data...")
     
     for idx, ticker in enumerate(tickers):
-        progress_bar.progress((idx + 1) / len(tickers), text=f"Analyzing {ticker}...")
-        try:
-            # --- FIX 1: Robust yFinance Data Extraction ---
-            if len(tickers) == 1:
-                df = data.copy()
-            else:
-                try:
-                    # Handles new yfinance version multi-index
-                    df = data.xs(ticker, axis=1, level=1).copy()
-                except Exception:
-                    try:
-                        # Handles older yfinance version multi-index
-                        df = data[ticker].copy()
-                    except Exception:
-                        continue
-            
-            df = df.dropna(subset=['Close']).copy()
-            if len(df) < 260: continue 
-
-            # --- Base Metrics ---
-            df['Pct_Change'] = df['Close'].pct_change() * 100
-            df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-            df
+        progress_bar.progress((idx + 1) / len(tickers), text=f"Analyzing {
             
