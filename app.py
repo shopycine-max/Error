@@ -19,7 +19,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Mega Stock Scanner Terminal (2300+ Universe)")
+st.title("🚀 Mega Stock Scanner Terminal")
 st.caption("Engine Upgraded: Path-Dependent Real Backtester & Target/SL Simulation Enabled")
 
 # --- MEGA 2300+ NSE TICKER DATABASE ---
