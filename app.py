@@ -7,7 +7,7 @@ import requests
 import io
 from datetime import datetime
 
-# Page Configurations
+# --- Page Configurations ---
 st.set_page_config(page_title="Pro Stock Scanner", page_icon="📈", layout="wide")
 
 # Custom Dark Premium Theme
@@ -49,7 +49,7 @@ def get_scanning_universe(universe_type):
         pass
     return target_stocks
 
-# Sidebar Settings Panel
+# --- Sidebar Settings Panel ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 universe_choice = st.sidebar.selectbox("Select Scanning Universe", ["📸 Chartink Screenshot Test (5 Stocks)", "Nifty 500 + Targets"])
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 50, 75, 60)
@@ -58,7 +58,7 @@ volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.5
 all_tickers = get_scanning_universe(universe_choice)
 st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
 
-# App Navigation Tabs
+# --- App Navigation Tabs ---
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
 # --- Core Scanner Engine (Upgraded Logic) ---
@@ -118,24 +118,5 @@ def process_market_analytics(tickers, mode="live"):
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7 & cond8 & cond9
 
             if mode == "live" and df['Signal'].iloc[-1]:
-                vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
-                results.append({
-                    "Symbol": ticker.replace(".NS", ""),
-                    "LTP (₹)": round(df['Close'].iloc[-1], 2),
-                    "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
-                    "RSI": round(df['RSI'].iloc[-1], 2),
-                    "Vol Spike (x)": round(vol_spike, 1),
-                    "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10), 2) # Custom Momentum Score
-                })
+                vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc
                 
-            elif mode == "backtest":
-                history_slice = df.iloc[-44:-1] 
-                triggers = history_slice[history_slice['Signal'] == True]
-                for date, row in triggers.iterrows():
-                    results.append
-                        "Date": date.strftime('%Y-%m-%d'),
-                        "Symbol": ticker.replace(".NS", ""),
-                        "Trigger Price (₹)": round(row['Close'], 2),
-                        "RSI at Trigger": round(row['RSI'], 2),
-                        "Next Day Move (%)": round (row['Next_Day_Return'],)
-            
