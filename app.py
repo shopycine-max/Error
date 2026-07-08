@@ -6,174 +6,168 @@ import requests
 from datetime import datetime
 
 # Page Configurations
-st.set_page_config(page_title="ERROR09 - Live Mega Scanner", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="ERROR09 - Pro Scanner & Backtester", page_icon="📈", layout="wide")
 
-st.title("🚀 ERROR09 - Live Stock Scanner Dashboard")
-st.caption("Merged Formula Scanner | Live yFinance & NSE Data Integration")
+st.title("📈 ERROR09 - Advanced Scanner & Backtester")
+st.caption("Live Breakout Signals + 2-Month Historical Backtest Engine")
 
-# --- Reliable Universe Fetcher ---
-@st.cache_data(ttl=86400)  # Cache for 24 hours to keep it fast
+# --- Nifty 500 Ticker Fetcher ---
+@st.cache_data(ttl=86400)
 def get_nifty500_tickers():
-    """Fetches Nifty 500 tickers safely using proper headers to avoid 404 errors"""
     url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             df = pd.read_csv(url)
-            # Append .NS for yfinance format
-            tickers = [str(symbol).strip() + ".NS" for symbol in df['Symbol'].dropna()]
-            return tickers
+            return [str(symbol).strip() + ".NS" for symbol in df['Symbol'].dropna()]
     except Exception as e:
-        st.sidebar.error(f"NSE Fetch Error: {e}. Using robust fallback.")
-    
-    # Rock-solid fallback list if NSE site is down or blocking (Includes your target Chartink hits)
-    return ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS", 
-            "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS"]
+        st.sidebar.error(f"NSE Fetch Error: {e}. Using fallback.")
+    return ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS", "RELIANCE.NS", "TCS.NS"]
 
-# Sidebar Configuration
-st.sidebar.header("⚙️ Scanner Control Panel")
-universe_option = st.sidebar.selectbox("Select Scanning Universe", ["Nifty 500 (All major stocks)", "Custom Target List"])
+# Sidebar Panel
+st.sidebar.header("⚙️ Settings Panel")
+universe_option = st.sidebar.selectbox("Select Universe", ["Nifty 500", "Custom List"])
+all_tickers = get_nifty500_tickers() if universe_option == "Nifty 500" else ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
 
-if universe_option == "Nifty 500 (All major stocks)":
-    all_tickers = get_nifty500_tickers()
-else:
-    all_tickers = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS"]
+st.sidebar.write(f"Total Stocks Loaded: **{len(all_tickers)}**")
 
-st.sidebar.write(f"Total Tickers Loaded: **{len(all_tickers)}**")
+# --- Main App Tabs ---
+tab1, tab2 = st.tabs(["🚀 Live Scanner (Today)", "⏳ 2-Month Backtester (Chartink Style)"])
 
-# --- Scanner Core Logic ---
-def execute_live_scan(tickers):
-    matched_stocks = []
-    
-    # Step 1: Batch download historical data to prevent rate limits
-    # We need ~550 daily candles to accurately compute a 500-day high breakout
-    st.info("📥 Fetching live market data from yfinance in an optimized batch...")
+# --- Core Advanced Data Engine ---
+def process_data_vectorized(tickers, mode="live"):
+    st.info("📥 Fetching and analyzing live 3-year data for lookback tracking...")
     try:
-        # Fetching 3 years of daily data to satisfy the 500-day rolling max condition
         batch_data = yf.download(tickers, period="3y", group_by='ticker', progress=False, threads=True)
     except Exception as e:
-        st.error(f"Error connecting to data servers: {e}")
+        st.error(f"Data Fetch Error: {e}")
         return pd.DataFrame()
 
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    live_results = []
+    backtest_results = []
     
-    # Step 2: Loop through data to check your Chartink Merged Formula
-    for i, ticker in enumerate(tickers):
-        progress_bar.progress((i + 1) / len(tickers))
-        status_text.text(f"Analyzing {i+1}/{len(tickers)}: {ticker}")
-        
+    progress_bar = st.progress(0)
+    
+    for idx, ticker in enumerate(tickers):
+        progress_bar.progress((idx + 1) / len(tickers))
         try:
-            # Handle multi-index data correctly
             if len(tickers) > 1:
                 df = batch_data[ticker].dropna()
             else:
                 df = batch_data.dropna()
-                
-            if len(df) < 535: # Ensure enough historical data exists for 500-day metrics
-                continue
-                
-            # Extract basic tracking points
-            close_today = df['Close'].iloc[-1]
-            close_yesterday = df['Close'].iloc[-2]
-            volume_today = df['Volume'].iloc[-1]
-            high_today = df['High'].iloc[-1]
-            
-            # --- Chartink Formula Validations ---
-            
-            # 1. Daily Close >= 20
-            if not (close_today >= 20): continue
-            
-            # 2 & 3. Daily % Change between 1% and 11%
-            pct_change = ((close_today - close_yesterday) / close_yesterday) * 100
-            if not (1.0 <= pct_change <= 11.0): continue
-            
-            # 4. Daily Volume > Daily SMA (Volume, 20) * 1
-            sma_volume_20 = df['Volume'].rolling(20).mean().iloc[-1]
-            if not (volume_today > (sma_volume_20 * 1)): continue
-            
-            # 5. Daily Close - 20 days ago close return >= 3%
-            close_20_days_ago = df['Close'].iloc[-21] 
-            return_20_days = ((close_today - close_20_days_ago) / close_20_days_ago) * 100
-            if not (return_20_days >= 3.0): continue
-            
-            # 6. Daily Close * Daily Volume > 500,000,000 (Value traded rule)
-            value_traded = close_today * volume_today
-            if not (value_traded > 500000000): continue
-            
-            # 7. Daily Max(2, 20 days ago High) >= Daily Max(200, 31 days ago High)
-            max_2_high_20_ago = df['High'].shift(20).rolling(2).max().iloc[-1]
-            max_200_high_31_ago = df['High'].shift(31).rolling(200).max().iloc[-1]
-            if not (max_2_high_20_ago >= max_200_high_31_ago): continue
-            
-            # 8. Daily Close >= 1 day ago Max(500, Daily High) -> The 500-Day Breakout Rule
-            max_500_high_1_day_ago = df['High'].shift(1).rolling(500).max().iloc[-1]
-            if not (close_today >= max_500_high_1_day_ago): continue
-            
-            # Step 3: Optimization - Only query .info API for stocks that pass technical filters
-            try:
-                ticker_info = yf.Ticker(ticker).info
-                market_cap_crores = ticker_info.get('marketCap', 0) / 10000000 # Convert to Crores
-            except:
-                market_cap_crores = 1001 # Fallback to not lose valid technical breakouts if API throttles
-                
-            # Chartink Rule: Market Cap > 1000 Cr
-            if market_cap_crores > 1000:
-                matched_stocks.append({
-                    "Symbol": ticker.replace(".NS", ""),
-                    "LTP (₹)": round(close_today, 2),
-                    "Day Change (%)": round(pct_change, 2),
-                    "Volume": int(volume_today),
-                    "Market Cap (Cr)": round(market_cap_crores, 2),
-                    "Value Traded (Cr)": round(value_traded / 10000000, 2)
-                })
-                
-        except Exception:
-            continue # Bypass single stock calculation errors dynamically
-            
-    status_text.empty()
-    return pd.DataFrame(matched_stocks)
 
-# --- UI Action Controller ---
-if st.sidebar.button("🚀 Start Live Scanner", type="primary"):
-    start_time = datetime.now()
-    results_df = execute_live_scan(all_tickers)
-    end_time = datetime.now()
+            if len(df) < 535:
+                continue
+            
+            # --- Vectorized Indicator Calculations ---
+            df['pct_change'] = ((df['Close'] - df['Close'].shift(1)) / df['Close'].shift(1)) * 100
+            df['sma_volume_20'] = df['Volume'].rolling(20).mean()
+            
+            close_20_days_ago = df['Close'].shift(20)
+            df['return_20_days'] = ((df['Close'] - close_20_days_ago) / close_20_days_ago) * 100
+            df['value_traded'] = df['Close'] * df['Volume']
+            
+            df['max_2_high_20_ago'] = df['High'].shift(20).rolling(2).max()
+            df['max_200_high_31_ago'] = df['High'].shift(31).rolling(200).max()
+            df['max_500_high_1_day_ago'] = df['High'].shift(1).rolling(500).max()
+            
+            # Target Metric: Next Day Return (for Backtesting)
+            df['next_day_return'] = ((df['Close'].shift(-1) - df['Close']) / df['Close']) * 100
+            
+            # --- Chartink Formula Condition Matrix ---
+            cond1 = df['Close'] >= 20
+            cond2 = (df['pct_change'] >= 1.0) & (df['pct_change'] <= 11.0)
+            cond3 = df['Volume'] > df['sma_volume_20']
+            cond4 = df['return_20_days'] >= 3.0
+            cond5 = df['value_traded'] > 500000000
+            cond6 = df['max_2_high_20_ago'] >= df['max_200_high_31_ago']
+            cond7 = df['Close'] >= df['max_500_high_1_day_ago']
+            
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7
+            
+            # Filter Data based on Mode
+            if mode == "live" and df['Signal'].iloc[-1]:
+                # Live Filter for Current Day
+                live_results.append({
+                    "Symbol": ticker.replace(".NS", ""),
+                    "LTP (₹)": round(df['Close'].iloc[-1], 2),
+                    "Day Change (%)": round(df['pct_change'].iloc[-1], 2),
+                    "Volume": int(df['Volume'].iloc[-1]),
+                    "Value Traded (Cr)": round(df['value_traded'].iloc[-1] / 10000000, 2)
+                })
+            elif mode == "backtest":
+                # Historical Filter for Last 2 Months (Approx 42 Trading Days)
+                historical_slice = df.iloc[-43:-1] # Exclude today to get completed next-day cycles
+                signals_df = historical_slice[historical_slice['Signal'] == True]
+                
+                for date, row in signals_df.iterrows():
+                    backtest_results.append({
+                        "Signal Date": date.strftime('%Y-%m-%d'),
+                        "Symbol": ticker.replace(".NS", ""),
+                        "Signal Price (₹)": round(row['Close'], 2),
+                        "Volume (Lakhs)": round(row['Volume'] / 100000, 2),
+                        "Next Day Return (%)": round(row['next_day_return'], 2) if not pd.isna(row['next_day_return']) else 0.0
+                    })
+                    
+        except Exception:
+            continue
+            
+    progress_bar.empty()
+    return pd.DataFrame(live_results) if mode == "live" else pd.DataFrame(backtest_results)
+
+# --- TAB 1: Live Scanner Execution ---
+with tab1:
+    st.subheader("⚡ Live Market Momentum Radar")
+    if st.button("🔍 Run Live Scan", key="btn_live"):
+        results_df = process_data_vectorized(all_tickers, mode="live")
+        
+        if not results_df.empty:
+            st.success(f"🔥 Found {len(results_df)} stocks matching criteria today!")
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            
+            fig = px.bar(results_df, x="Symbol", y="Day Change (%)", color="Day Change (%)",
+                         title="Live Signals Momentum Rate", color_continuous_scale="Greens")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Filhal aaj ke din koi stock is stringent formula ko match nahi kar raha hai.")
+
+# --- TAB 2: 2-Month Backtester Execution ---
+with tab2:
+    st.subheader("⏳ Chartink-Style 2-Month Backtest Analytics")
+    st.caption("Pichle 60 dino mein jab bhi signal aaya, uske agle din (Next Day) stock ne kaisa perform kiya:")
     
-    st.toast(f"Scan completed in {(end_time - start_time).seconds} seconds!")
-    
-    if not results_df.empty:
-        st.success(f"🔥 Found {len(results_df)} stocks matching your exact formula criteria!")
+    if st.button("📊 Start Historical Backtest", key="btn_backtest"):
+        bt_df = process_data_vectorized(all_tickers, mode="backtest")
         
-        # Matrix Layout Metrics
-        m1, m2 = st.columns(2)
-        m1.metric("Total Universe Scanned", len(all_tickers))
-        m2.metric("Successful Outliers Identified", len(results_df))
-        
-        # Interactive Grid Display
-        st.subheader("📋 Filtered Stocks Data Sheet")
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
-        
-        # Live Chart Rendering (Fixes your Plotly Module Missing bug)
-        st.subheader("📊 Dynamic Market Performance Chart")
-        fig = px.scatter(
-            results_df, 
-            x="Market Cap (Cr)", 
-            y="Day Change (%)", 
-            size="Value Traded (Cr)", 
-            color="Symbol",
-            hover_name="Symbol", 
-            text="Symbol",
-            size_max=40,
-            title="Passed Stocks: Change % vs Market Cap (Bubble size = Value Traded)"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Data Export Gateway
-        csv_data = results_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Live Scan Report (CSV)", data=csv_data, file_name="live_scan_output.csv", mime="text/csv")
-        
-    else:
-        st.warning("Taaza market data ke mutabiq filhal koi bhi stock is tough criteria ko match nahi kar raha hai. Live market hours ke dauran ise fir se chalayein.")
+        if not bt_df.empty:
+            # Sort by latest date
+            bt_df = bt_df.sort_values(by="Signal Date", ascending=False)
+            
+            # Calculations for Strategy Performance
+            total_signals = len(bt_df)
+            positive_days = len(bt_df[bt_df['Next Day Return (%)'] > 0])
+            accuracy = round((positive_days / total_signals) * 100, 2) if total_signals > 0 else 0
+            avg_gain = round(bt_df['Next Day Return (%)'].mean(), 2)
+            
+            # Metrics Cards
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Backtest Signals", total_signals)
+            c2.metric("Next-Day Bullish Accuracy", f"{accuracy}%")
+            c3.metric("Average Next-Day Return", f"{avg_gain}%")
+            
+            st.subheader("📋 Historical Trigger Log Sheet")
+            st.dataframe(bt_df, use_container_width=True, hide_index=True)
+            
+            # Visualizing Backtest Data
+            fig_bt = px.histogram(bt_df, x="Next Day Return (%)", nbins=20, 
+                                 title="Distribution of Next-Day Returns (Bullish vs Bearish Outcomes)",
+                                 color_discrete_sequence=['#2ecc71'])
+            st.plotly_chart(fig_bt, use_container_width=True)
+            
+            # Download Facility
+            csv = bt_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Export Backtest Data to CSV", data=csv, file_name="backtest_report.csv", mime="text/csv")
+        else:
+            st.warning("Pichle 2 mahino mein is filter criteria par koi historical triggers nahi mile.")
             
