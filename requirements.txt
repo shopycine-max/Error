@@ -2,6 +2,6 @@ websocket-client
 streamlit
 pandas
 yfinance 
-graph_objects 
+graph objects 
 ThreadPoolExecutor
 requests
