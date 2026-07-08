@@ -2,98 +2,107 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import requests
 import io
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 
-# --- Config ---
-st.set_page_config(page_title="Institutional Scanner", layout="wide", page_icon="📈")
-st.markdown("""<style>.stApp { background-color: #0e1117; } .metric-card { padding: 10px; border-radius: 5px; background: #161b22; }</style>""", unsafe_allow_html=True)
+# --- Page Configurations ---
+st.set_page_config(page_title="Pro Stock Scanner v2.0", page_icon="🚀", layout="wide")
 
-st.title("🚀 Institutional Grade Stock Scanner")
-st.sidebar.header("⚙️ Configuration")
+# Custom Dark Premium Theme & Table Styling
+st.markdown("""
+    <style>
+    .main { background-color: #0d1117; color: #c9d1d9; }
+    .stButton>button { background-color: #238636; color: white; font-weight: bold; border-radius: 8px; border: none; transition: 0.3s; }
+    .stButton>button:hover { background-color: #2ea043; border-color: white; }
+    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; box-shadow: 2px 2px 10px rgba(0,0,0,0.5); }
+    h1, h2, h3 { color: #58a6ff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .css-1d391kg { padding-top: 1rem; }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- Optimized Data Fetching ---
-@st.cache_data(ttl=86400) # Cache for 24h
-def get_all_nse_tickers():
+st.title("🚀 AlphaTrade Momentum Terminal")
+st.caption("Advanced Engine: RSI, MACD, Bollinger Bands, & Volume Shocks for High-Conviction Breakouts")
+
+# --- Reliable Universe Fetcher ---
+@st.cache_data(ttl=43200)
+def get_scanning_universe(universe_type):
+    target_stocks = ["CUPID.NS", "DIACABS.NS", "SPARC.NS", "ADANIENSOL.NS", "JBCHEPHARM.NS", "ZOMATO.NS", "TATASTEEL.NS"]
+    
+    if universe_type == "📸 Quick Test (7 Stocks)":
+        return target_stocks
+
     url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
     try:
-        df = pd.read_csv(url)
-        return [str(s).strip() + ".NS" for s in df['Symbol']]
-    except:
-        return ["RELIANCE.NS", "TCS.NS", "INFY.NS"]
-
-# --- Core Logic Engine ---
-def analyze_stock(ticker):
-    try:
-        # Download data
-        df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-        if len(df) < 50: return None
-        
-        # Ensure column format
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
-        
-        # Indicators
-        df['EMA20'] = df['Close'].ewm(span=20).mean()
-        df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-        df['ATR'] = (df['High'] - df['Low']).rolling(14).mean()
-        
-        # RSI
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        df['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, 0.001))))
-        
-        # Current Metrics
-        ltp = df['Close'].iloc[-1]
-        vol = df['Volume'].iloc[-1]
-        vol_sma = df['Vol_SMA20'].iloc[-1]
-        rsi = df['RSI'].iloc[-1]
-        
-        # Strategy: Breakout + Volume Spike + Trend
-        if (ltp > df['EMA20'].iloc[-1]) and (vol > vol_sma * 1.5) and (rsi > 55):
-            return {
-                "Symbol": ticker.replace(".NS", ""),
-                "LTP": round(ltp, 2),
-                "Vol Spike": round(vol / vol_sma, 1),
-                "RSI": round(rsi, 1),
-                "StopLoss (ATR)": round(ltp - (df['ATR'].iloc[-1] * 2), 2),
-                "Trend": "Bullish"
-            }
-    except:
-        return None
-    return None
-
-# --- UI Layout ---
-tab1, tab2 = st.tabs(["⚡ Live Screener", "🔍 Watchlist & Charting"])
-
-with tab1:
-    col1, col2 = st.columns([1, 3])
-    limit = col1.slider("Limit Stocks", 10, 500, 50)
-    if col1.button("🚀 Execute Scan"):
-        tickers = get_all_nse_tickers()[:limit]
-        results = []
-        
-        progress = st.progress(0)
-        # Using Parallel Processing
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            data = list(executor.map(analyze_stock, tickers))
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            df = pd.read_csv(io.StringIO(response.text))
+            df.columns = df.columns.str.strip()
+            nse_tickers = [str(sym).strip() + ".NS" for sym in df['Symbol'].dropna()]
             
-        results = [d for d in data if d is not None]
-        
-        if results:
-            res_df = pd.DataFrame(results)
-            st.dataframe(res_df, use_container_width=True)
-        else:
-            st.warning("No setup found. Increase the limit or try later.")
+            for stock in target_stocks:
+                if stock not in nse_tickers:
+                    nse_tickers.append(stock)
+            return nse_tickers
+    except Exception:
+        pass
+    return target_stocks
 
-with tab2:
-    st.subheader("Interactive Chart")
-    ticker_input = st.text_input("Enter Ticker", "RELIANCE.NS")
-    if ticker_input:
-        chart_df = yf.download(ticker_input, period="1y", interval="1d", progress=False)
-        fig = go.Figure(data=[go.Candlestick(x=chart_df.index, open=chart_df['Open'], high=chart_df['High'], low=chart_df['Low'], close=chart_df['Close'])])
-        fig.update_layout(template="plotly_dark", height=500)
-        st.plotly_chart(fig, use_container_width=True)
-        
+# --- Sidebar Pro Settings Panel ---
+st.sidebar.header("⚙️ Terminal Controls")
+universe_choice = st.sidebar.selectbox("Scanning Universe", ["📸 Quick Test (7 Stocks)", "Nifty 500"])
+
+with st.sidebar.expander("📈 Trend & Momentum Filters", expanded=True):
+    rsi_filter = st.slider("Min RSI (Strength)", 50, 80, 60)
+    req_macd = st.checkbox("Require MACD Bullish", value=True)
+    req_bb = st.checkbox("Price Near Upper Bollinger Band", value=False)
+    dist_52w = st.slider("Max Distance from 52W High (%)", 5, 50, 20)
+
+with st.sidebar.expander("📊 Volume & Price Filters", expanded=True):
+    volume_multiplier = st.slider("Volume Shock (Multiplier)", 1.0, 5.0, 2.0, step=0.1)
+    min_price = st.number_input("Minimum Stock Price (₹)", value=20)
+
+all_tickers = get_scanning_universe(universe_choice)
+st.sidebar.success(f"Total Stocks Loaded: **{len(all_tickers)}**")
+
+# --- Core Scanner Engine ---
+def process_market_analytics(tickers, mode="live"):
+    results = []
+    if not tickers: return pd.DataFrame()
+
+    try:
+        data = yf.download(tickers, period="2y", interval="1d", progress=False, group_by='ticker')
+    except Exception as e:
+        st.error(f"Data Fetch Error: {e}")
+        return pd.DataFrame()
+
+    progress_bar = st.progress(0, text="Scanning Market Data...")
+    
+    for idx, ticker in enumerate(tickers):
+        progress_bar.progress((idx + 1) / len(tickers), text=f"Analyzing {ticker}...")
+        try:
+            if len(tickers) > 1:
+                if ticker in data.columns.levels[0]: df = data[ticker].dropna(subset=['Close']).copy()
+                else: continue
+            else:
+                df = data.dropna(subset=['Close']).copy()
+
+            if len(df) < 260: continue # Need enough data for 52W High (approx 252 trading days)
+
+            # --- Base Metrics ---
+            df['Pct_Change'] = df['Close'].pct_change() * 100
+            df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
+            df['Turnover'] = df['Close'] * df['Volume']
+            df['High_52W'] = df['High'].rolling(252).max()
+            df['Dist_52W_High'] = ((df['High_52W'] - df['Close']) / df['High_52W']) * 100
+            
+            # --- Indicators: RSI, EMA, Bollinger Bands, MACD ---
+            df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+            
+            # RSI
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0,
+            
