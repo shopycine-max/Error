@@ -1,3 +1,7 @@
 websocket-client
 plotly
-
+streamlit
+pandas
+yfinance
+plotly
+requests
