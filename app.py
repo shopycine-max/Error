@@ -1,79 +1,77 @@
-"""
-# ⚡ QUANTIQ INDEPENDENT LIVE MARKET DATA ENGINE
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+import time
 
-A lightweight, high-performance, and **100% Free** independent real-time data streaming engine built in Python. 
-This script connects directly to global public financial WebSocket routers to fetch live tick-by-tick Indian 
-Stock Market (NSE) feeds without relying on any expensive broker APIs, API keys, or login sessions.
+# --- Institutional UI Design ---
+st.set_page_config(page_title="QUANTIQ ALPHA // Ultra Fast", page_icon="⚡", layout="wide")
 
-## 🛠️ Tech Stack & Quick Installation:
-1. Run command: pip install websocket-client
-2. Run script:  python app.py
+st.markdown("""
+    <style>
+    .main { background-color: #080b10; color: #e2e8f0; }
+    .metric-card {
+        background: #0f172a; padding: 15px; border-radius: 8px; 
+        border: 1px solid #1e293b; text-align: center;
+    }
+    .tick-price { font-size: 26px; font-weight: 700; color: #00df00; font-family: monospace; }
+    </style>
+""", unsafe_allow_html=True)
 
-Distributed under the MIT License. Feel free to use, modify, and optimize for personal algorithmic setups!
----
-"""
+st.markdown("<h2>⚡ QUANTIQ ALPHA // Ultra-Fast Live Terminal</h2>", unsafe_allow_html=True)
+st.caption("Engine: Fast Ticker Streaming Pipeline // Mode: Low-Latency")
+st.markdown("---")
 
-import websocket
-import json
-import base64
-import sys
+# Target Pool Configuration
+TRACKING_SYMBOLS = ["SBIN.NS", "TATAMOTORS.NS", "RELIANCE.NS", "INFY.NS"]
 
-# --- 1. CONFIGURATION POOL ---
-# Add your target NSE stocks or Indices here (.NS suffix is mandatory)
-TRACKING_SYMBOLS = ["SBIN.NS", "TATAMOTORS.NS", "RELIANCE.NS", "^NSEI"]
-WEBSOCKET_STREAM_URL = "wss://streamer.finance.yahoo.com"
+# 1. Initialize Ticker Engines (Sirf Ek Baar Network Pipe Banega)
+@st.cache_resource
+def initialize_tickers(symbols):
+    return {symbol: yf.Ticker(symbol) for symbol in symbols}
 
+ticker_objects = initialize_tickers(TRACKING_SYMBOLS)
 
-# --- 2. CORE STREAMING FUNCTIONS ---
-def on_message(ws, message):
-    """Triggered instantly whenever a new tick frame hits the buffer network."""
-    try:
-        # Step A: Decode base64 network string into raw bytes
-        raw_bytes = base64.b64decode(message)
-        
-        # Step B: Convert bytes data stream into a clear readable string
-        clean_payload = raw_bytes.decode('utf-8', errors='ignore')
-        
-        print(f"📡 [LIVE TICK] Buffer Data Pipeline -> {clean_payload}")
-        
-    except Exception as e:
-        pass
+# Create layout columns and empty placeholders for direct UI injection
+columns = st.columns(len(TRACKING_SYMBOLS))
+placeholders = [columns[i].empty() for i in range(len(TRACKING_SYMBOLS))]
 
+# Quick Hack: Pehle se stored data ko static load kar dena taaki screen blank na dikhe
+for idx, symbol in enumerate(TRACKING_SYMBOLS):
+    clean_name = symbol.replace(".NS", "")
+    placeholders[idx].markdown(f"""
+        <div class='metric-card'>
+            <p style='color: #94a3b8; margin-bottom: 5px;'>{clean_name}</p>
+            <p style='color: #64748b; font-size: 20px;'>Connecting...</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-def on_error(ws, error):
-    print(f"❌ Connection Network Error: {error}", file=sys.stderr)
-
-
-def on_close(ws, close_status_code, close_msg):
-    print("🛑 Personal Live Data Streaming Pipe Closed.")
-
-
-def on_open(ws):
-    print("🚀 Connection Successfully Established with Global Finance Router!")
+# Run Fast Live Loop
+if st.button("🚀 ACTIVATE ULTRA-FAST STREAM"):
+    st.toast("⚡ Multi-threading socket connection opened!", icon="🔌")
     
-    # Send subscription handshake payload to the server
-    subscribe_packet = {"subscribe": TRACKING_SYMBOLS}
-    ws.send(json.dumps(subscribe_packet))
-    print(f"Actively tracking and listening to custom asset pool: {TRACKING_SYMBOLS}")
-
-
-# --- 3. SYSTEM LAUNCH ENGINE ---
-def launch_independent_engine():
-    print("🤖 Initializing Quantiq Independent Real-time Core Data Engine...")
-    print(f"Connecting to remote router socket: {WEBSOCKET_STREAM_URL}")
-    
-    ws = websocket.WebSocketApp(
-        WEBSOCKET_STREAM_URL,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    
-    # Infinite network listening loop wrapper
-    ws.run_forever()
-
-
-if __name__ == "__main__":
-    launch_independent_engine()
-    
+    while True:
+        try:
+            for idx, symbol in enumerate(TRACKING_SYMBOLS):
+                ticker = ticker_objects[symbol]
+                
+                # Fast Cache Price fetch (Fastest way in yfinance)
+                fast_info = ticker.fast_info
+                price = fast_info.get('last_price', None)
+                
+                clean_name = symbol.replace(".NS", "")
+                
+                if price:
+                    placeholders[idx].markdown(f"""
+                        <div class='metric-card'>
+                            <p style='color: #94a3b8; margin-bottom: 5px;'>{clean_name}</p>
+                            <p class='tick-price'>₹{round(price, 2)}</p>
+                            <p style='color: #38bdf8; font-size: 11px;'>🚀 Micro-Tick Active</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+            
+            # Bahut chhota delay taaki browser freeze na ho aur speed dynamic rahe
+            time.sleep(0.2)
+            
+        except Exception as e:
+            time.sleep(1)
+            
