@@ -385,19 +385,3 @@ if auto_refresh:
     time.sleep(refresh_interval * 60)
     # Rerun the script automatically to fetch new data and update UI
     st.rerun()
-import streamlit as st
-
-st.markdown(
-    """
-    <style>
-    /* सिर्फ नीचे के फुटर और टूलबार को छुपाने के लिए */
-    footer {visibility: hidden;}
-    div[data-testid="stToolbar"] {display: none;}
-    
-    /* ऊपर का हेडर दिखाई देता रहेगा */
-    header {visibility: visible !important;}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
