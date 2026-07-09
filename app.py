@@ -385,3 +385,13 @@ if auto_refresh:
     time.sleep(refresh_interval * 60)
     # Rerun the script automatically to fetch new data and update UI
     st.rerun()
+
+import streamlit as st
+
+hide_footer_style = """
+    <style>
+    /* Niche ka standard Streamlit footer hide karne ke liye */
+    footer {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_footer_style, unsafe_allow_html=True)
