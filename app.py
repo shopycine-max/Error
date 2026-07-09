@@ -9,7 +9,7 @@ import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Aashiyana Dashboard", page_icon="📈", layout="wide")
 
 # --- 🛠️ SAFELY INITIALIZE SESSION STATE ---
 if 'live_results' not in st.session_state: 
@@ -29,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Aashiyana Dashboard")
-st.caption("Engine Upgraded: Automated NSE Universe Fetcher, Cached Session Storage & Auto-Refresh Active")
+st.caption("Engine Upgraded")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400) # Cache for 24 Hours
