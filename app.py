@@ -263,8 +263,8 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Momentum Breakout Radar")
-    if st.button("🚀 Run Mega Universe Magic Scan", key="live_btn"):
+    st.subheader("⚡ Live Radar")
+    if st.button("🚀 Run", key="live_btn"):
         with st.spinner("Processing filters over database..."):
             st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
         
@@ -305,7 +305,7 @@ with tab1:
                 st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
-        st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
+        st.subheader("🔮 Tomorrow's Prediction")
         
         future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
         top_future_stock = future_df.iloc[0]['Symbol']
