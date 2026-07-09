@@ -263,7 +263,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collected")
+    st.subheader("⚡ Live Data Collection")
     if st.button("🚀 Run", key="live_btn"):
         with st.spinner("Processing filters over database..."):
             st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
