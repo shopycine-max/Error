@@ -9,9 +9,9 @@ import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Custom Formula Stock Scanner", page_icon="📈", layout="wide")
 
-# --- 🛠️ SAFELY INITIALIZE SESSION STATE ---
+# --- SAFELY INITIALIZE SESSION STATE ---
 if 'live_results' not in st.session_state: 
     st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
@@ -28,8 +28,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Mega Stock Scanner Terminal (2300+ Universe)")
-st.caption("Engine Upgraded: Automated NSE Universe Fetcher, Cached Session Storage & Auto-Refresh Active")
+st.title("🚀 Custom Formula Stock Scanner Terminal")
+st.caption("Engine Status: Syncing strictly with your Chartink formula logic (3-Year Historical Data Enabled)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400) # Cache for 24 Hours
@@ -49,47 +49,42 @@ def get_mega_nse_universe():
     fallback = ["RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC"]
     return [f"{t}.NS" for t in fallback]
 
-# --- Core Technical Analytics Processor ---
-def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit):
+# --- Core Technical Analytics Processor (STRICTLY YOUR FORMULA) ---
+def analyze_single_ticker(ticker, df, mode):
     try:
         total_rows = len(df)
-        if total_rows < 50: return None 
+        # We need at least 530 rows to compute a 500-day lookback shifted by 1 or 200-day shifted by 31
+        if total_rows < 530: return None 
 
         df = df.copy()
         df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
         df = df[df['Volume'] > 0]
-        if len(df) < 50: return None 
+        if len(df) < 530: return None 
         
+        # --- Formula Building Blocks ---
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-        df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
+        df['Return_20d'] = ((df['Close'] - df['Close'].shift(20)) / df['Close'].shift(20)) * 100
         df['Turnover'] = df['Close'] * df['Volume']
-        df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
-        # RSI Calculation
-        delta = df['Close'].diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(com=13, adjust=False).mean()
-        avg_loss = loss.ewm(com=13, adjust=False).mean()
-        rs = avg_gain / (avg_loss + 1e-10)
-        df['RSI'] = 100 - (100 / (1 + rs))
+        # Complex high lookbacks from your formula
+        df['Max_2_High_20d_Ago'] = df['High'].shift(20).rolling(2).max()
+        df['Max_200_High_31d_Ago'] = df['High'].shift(31).rolling(200).max()
+        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(500).max()
         
-        window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-        df['Low_5d'] = df['Low'].rolling(window=5).min()
+        df['Low_5d'] = df['Low'].rolling(window=5).min() # For automated SL calculation
 
-        # Strategy Filters
+        # --- STRICT STRATEGY FILTERS AS PER YOUR CHARTINK FORMULA ---
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
-        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 11.0) 
+        cond3 = df['Volume'] > (df['Vol_SMA20'] * 1.0) 
         cond4 = df['Return_20d'] >= 3.0 
-        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
+        cond5 = df['Turnover'] > 500000000 # 500,000,000 (50 Crores INR)
+        cond6 = df['Max_2_High_20d_Ago'] >= df['Max_200_High_31d_Ago']
         cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
-        cond8 = df['RSI'] >= rsi_filter 
-        cond9 = df['Close'] > df['EMA_20'] 
 
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
+        # Applying strict validation matching your exact formula
+        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond6 & cond7
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
@@ -111,14 +106,13 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
-                "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
-                "Continuation Score (%)": round(close_pos, 1),
-                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10) + (close_pos / 2), 2)
+                "Turnover (Cr)": round(df['Turnover'].iloc[-1] / 10000000, 2),
+                "Continuation Score (%)": round(close_pos, 1)
             }]
             
         elif mode == "backtest":
-            history_slice = df.iloc[-60:]
+            history_slice = df.iloc[-60:] # Look at the last 2 months for backtest triggers
             triggers = history_slice[history_slice['Signal'] == True]
             
             for idx in triggers.index:
@@ -177,8 +171,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
-@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
+# --- OPTIMIZED CACHED BULK DOWNLOADER (3 YEARS DATA TO FILL 500-DAY MOVING WIN) ---
+@st.cache_data(ttl=600, show_spinner=False) 
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -188,9 +182,10 @@ def download_all_market_data(tickers):
     status_text = st.empty()
     
     for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance...")
+        status_text.text(f"⏳ Syncing Batch {c_idx+1}/{len(ticker_chunks)} (Fetching 3-Year Depths from Yahoo Finance)...")
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
+            # Changed period to '3y' to support the 500 days high lookback accurately
+            raw_data = yf.download(chunk, period="3y", interval="1d", progress=False, group_by='ticker')
             if raw_data.empty: continue
             
             for ticker in chunk:
@@ -216,35 +211,31 @@ def download_all_market_data(tickers):
     return cached_master
 
 # --- Sidebar Controls UI ---
-st.sidebar.header("⚙️ Pro Scanner Controls")
-rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
-volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
-min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
+st.sidebar.header("⚙️ Formula Scanner Active")
+st.sidebar.info("All parameters are hardcoded strictly according to your customized Chartink formula rules.")
 
 st.sidebar.markdown("---")
 st.sidebar.header("🔄 Auto-Update & Data Controls")
 
-# Manual Force Refresh Button
-if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() # Clears the 5-min cache
+if st.sidebar.button("🗑️ Force Clear RAM Cache"):
+    download_all_market_data.clear()
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
-    st.sidebar.success("Cache Cleared! Data will download fresh.")
+    st.sidebar.success("Cache Cleared!")
 
-# Auto Refresh Checkbox
-auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
+auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh")
 refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
 
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
-    st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
+    st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache (~3 Years depth takes 2-3 mins). Please wait...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Full NSE Database synchronized into Cache memory successfully!")
-    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
+    st.session_state['live_results'] = pd.DataFrame()
 
-tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
+tab1, tab2 = st.tabs(["⚡ Live Formula Radar (Today)", "📊 2-Month Historical Backtester"])
 
 def compute_analytics_on_cached_pool(mode="live"):
     results = []
@@ -252,7 +243,7 @@ def compute_analytics_on_cached_pool(mode="live"):
     
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
+            executor.submit(analyze_single_ticker, ticker, df, mode): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
@@ -264,22 +255,20 @@ def compute_analytics_on_cached_pool(mode="live"):
 # --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
-    if st.button("🚀 Run Mega Universe Magic Scan", key="live_btn"):
-        with st.spinner("Processing filters over database..."):
+    if st.button("🚀 Run Formula Scan Engine", key="live_btn"):
+        with st.spinner("Filtering 2300+ stock charts against your strict code formulas..."):
             st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
         
     res_df = st.session_state.get('live_results', pd.DataFrame())
     
     if not res_df.empty:
-        res_df = res_df.sort_values(by="Score", ascending=False)
-        if 'Rank' not in res_df.columns:
-            res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-        st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
+        res_df = res_df.sort_values(by="Day Change (%)", ascending=False)
+        st.success(f"🎉 Found {len(res_df)} high-probability breakout setups matching your formula perfectly!")
         st.dataframe(res_df, use_container_width=True, hide_index=True)
         
         top_stock = res_df.iloc[0]['Symbol']
         st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
-        chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+        chart_data = yf.download(f"{top_stock}.NS", period="6mo", interval="1d", progress=False)
         
         if not chart_data.empty:
             if isinstance(chart_data.columns, pd.MultiIndex):
@@ -293,7 +282,6 @@ with tab1:
                     x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
                     low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
                 )])
-                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
                 live_sl = res_df.iloc[0]['Stop Loss (₹)']
                 live_tgt = res_df.iloc[0]['Target Price (₹)']
@@ -301,60 +289,16 @@ with tab1:
                 fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
                 fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
                 
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Breakout Structure", xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
-        
-        future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
-        top_future_stock = future_df.iloc[0]['Symbol']
-        top_future_score = future_df.iloc[0]['Continuation Score (%)']
-        
-        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
-        
-        f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
-        if not f_chart_data.empty:
-            if isinstance(f_chart_data.columns, pd.MultiIndex):
-                f_chart_data.columns = f_chart_data.columns.get_level_values(0)
-                
-            f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-            f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
-            
-            if not f_chart_data.empty:
-                today_close = f_chart_data['Close'].iloc[-1]
-                today_high = f_chart_data['High'].iloc[-1]
-                tomorrow_trigger = today_high + (today_high * 0.002) 
-                tomorrow_target_1 = today_close + (today_close * 0.02) 
-                
-                fig_future = go.Figure()
-                fig_future.add_trace(go.Candlestick(
-                    x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
-                    low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
-                ))
-                
-                fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                     annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
-                fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                     annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
-                
-                fig_future.update_layout(
-                    template="plotly_dark", 
-                    title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
-                    xaxis_rangeslider_visible=False,
-                    paper_bgcolor='#0d1117',
-                    plot_bgcolor='#161b22'
-                )
-                st.plotly_chart(fig_future, use_container_width=True)
-            
     else:
-        st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
+        st.caption("No breakout setups currently active matching this strict criteria today. Click 'Run Formula Scan Engine' to refresh.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
     st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
     if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
-        with st.spinner("Simulating multi-day paths for every trigger..."):
+        with st.spinner("Simulating multi-day trading paths for every historical formula trigger..."):
             st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
         
     bt_df = st.session_state.get('bt_results', pd.DataFrame())
@@ -372,16 +316,11 @@ with tab2:
         
         st.markdown("### 📋 Complete Historical Simulation Log")
         st.dataframe(bt_df, use_container_width=True, hide_index=True)
-        
-        csv_data = bt_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
     else:
-        st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
+        st.caption("No backtest data loaded. Click 'Start Strict Backtest Simulation' to test this exact formula historically.")
 
-# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
+# --- AUTO REFRESH LOGIC ---
 if auto_refresh:
-    # Adding a subtle visual cue that auto-refresh is active
     st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
     time.sleep(refresh_interval * 60)
-    # Rerun the script automatically to fetch new data and update UI
     st.rerun()
