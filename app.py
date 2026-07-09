@@ -11,6 +11,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- Page Configurations ---
 st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
 
+# --- 🛠️ BUG FIX: INITIALIZE SESSION STATE AT THE VERY TOP ---
+# Isko sabse upar rakhne se AttributeError kabhi nahi aayega
+if 'live_results' not in st.session_state: 
+    st.session_state.live_results = pd.DataFrame()
+if 'bt_results' not in st.session_state: 
+    st.session_state.bt_results = pd.DataFrame()
+# -------------------------------------------------------------
+
 # Custom Dark Premium Theme
 st.markdown("""
     <style>
@@ -51,12 +59,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         df = df.copy()
         
-        # --- 🛠️ EXTRA SAFETY: Remove Pre-market/Midnight Empty Candles ---
+        # --- Remove Pre-market/Midnight Empty Candles ---
         df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
         df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
-        # -----------------------------------------------------------------
-
+        
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -196,20 +203,14 @@ def download_all_market_data(tickers):
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     if ticker in raw_data.columns.get_level_values(0):
                         t_data = raw_data[ticker].copy()
-                        
-                        # --- 🛠️ ROOT FIX: Bulk Data Cleaning ---
                         t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
                         t_data = t_data[t_data['Volume'] > 0]
-                        
                         if not t_data.empty: cached_master[ticker] = t_data
                 else:
                     if len(chunk) == 1 and not raw_data.empty:
                         t_data = raw_data.copy()
-                        
-                        # --- 🛠️ ROOT FIX: Bulk Data Cleaning ---
                         t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
                         t_data = t_data[t_data['Volume'] > 0]
-                        
                         if not t_data.empty: cached_master[ticker] = t_data
             time.sleep(0.1)
         except Exception:
@@ -228,9 +229,6 @@ min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)",
 
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
-
-if 'live_results' not in st.session_state: st.session_state.live_results = pd.DataFrame()
-if 'bt_results' not in st.session_state: st.session_state.bt_results = pd.DataFrame()
 
 if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
@@ -278,10 +276,8 @@ with tab1:
             if isinstance(chart_data.columns, pd.MultiIndex):
                 chart_data.columns = chart_data.columns.get_level_values(0)
             
-            # --- 🛠️ CHART 1 FIX: Clean NaN ---
             chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
             chart_data = chart_data[chart_data['Volume'] > 0]
-            # ---------------------------------
             
             if not chart_data.empty:
                 fig = go.Figure(data=[go.Candlestick(
@@ -299,7 +295,7 @@ with tab1:
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-        # --- CHART 2: Tomorrow's High-Probability Breakout Predictor ---
+        # --- CHART 2: Tomorrow's Predictor ---
         st.markdown("---")
         st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
         
@@ -314,10 +310,8 @@ with tab1:
             if isinstance(f_chart_data.columns, pd.MultiIndex):
                 f_chart_data.columns = f_chart_data.columns.get_level_values(0)
                 
-            # --- 🛠️ CHART 2 FIX (Fixes NaN Target Issue) ---
             f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
             f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
-            # -----------------------------------------------
             
             if not f_chart_data.empty:
                 today_close = f_chart_data['Close'].iloc[-1]
