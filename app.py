@@ -11,6 +11,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- Page Configurations ---
 st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
 
+# --- 🛠️ SAFELY INITIALIZE SESSION STATE ---
+if 'live_results' not in st.session_state: 
+    st.session_state['live_results'] = pd.DataFrame()
+if 'bt_results' not in st.session_state: 
+    st.session_state['bt_results'] = pd.DataFrame()
+# -------------------------------------------------------------
+
 # Custom Dark Premium Theme
 st.markdown("""
     <style>
@@ -22,12 +29,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Mega Stock Scanner Terminal (2300+ Universe)")
-st.caption("Engine Upgraded: Automated NSE Universe Fetcher & Cached Session Storage Active")
+st.caption("Engine Upgraded: Automated NSE Universe Fetcher, Cached Session Storage & Auto-Refresh Active")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400) # Cache for 24 Hours
 def get_mega_nse_universe():
-    """Fetches the complete list of all 2300+ listed stocks directly from NSE official records"""
     try:
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -50,6 +56,10 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         if total_rows < 50: return None 
 
         df = df.copy()
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+        df = df[df['Volume'] > 0]
+        if len(df) < 50: return None 
+        
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -65,11 +75,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        window_size = min(500, total_rows - 2)
+        window_size = min(500, len(df) - 2)
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # Strategy Breakout Filters
+        # Strategy Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
@@ -85,14 +95,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
             sl = df['Low_5d'].iloc[-1]
-            if sl >= entry or (entry - sl) / entry < 0.005: 
-                sl = entry * 0.965  
+            if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
             risk = entry - sl
             target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
-            # --- कल के ब्रेकआउट की संभावना (Continuation Score) ---
-            # यह देखता है कि आज क्लोजिंग दिन के हाई के कितने पास हुई है (Strong Multi-day Close)
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
@@ -106,7 +113,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
-                "Continuation Score (%)": round(close_pos, 1),  # हाई के पास क्लोज = हाई स्कोर
+                "Continuation Score (%)": round(close_pos, 1),
                 "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10) + (close_pos / 2), 2)
             }]
             
@@ -119,8 +126,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 b_entry = row['Close']
                 b_sl = row['Low_5d']
                 
-                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005:
-                    b_sl = b_entry * 0.965
+                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
                 b_risk = b_entry - b_sl
                 b_target = b_entry + (2 * b_risk)
                 
@@ -171,8 +177,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER ---
-@st.cache_data(ttl=1800, show_spinner=False)
+# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
+@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -190,11 +196,16 @@ def download_all_market_data(tickers):
             for ticker in chunk:
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     if ticker in raw_data.columns.get_level_values(0):
-                        t_data = raw_data[ticker].dropna(subset=['Close'])
+                        t_data = raw_data[ticker].copy()
+                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                        t_data = t_data[t_data['Volume'] > 0]
                         if not t_data.empty: cached_master[ticker] = t_data
                 else:
                     if len(chunk) == 1 and not raw_data.empty:
-                        cached_master[ticker] = raw_data.dropna(subset=['Close'])
+                        t_data = raw_data.copy()
+                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                        t_data = t_data[t_data['Volume'] > 0]
+                        if not t_data.empty: cached_master[ticker] = t_data
             time.sleep(0.1)
         except Exception:
             continue
@@ -210,22 +221,34 @@ rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
 
+st.sidebar.markdown("---")
+st.sidebar.header("🔄 Auto-Update & Data Controls")
+
+# Manual Force Refresh Button
+if st.sidebar.button("🗑️ Force Refresh Market Data"):
+    download_all_market_data.clear() # Clears the 5-min cache
+    if 'master_market_data' in st.session_state:
+        del st.session_state['master_market_data']
+    st.sidebar.success("Cache Cleared! Data will download fresh.")
+
+# Auto Refresh Checkbox
+auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
+refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
+
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
-if 'live_results' not in st.session_state: st.session_state.live_results = pd.DataFrame()
-if 'bt_results' not in st.session_state: st.session_state.bt_results = pd.DataFrame()
-
 if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
-    st.session_state.master_market_data = download_all_market_data(all_tickers)
+    st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Full NSE Database synchronized into Cache memory successfully!")
+    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
 def compute_analytics_on_cached_pool(mode="live"):
     results = []
-    pool = st.session_state.master_market_data
+    pool = st.session_state.get('master_market_data', {})
     
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
@@ -243,9 +266,10 @@ with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
     if st.button("🚀 Run Mega Universe Magic Scan", key="live_btn"):
         with st.spinner("Processing filters over database..."):
-            st.session_state.live_results = compute_analytics_on_cached_pool(mode="live")
+            st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
         
-    res_df = st.session_state.live_results
+    res_df = st.session_state.get('live_results', pd.DataFrame())
+    
     if not res_df.empty:
         res_df = res_df.sort_values(by="Score", ascending=False)
         if 'Rank' not in res_df.columns:
@@ -253,7 +277,6 @@ with tab1:
         st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
         st.dataframe(res_df, use_container_width=True, hide_index=True)
         
-        # --- CHART 1: standard Live Candlestick ---
         top_stock = res_df.iloc[0]['Symbol']
         st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
         chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
@@ -261,66 +284,68 @@ with tab1:
         if not chart_data.empty:
             if isinstance(chart_data.columns, pd.MultiIndex):
                 chart_data.columns = chart_data.columns.get_level_values(0)
+            
+            chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            chart_data = chart_data[chart_data['Volume'] > 0]
+            
+            if not chart_data.empty:
+                fig = go.Figure(data=[go.Candlestick(
+                    x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
+                    low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
+                )])
+                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
-            fig = go.Figure(data=[go.Candlestick(
-                x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
-                low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
-            )])
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
-            
-            live_sl = res_df.iloc[0]['Stop Loss (₹)']
-            live_tgt = res_df.iloc[0]['Target Price (₹)']
-            
-            fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
-            fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
-            
-            fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+                live_sl = res_df.iloc[0]['Stop Loss (₹)']
+                live_tgt = res_df.iloc[0]['Target Price (₹)']
+                
+                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
+                
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
+                st.plotly_chart(fig, use_container_width=True)
 
-        # --- NAYAA CHART SECTION: CHART 2 (कल के लिए Next-Day Breakout Radar) ---
         st.markdown("---")
         st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
         
-        # Continuation Score के हिसाब से सबसे मजबूत स्टॉक ढूंढें जो कल भाग सकता है
         future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
         top_future_stock = future_df.iloc[0]['Symbol']
         top_future_score = future_df.iloc[0]['Continuation Score (%)']
         
-        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है (यह आज अपने दिन के उच्चतम स्तर के बिल्कुल करीब बंद हुआ है)।")
+        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
         
         f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
         if not f_chart_data.empty:
             if isinstance(f_chart_data.columns, pd.MultiIndex):
                 f_chart_data.columns = f_chart_data.columns.get_level_values(0)
                 
-            # कल की संभावित एंट्री और ट्रिगर जोन
-            today_close = f_chart_data['Close'].iloc[-1]
-            today_high = f_chart_data['High'].iloc[-1]
-            tomorrow_trigger = today_high + (today_high * 0.002) # आज के हाई से थोड़ा सा ऊपर बफर
-            tomorrow_target_1 = today_close + (today_close * 0.02) # कल का पहला 2% का क्विक टारगेट
+            f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
             
-            fig_future = go.Figure()
-            
-            # Candlestick chart
-            fig_future.add_trace(go.Candlestick(
-                x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
-                low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
-            ))
-            
-            # कल के लेवल्स ड्रा करना
-            fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                 annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
-            fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                 annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
-            
-            fig_future.update_layout(
-                template="plotly_dark", 
-                title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
-                xaxis_rangeslider_visible=False,
-                paper_bgcolor='#0d1117',
-                plot_bgcolor='#161b22'
-            )
-            st.plotly_chart(fig_future, use_container_width=True)
+            if not f_chart_data.empty:
+                today_close = f_chart_data['Close'].iloc[-1]
+                today_high = f_chart_data['High'].iloc[-1]
+                tomorrow_trigger = today_high + (today_high * 0.002) 
+                tomorrow_target_1 = today_close + (today_close * 0.02) 
+                
+                fig_future = go.Figure()
+                fig_future.add_trace(go.Candlestick(
+                    x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
+                    low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
+                ))
+                
+                fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
+                                     annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
+                fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
+                                     annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
+                
+                fig_future.update_layout(
+                    template="plotly_dark", 
+                    title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
+                    xaxis_rangeslider_visible=False,
+                    paper_bgcolor='#0d1117',
+                    plot_bgcolor='#161b22'
+                )
+                st.plotly_chart(fig_future, use_container_width=True)
             
     else:
         st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
@@ -330,9 +355,10 @@ with tab2:
     st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
     if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
         with st.spinner("Simulating multi-day paths for every trigger..."):
-            st.session_state.bt_results = compute_analytics_on_cached_pool(mode="backtest")
+            st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
         
-    bt_df = st.session_state.bt_results
+    bt_df = st.session_state.get('bt_results', pd.DataFrame())
+    
     if not bt_df.empty:
         bt_df = bt_df.sort_values(by="Date", ascending=False)
         closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
@@ -351,3 +377,11 @@ with tab2:
         st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
     else:
         st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
+
+# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
+if auto_refresh:
+    # Adding a subtle visual cue that auto-refresh is active
+    st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
+    time.sleep(refresh_interval * 60)
+    # Rerun the script automatically to fetch new data and update UI
+    st.rerun()
