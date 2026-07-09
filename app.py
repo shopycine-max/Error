@@ -239,9 +239,9 @@ all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
-    st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
+    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
-    st.success("🏁 Full Database Uploaded successfully!")
+    st.success("🏁 Uploaded successfully!")
     st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
