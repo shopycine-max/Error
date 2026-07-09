@@ -385,19 +385,19 @@ if auto_refresh:
     time.sleep(refresh_interval * 60)
     # Rerun the script automatically to fetch new data and update UI
     st.rerun()
-
 import streamlit as st
 
-# Streamlit ke default elements ko hide karne ke liye CSS
-hide_elements_css = """
+st.markdown(
+    """
     <style>
-    #MainMenu {visibility: hidden;}
+    /* सिर्फ नीचे के फुटर और टूलबार को छुपाने के लिए */
     footer {visibility: hidden;}
-    /* Agar niche koi specific floating button ya toolbar hai toh use bhi target karne ke liye */
-    .stAppDeployButton {display: none !important;}
-    stViewerToolbar {display: none !important;}
+    div[data-testid="stToolbar"] {display: none;}
+    
+    /* ऊपर का हेडर दिखाई देता रहेगा */
+    header {visibility: visible !important;}
     </style>
-"""
+    """,
+    unsafe_allow_html=True
+)
 
-# CSS ko app me inject karein
-st.markdown(hide_elements_css, unsafe_allow_html=True)
