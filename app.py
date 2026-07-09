@@ -9,7 +9,7 @@ import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
-st.set_page_config(page_title="Aashiyana Dashboard", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Aashiyana Dashboard Pro Max", page_icon="📈", layout="wide")
 
 # --- 🛠️ SAFELY INITIALIZE SESSION STATE ---
 if 'live_results' not in st.session_state: 
