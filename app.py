@@ -51,12 +51,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         df = df.copy()
         
-        # --- 🛠️ BUG FIX: Remove Pre-market/Midnight Empty Candles ---
-        # Yeh filter yfinance ke raat/subah wale 0 volume empty candles ko hata dega
+        # --- 🛠️ EXTRA SAFETY: Remove Pre-market/Midnight Empty Candles ---
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
         df = df[df['Volume'] > 0]
-        
         if len(df) < 50: return None 
-        # -------------------------------------------------------------
+        # -----------------------------------------------------------------
 
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
@@ -99,7 +98,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
-            # --- कल के ब्रेकआउट की संभावना (Continuation Score) ---
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
@@ -197,11 +195,22 @@ def download_all_market_data(tickers):
             for ticker in chunk:
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     if ticker in raw_data.columns.get_level_values(0):
-                        t_data = raw_data[ticker].dropna(subset=['Close'])
+                        t_data = raw_data[ticker].copy()
+                        
+                        # --- 🛠️ ROOT FIX: Bulk Data Cleaning ---
+                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                        t_data = t_data[t_data['Volume'] > 0]
+                        
                         if not t_data.empty: cached_master[ticker] = t_data
                 else:
                     if len(chunk) == 1 and not raw_data.empty:
-                        cached_master[ticker] = raw_data.dropna(subset=['Close'])
+                        t_data = raw_data.copy()
+                        
+                        # --- 🛠️ ROOT FIX: Bulk Data Cleaning ---
+                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                        t_data = t_data[t_data['Volume'] > 0]
+                        
+                        if not t_data.empty: cached_master[ticker] = t_data
             time.sleep(0.1)
         except Exception:
             continue
@@ -268,23 +277,29 @@ with tab1:
         if not chart_data.empty:
             if isinstance(chart_data.columns, pd.MultiIndex):
                 chart_data.columns = chart_data.columns.get_level_values(0)
+            
+            # --- 🛠️ CHART 1 FIX: Clean NaN ---
+            chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            chart_data = chart_data[chart_data['Volume'] > 0]
+            # ---------------------------------
+            
+            if not chart_data.empty:
+                fig = go.Figure(data=[go.Candlestick(
+                    x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
+                    low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
+                )])
+                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
-            fig = go.Figure(data=[go.Candlestick(
-                x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
-                low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
-            )])
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
-            
-            live_sl = res_df.iloc[0]['Stop Loss (₹)']
-            live_tgt = res_df.iloc[0]['Target Price (₹)']
-            
-            fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
-            fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
-            
-            fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+                live_sl = res_df.iloc[0]['Stop Loss (₹)']
+                live_tgt = res_df.iloc[0]['Target Price (₹)']
+                
+                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
+                
+                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
+                st.plotly_chart(fig, use_container_width=True)
 
-        # --- CHART 2 (कल के लिए Next-Day Breakout Radar) ---
+        # --- CHART 2: Tomorrow's High-Probability Breakout Predictor ---
         st.markdown("---")
         st.subheader("🔮 Tomorrow's High-Probability Breakout Predictor")
         
@@ -299,31 +314,37 @@ with tab1:
             if isinstance(f_chart_data.columns, pd.MultiIndex):
                 f_chart_data.columns = f_chart_data.columns.get_level_values(0)
                 
-            today_close = f_chart_data['Close'].iloc[-1]
-            today_high = f_chart_data['High'].iloc[-1]
-            tomorrow_trigger = today_high + (today_high * 0.002) 
-            tomorrow_target_1 = today_close + (today_close * 0.02) 
+            # --- 🛠️ CHART 2 FIX (Fixes NaN Target Issue) ---
+            f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
+            # -----------------------------------------------
             
-            fig_future = go.Figure()
-            
-            fig_future.add_trace(go.Candlestick(
-                x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
-                low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
-            ))
-            
-            fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                 annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
-            fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                 annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
-            
-            fig_future.update_layout(
-                template="plotly_dark", 
-                title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
-                xaxis_rangeslider_visible=False,
-                paper_bgcolor='#0d1117',
-                plot_bgcolor='#161b22'
-            )
-            st.plotly_chart(fig_future, use_container_width=True)
+            if not f_chart_data.empty:
+                today_close = f_chart_data['Close'].iloc[-1]
+                today_high = f_chart_data['High'].iloc[-1]
+                tomorrow_trigger = today_high + (today_high * 0.002) 
+                tomorrow_target_1 = today_close + (today_close * 0.02) 
+                
+                fig_future = go.Figure()
+                
+                fig_future.add_trace(go.Candlestick(
+                    x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
+                    low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
+                ))
+                
+                fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
+                                     annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
+                fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
+                                     annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
+                
+                fig_future.update_layout(
+                    template="plotly_dark", 
+                    title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
+                    xaxis_rangeslider_visible=False,
+                    paper_bgcolor='#0d1117',
+                    plot_bgcolor='#161b22'
+                )
+                st.plotly_chart(fig_future, use_container_width=True)
             
     else:
         st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
