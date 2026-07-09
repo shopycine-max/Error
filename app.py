@@ -241,7 +241,7 @@ st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
-    st.success("🏁 Uploaded successfully!")
+    st.success("🏁 Updated successfully!")
     st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
@@ -263,7 +263,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Radar")
+    st.subheader("⚡ Live Data Collected")
     if st.button("🚀 Run", key="live_btn"):
         with st.spinner("Processing filters over database..."):
             st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
