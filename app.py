@@ -28,8 +28,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("Aashiyana Dashboard")
-st.caption("Engine Upgraded")
+st.title("Aashiyana Dashboard Pro Max 🚀")
+st.caption("Engine Upgraded ⚙️")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400) # Cache for 24 Hours
