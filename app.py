@@ -28,7 +28,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Mega Stock Scanner Terminal (2300+ Universe)")
+st.title("Aashiyana Dashboard")
 st.caption("Engine Upgraded: Automated NSE Universe Fetcher, Cached Session Storage & Auto-Refresh Active")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
