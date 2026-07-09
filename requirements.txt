@@ -1,5 +1,5 @@
-websocket-client
 streamlit
 pandas
-yfinance 
+yfinance
+plotly
 requests
