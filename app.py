@@ -11,12 +11,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- Page Configurations ---
 st.set_page_config(page_title="Pro Stock Scanner 2300+", page_icon="📈", layout="wide")
 
-# --- 🛠️ BUG FIX: INITIALIZE SESSION STATE AT THE VERY TOP ---
-# Isko sabse upar rakhne se AttributeError kabhi nahi aayega
+# --- 🛠️ BUG FIX: SAFELY INITIALIZE SESSION STATE ---
 if 'live_results' not in st.session_state: 
-    st.session_state.live_results = pd.DataFrame()
+    st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
-    st.session_state.bt_results = pd.DataFrame()
+    st.session_state['bt_results'] = pd.DataFrame()
 # -------------------------------------------------------------
 
 # Custom Dark Premium Theme
@@ -232,14 +231,15 @@ st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Stocks Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
-    st.session_state.master_market_data = download_all_market_data(all_tickers)
+    st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Full NSE Database synchronized into Cache memory successfully!")
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
 def compute_analytics_on_cached_pool(mode="live"):
     results = []
-    pool = st.session_state.master_market_data
+    # SAFELY get master market data
+    pool = st.session_state.get('master_market_data', {})
     
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
@@ -257,9 +257,11 @@ with tab1:
     st.subheader("⚡ Live Momentum Breakout Radar")
     if st.button("🚀 Run Mega Universe Magic Scan", key="live_btn"):
         with st.spinner("Processing filters over database..."):
-            st.session_state.live_results = compute_analytics_on_cached_pool(mode="live")
+            st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
         
-    res_df = st.session_state.live_results
+    # SAFELY Fetch Live Results
+    res_df = st.session_state.get('live_results', pd.DataFrame())
+    
     if not res_df.empty:
         res_df = res_df.sort_values(by="Score", ascending=False)
         if 'Rank' not in res_df.columns:
@@ -348,9 +350,11 @@ with tab2:
     st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
     if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
         with st.spinner("Simulating multi-day paths for every trigger..."):
-            st.session_state.bt_results = compute_analytics_on_cached_pool(mode="backtest")
+            st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
         
-    bt_df = st.session_state.bt_results
+    # SAFELY Fetch Backtest Results
+    bt_df = st.session_state.get('bt_results', pd.DataFrame())
+    
     if not bt_df.empty:
         bt_df = bt_df.sort_values(by="Date", ascending=False)
         closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
