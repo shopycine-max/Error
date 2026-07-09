@@ -393,7 +393,6 @@ hide_elements_css = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     /* Agar niche koi specific floating button ya toolbar hai toh use bhi target karne ke liye */
     .stAppDeployButton {display: none !important;}
     stViewerToolbar {display: none !important;}
