@@ -29,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️")
+st.caption("Engine Upgraded ⚙️ (ATR, VCP Squeeze, Mean Reversion & Future Target Mapping)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400) # Cache for 24 Hours
@@ -79,6 +79,20 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
+        # --- ADVANCED RISK & VCP METRICS ---
+        # 1. ATR (Average True Range) for Smart Stop Loss
+        high_low = df['High'] - df['Low']
+        high_close = (df['High'] - df['Close'].shift()).abs()
+        low_close = (df['Low'] - df['Close'].shift()).abs()
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        df['ATR_14'] = true_range.rolling(14).mean()
+
+        # 2. Consolidation Squeeze (Pichle 10 din ka range max 12% hona chahiye)
+        df['High_10d_ago'] = df['High'].shift(1).rolling(10).max()
+        df['Low_10d_ago'] = df['Low'].shift(1).rolling(10).min()
+        df['Consolidation_Pct'] = ((df['High_10d_ago'] - df['Low_10d_ago']) / (df['Low_10d_ago'] + 1e-10)) * 100
+        # -----------------------------------
+
         # Strategy Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
@@ -88,14 +102,21 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
+        cond10 = df['Close'] <= (df['EMA_20'] * 1.12) # Rubber-Band Filter (Avoid over-extended stocks)
+        cond11 = df['Consolidation_Pct'] <= 12.0      # VCP Squeeze (Range before breakout)
 
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
+        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
-            sl = df['Low_5d'].iloc[-1]
-            if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
+            
+            # Smart Dynamic SL using ATR
+            sl = entry - (1.5 * df['ATR_14'].iloc[-1])
+            # Fallback agar ATR calc error de
+            if pd.isna(sl) or sl >= entry or (entry - sl) / entry < 0.005: 
+                sl = entry * 0.965  
+                
             risk = entry - sl
             target = entry + (2 * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
@@ -124,9 +145,12 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             for idx in triggers.index:
                 row = df.loc[idx]
                 b_entry = row['Close']
-                b_sl = row['Low_5d']
                 
-                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
+                # Smart Dynamic SL using ATR for Backtest
+                b_sl = b_entry - (1.5 * row['ATR_14'])
+                if pd.isna(b_sl) or b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: 
+                    b_sl = b_entry * 0.965
+                    
                 b_risk = b_entry - b_sl
                 b_target = b_entry + (2 * b_risk)
                 
@@ -311,7 +335,11 @@ with tab1:
         top_future_stock = future_df.iloc[0]['Symbol']
         top_future_score = future_df.iloc[0]['Continuation Score (%)']
         
-        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
+        # --- NAYA: Aaj ka target price fetch karna ---
+        today_strategy_target = future_df.iloc[0]['Target Price (₹)']
+        
+        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।\n\n"
+                f"💡 **आज की स्ट्रेटेजी के अनुसार इसका Target:** ₹{today_strategy_target}")
         
         f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
         if not f_chart_data.empty:
@@ -333,6 +361,11 @@ with tab1:
                     low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
                 ))
                 
+                # --- NAYA: Aaj ka target chart par draw karna (Orange/Gold Color) ---
+                fig_future.add_hline(y=today_strategy_target, line_dash="solid", line_color="#ffcc00", line_width=1.5, 
+                                     annotation_text=f"आज का Target: ₹{today_strategy_target}", annotation_position="top left", opacity=0.7)
+                
+                # Kal ka Trigger aur Target
                 fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
                                      annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
                 fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
@@ -385,6 +418,3 @@ if auto_refresh:
     time.sleep(refresh_interval * 60)
     # Rerun the script automatically to fetch new data and update UI
     st.rerun()
-
-            
-        
