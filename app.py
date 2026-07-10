@@ -378,10 +378,3 @@ with tab2:
     else:
         st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
-# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
-if auto_refresh:
-    # Adding a subtle visual cue that auto-refresh is active
-    st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
-    time.sleep(refresh_interval * 60)
-    # Rerun the script automatically to fetch new data and update UI
-    st.rerun()
