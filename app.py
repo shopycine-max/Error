@@ -52,6 +52,7 @@ def get_mega_nse_universe():
 # --- Core Technical Analytics Processor ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit):
     try:
+        if df is None or df.empty: return None
         total_rows = len(df)
         if total_rows < 50: return None 
 
@@ -177,8 +178,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
-@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
+# --- OPTIMIZED CACHED BULK DOWNLOADER ---
+@st.cache_data(ttl=300, show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -194,18 +195,21 @@ def download_all_market_data(tickers):
             if raw_data.empty: continue
             
             for ticker in chunk:
-                if isinstance(raw_data.columns, pd.MultiIndex):
-                    if ticker in raw_data.columns.get_level_values(0):
-                        t_data = raw_data[ticker].copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
-                else:
-                    if len(chunk) == 1 and not raw_data.empty:
-                        t_data = raw_data.copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
+                try:
+                    if isinstance(raw_data.columns, pd.MultiIndex):
+                        if ticker in raw_data.columns.get_level_values(0):
+                            t_data = raw_data[ticker].copy()
+                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            t_data = t_data[t_data['Volume'] > 0]
+                            if not t_data.empty: cached_master[ticker] = t_data
+                    else:
+                        if len(chunk) == 1 and not raw_data.empty:
+                            t_data = raw_data.copy()
+                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            t_data = t_data[t_data['Volume'] > 0]
+                            if not t_data.empty: cached_master[ticker] = t_data
+                except Exception:
+                    continue
             time.sleep(0.1)
         except Exception:
             continue
@@ -226,14 +230,18 @@ st.sidebar.header("🔄 Auto-Update & Data Controls")
 
 # Manual Force Refresh Button
 if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() # Clears the 5-min cache
+    download_all_market_data.clear() 
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
     st.sidebar.success("Cache Cleared! Data will download fresh.")
 
-# Auto Refresh Checkbox
-auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
-refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
+# SAFE Auto-Refresh Using Streamlit Element (Avoids background memory infinite loop)
+st.sidebar.markdown("### 🟢 Auto-Refresh Configuration")
+enable_refresh = st.sidebar.toggle("Enable Live Auto-Refresh")
+if enable_refresh:
+    refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
+    # Safely trigger rerun without sleeping in background thread
+    st.fragment(run_every=f"{refresh_interval}m")
 
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
@@ -242,7 +250,7 @@ if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Updated successfully!")
-    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
+    st.session_state['live_results'] = pd.DataFrame() 
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
@@ -250,14 +258,17 @@ def compute_analytics_on_cached_pool(mode="live"):
     results = []
     pool = st.session_state.get('master_market_data', {})
     
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:  # Reduced max_workers slightly to protect CPU memory
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
-            res = future.result()
-            if res: results.extend(res)
+            try:
+                res = future.result()
+                if res: results.extend(res)
+            except Exception:
+                continue
             
     return pd.DataFrame(results)
 
@@ -275,11 +286,17 @@ with tab1:
         if 'Rank' not in res_df.columns:
             res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
         st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
-        st.dataframe(res_df, use_container_width=True, hide_index=True)
+        st.dataframe(res_df, width="stretch", hide_index=True)
         
         top_stock = res_df.iloc[0]['Symbol']
         st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
-        chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+        
+        chart_data = pd.DataFrame()
+        try:
+            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+        except Exception:
+            st.warning(f"Could not load fresh chart for {top_stock} due to Yahoo rate limit. Using pool fallback.")
+            chart_data = st.session_state.get('master_market_data', {}).get(f"{top_stock}.NS", pd.DataFrame())
         
         if not chart_data.empty:
             if isinstance(chart_data.columns, pd.MultiIndex):
@@ -302,7 +319,7 @@ with tab1:
                 fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
                 
                 fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
         st.subheader("🔮 Tomorrow's Prediction")
@@ -313,7 +330,12 @@ with tab1:
         
         st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
         
-        f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
+        f_chart_data = pd.DataFrame()
+        try:
+            f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
+        except Exception:
+            f_chart_data = st.session_state.get('master_market_data', {}).get(f"{top_future_stock}.NS", pd.DataFrame())
+
         if not f_chart_data.empty:
             if isinstance(f_chart_data.columns, pd.MultiIndex):
                 f_chart_data.columns = f_chart_data.columns.get_level_values(0)
@@ -345,7 +367,7 @@ with tab1:
                     paper_bgcolor='#0d1117',
                     plot_bgcolor='#161b22'
                 )
-                st.plotly_chart(fig_future, use_container_width=True)
+                st.plotly_chart(fig_future, width="stretch")
             
     else:
         st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
@@ -371,10 +393,9 @@ with tab2:
         col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
         
         st.markdown("### 📋 Complete Historical Simulation Log")
-        st.dataframe(bt_df, use_container_width=True, hide_index=True)
+        st.dataframe(bt_df, width="stretch", hide_index=True)
         
         csv_data = bt_df.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
     else:
         st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
-
