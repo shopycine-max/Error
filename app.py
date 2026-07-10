@@ -56,6 +56,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         if total_rows < 50: return None 
 
         df = df.copy()
+        # Clean MultiIndex columns if any leak through
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df.columns = [str(c).strip() for c in df.columns]
+
         df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
         df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
@@ -102,8 +107,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
-        cond10 = df['Close'] <= (df['EMA_20'] * 1.12) # Rubber-Band Filter (Avoid over-extended stocks)
-        cond11 = df['Consolidation_Pct'] <= 12.0      # VCP Squeeze (Range before breakout)
+        cond10 = df['Close'] <= (df['EMA_20'] * 1.12) # Rubber-Band Filter
+        cond11 = df['Consolidation_Pct'] <= 12.0      # VCP Squeeze
 
         df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11
         ticker_results = []
@@ -113,7 +118,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             
             # Smart Dynamic SL using ATR
             sl = entry - (1.5 * df['ATR_14'].iloc[-1])
-            # Fallback agar ATR calc error de
             if pd.isna(sl) or sl >= entry or (entry - sl) / entry < 0.005: 
                 sl = entry * 0.965  
                 
@@ -146,7 +150,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 row = df.loc[idx]
                 b_entry = row['Close']
                 
-                # Smart Dynamic SL using ATR for Backtest
                 b_sl = b_entry - (1.5 * row['ATR_14'])
                 if pd.isna(b_sl) or b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: 
                     b_sl = b_entry * 0.965
@@ -201,8 +204,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
-@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
+# --- OPTIMIZED CACHED BULK DOWNLOADER ---
+@st.cache_data(ttl=300, show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -214,22 +217,25 @@ def download_all_market_data(tickers):
     for c_idx, chunk in enumerate(ticker_chunks):
         status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance...")
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False)
             if raw_data.empty: continue
             
             for ticker in chunk:
+                t_data = pd.DataFrame()
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     if ticker in raw_data.columns.get_level_values(0):
                         t_data = raw_data[ticker].copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
+                    elif ticker in raw_data.columns.get_level_values(1):
+                        t_data = raw_data.xs(ticker, axis=1, level=1).copy()
                 else:
                     if len(chunk) == 1 and not raw_data.empty:
                         t_data = raw_data.copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
+                
+                if not t_data.empty:
+                    t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                    t_data = t_data[t_data['Volume'] > 0]
+                    if not t_data.empty: 
+                        cached_master[ticker] = t_data
             time.sleep(0.1)
         except Exception:
             continue
@@ -248,14 +254,12 @@ min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)",
 st.sidebar.markdown("---")
 st.sidebar.header("🔄 Auto-Update & Data Controls")
 
-# Manual Force Refresh Button
 if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() # Clears the 5-min cache
+    download_all_market_data.clear()
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
     st.sidebar.success("Cache Cleared! Data will download fresh.")
 
-# Auto Refresh Checkbox
 auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
 refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
 
@@ -266,7 +270,7 @@ if 'master_market_data' not in st.session_state:
     st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Updated successfully!")
-    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
+    st.session_state['live_results'] = pd.DataFrame() 
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
@@ -319,8 +323,8 @@ with tab1:
                 )])
                 fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                 
-                live_sl = res_df.iloc[0]['Stop Loss (₹)']
-                live_tgt = res_df.iloc[0]['Target Price (₹)']
+                live_sl = float(res_df.iloc[0]['Stop Loss (₹)'])
+                live_tgt = float(res_df.iloc[0]['Target Price (₹)'])
                 
                 fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
                 fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
@@ -335,8 +339,8 @@ with tab1:
         top_future_stock = future_df.iloc[0]['Symbol']
         top_future_score = future_df.iloc[0]['Continuation Score (%)']
         
-        # --- NAYA: Aaj ka target price fetch karna ---
-        today_strategy_target = future_df.iloc[0]['Target Price (₹)']
+        # --- FIXED: Aaj ka target price float parsing ---
+        today_strategy_target = float(future_df.iloc[0]['Target Price (₹)'])
         
         st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।\n\n"
                 f"💡 **आज की स्ट्रेटेजी के अनुसार इसका Target:** ₹{today_strategy_target}")
@@ -350,10 +354,10 @@ with tab1:
             f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
             
             if not f_chart_data.empty:
-                today_close = f_chart_data['Close'].iloc[-1]
-                today_high = f_chart_data['High'].iloc[-1]
-                tomorrow_trigger = today_high + (today_high * 0.002) 
-                tomorrow_target_1 = today_close + (today_close * 0.02) 
+                today_close = float(f_chart_data['Close'].iloc[-1])
+                today_high = float(f_chart_data['High'].iloc[-1])
+                tomorrow_trigger = float(today_high + (today_high * 0.002)) 
+                tomorrow_target_1 = float(today_close + (today_close * 0.02)) 
                 
                 fig_future = go.Figure()
                 fig_future.add_trace(go.Candlestick(
@@ -361,11 +365,10 @@ with tab1:
                     low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
                 ))
                 
-                # --- NAYA: Aaj ka target chart par draw karna (Orange/Gold Color) ---
+                # --- FIXED: Pure Float pass kiya hai line drawing me ---
                 fig_future.add_hline(y=today_strategy_target, line_dash="solid", line_color="#ffcc00", line_width=1.5, 
                                      annotation_text=f"आज का Target: ₹{today_strategy_target}", annotation_position="top left", opacity=0.7)
                 
-                # Kal ka Trigger aur Target
                 fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
                                      annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
                 fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
@@ -411,10 +414,8 @@ with tab2:
     else:
         st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
-# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
+# --- AUTO REFRESH LOGIC ---
 if auto_refresh:
-    # Adding a subtle visual cue that auto-refresh is active
     st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
     time.sleep(refresh_interval * 60)
-    # Rerun the script automatically to fetch new data and update UI
     st.rerun()
