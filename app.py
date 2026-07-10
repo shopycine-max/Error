@@ -177,52 +177,46 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
     
-# --- OPTIMIZED CACHED BULK DOWNLOADER (MULTI-THREADED) ---
-@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
+# --- HYPER-OPTIMIZED VECTORIZED DOWNLOADER ---
+@st.cache_data(ttl=300, show_spinner=False) # 5 Minute Cache
 def download_all_market_data(tickers):
-    chunk_size = 50  # Chunk size badha diya gaya hai
-    ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
-    
-    cached_master = {}
-    progress_bar = st.progress(0)
     status_text = st.empty()
-    status_text.text("🚀 Hyper-Downloading Live Market Data (Parallel Mode)...")
-
-    def fetch_chunk(chunk):
-        try:
-            # yfinance ka built-in multi-threading (threads=True) network calls ko fast karta hai
-            return yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True)
-        except Exception:
-            return pd.DataFrame()
-
-    # Parallel downloading using ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_chunk = {executor.submit(fetch_chunk, chunk): chunk for chunk in ticker_chunks}
+    status_text.text("🚀 Fetching 2300+ Tickers in a single optimized batch...")
+    
+    try:
+        # NO CHUNKS / NO LOOPS: Ek single request mein pura data manga rahe hain
+        # yfinance apne aap isko internally best speed par handle karega bina block hue
+        raw_data = yf.download(tickers, period="2y", interval="1d", progress=False, threads=True)
         
-        for i, future in enumerate(as_completed(future_to_chunk)):
-            raw_data = future.result()
-            chunk = future_to_chunk[future]
+        if raw_data.empty:
+            status_text.empty()
+            return {}
             
-            if not raw_data.empty:
-                for ticker in chunk:
-                    if isinstance(raw_data.columns, pd.MultiIndex):
-                        if ticker in raw_data.columns.get_level_values(0):
-                            t_data = raw_data[ticker].copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                            if not t_data[t_data['Volume'] > 0].empty: 
-                                cached_master[ticker] = t_data[t_data['Volume'] > 0]
-                    else:
-                        if len(chunk) == 1:
-                            t_data = raw_data.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                            if not t_data[t_data['Volume'] > 0].empty:
-                                cached_master[ticker] = t_data[t_data['Volume'] > 0]
-                                
-            # Progress bar ko smooth update karna
-            progress_bar.progress((i + 1) / len(ticker_chunks))
+        status_text.text("⚡ Heavy Vectorized Engine Parsing Data...")
+        
+        # STEP 1: Columns ke Tickers ko Rows mein 'stack' karna (Lightning Fast)
+        # Isse columns simplify ho jayenge aur index [Date, Ticker] ban jayega
+        stacked = raw_data.stack(level=1)
+        stacked.index.names = ['Date', 'Ticker']
+        
+        # STEP 2: Pure data ka ek sath cleanup (No individual loops)
+        stacked = stacked.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+        stacked = stacked[stacked['Volume'] > 0]
+        
+        # STEP 3: Groupby ka use karke Dictionary banana (Pure C-Speed Execution)
+        cached_master = {}
+        for ticker, group in stacked.groupby(level='Ticker'):
+            # Ticker level ko index se hata kar strictly Date index bana rahe hain
+            df_ticker = group.droplevel('Ticker')
+            cached_master[ticker] = df_ticker
             
-    progress_bar.empty()
-    status_text.empty()
-    return cached_master
-
+        status_text.empty()
+        return cached_master
+        
+    except Exception as e:
+        st.sidebar.error(f"Bulk download failed: {e}")
+        status_text.empty()
+        return {}
 
 # --- Sidebar Controls UI ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
