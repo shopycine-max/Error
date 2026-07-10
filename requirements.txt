@@ -1,7 +1,7 @@
 streamlit
 pandas
-yfinance<1.5.0
+yfinance
 plotly
-numpy<2.0.0
-pyarrow<24.0.0
+numpy
+pyarrow
 requests
