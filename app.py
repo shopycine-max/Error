@@ -8,9 +8,6 @@ import requests
 import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- yfinance Memory Crash Fix ---
-yf.enable_debug_mode = False 
-
 # --- Page Configurations ---
 st.set_page_config(page_title="Aashiyana Dashboard Pro Max 🚀", page_icon="📈", layout="wide")
 
@@ -19,8 +16,6 @@ if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
     st.session_state['bt_results'] = pd.DataFrame()
-if 'last_refresh_time' not in st.session_state:
-    st.session_state['last_refresh_time'] = time.time()
 # -------------------------------------------------------------
 
 # Custom Dark Premium Theme
@@ -182,8 +177,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER ---
-@st.cache_data(ttl=300, show_spinner=False)
+# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
+@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -229,32 +224,33 @@ min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)",
 st.sidebar.markdown("---")
 st.sidebar.header("🔄 Auto-Update & Data Controls")
 
+# Manual Force Refresh Button
 if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() 
+    download_all_market_data.clear() # Clears the 5-min cache
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
     st.sidebar.success("Cache Cleared! Data will download fresh.")
 
-auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh")
+# Auto Refresh Checkbox
+auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
 refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
 
 all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
-    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins...")
+    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Updated successfully!")
-    st.session_state['live_results'] = pd.DataFrame() 
+    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
 
-tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 Historical Backtester"])
+tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
 def compute_analytics_on_cached_pool(mode="live"):
     results = []
     pool = st.session_state.get('master_market_data', {})
     
-    # 🚨 FIX 2: Reduced workers from 16 to 4 to prevent Streamlit Memory Crash
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
             for ticker, df in pool.items()
@@ -278,7 +274,7 @@ with tab1:
         res_df = res_df.sort_values(by="Score", ascending=False)
         if 'Rank' not in res_df.columns:
             res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-        st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups!")
+        st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
         st.dataframe(res_df, use_container_width=True, hide_index=True)
         
         top_stock = res_df.iloc[0]['Symbol']
@@ -315,7 +311,7 @@ with tab1:
         top_future_stock = future_df.iloc[0]['Symbol']
         top_future_score = future_df.iloc[0]['Continuation Score (%)']
         
-        st.info(f"🎯 **{top_future_stock}** kal ke liye sabse mazboot davedaar hai kyunki iska Continuation Score **{top_future_score}%** hai.")
+        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
         
         f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
         if not f_chart_data.empty:
@@ -338,24 +334,27 @@ with tab1:
                 ))
                 
                 fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                     annotation_text=f"Buy Above: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
+                                     annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
                 fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                     annotation_text=f"Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
+                                     annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
                 
                 fig_future.update_layout(
-                    template="plotly_dark", title=f"📈 {top_future_stock} - Tomorrow's Runway",
-                    xaxis_rangeslider_visible=False, paper_bgcolor='#0d1117', plot_bgcolor='#161b22'
+                    template="plotly_dark", 
+                    title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
+                    xaxis_rangeslider_visible=False,
+                    paper_bgcolor='#0d1117',
+                    plot_bgcolor='#161b22'
                 )
                 st.plotly_chart(fig_future, use_container_width=True)
             
     else:
-        st.caption("No breakout setups currently active. Click Run Scanner above.")
+        st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
-    st.subheader("⏳ True Strategy Analytics Dashboard")
-    if st.button("📊 Start Backtest Simulation", key="bt_btn"):
-        with st.spinner("Simulating multi-day paths..."):
+    st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
+    if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
+        with st.spinner("Simulating multi-day paths for every trigger..."):
             st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
         
     bt_df = st.session_state.get('bt_results', pd.DataFrame())
@@ -367,24 +366,22 @@ with tab2:
         accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2) if len(closed_trades) > 0 else 0.0
         
         col1, col2, col3 = st.columns(3)
-        col1.metric("Generated Signals", len(bt_df))
-        col2.metric("Closed Trades", len(closed_trades))
-        col3.metric("Strategy Win Rate", f"{accuracy}%")
+        col1.metric("Total Generated Signals", len(bt_df))
+        col2.metric("Closed/Evaluated Signals", len(closed_trades))
+        col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
         
+        st.markdown("### 📋 Complete Historical Simulation Log")
         st.dataframe(bt_df, use_container_width=True, hide_index=True)
+        
         csv_data = bt_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Log (CSV)", data=csv_data, file_name="backtest.csv", mime="text/csv")
+        st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
     else:
-        st.caption("No backtest data. Click Start Simulation.")
+        st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
-# --- 🚨 FIX 3: NON-BLOCKING AUTO REFRESH LOGIC ---
+# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
 if auto_refresh:
-    current_time = time.time()
-    time_elapsed = current_time - st.session_state['last_refresh_time']
-    
-    if time_elapsed > (refresh_interval * 60):
-        st.session_state['last_refresh_time'] = current_time
-        st.rerun()
-    else:
-        time_left = int((refresh_interval * 60) - time_elapsed)
-        st.sidebar.caption(f"⏱️ Next auto-refresh in {time_left} seconds (interact with app to keep timer active)")
+    # Adding a subtle visual cue that auto-refresh is active
+    st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
+    time.sleep(refresh_interval * 60)
+    # Rerun the script automatically to fetch new data and update UI
+    st.rerun()
