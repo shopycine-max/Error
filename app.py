@@ -176,44 +176,53 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
     except Exception:
         return None
     return None
-
-# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
+    
+# --- OPTIMIZED CACHED BULK DOWNLOADER (MULTI-THREADED) ---
 @st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
 def download_all_market_data(tickers):
-    chunk_size = 35
+    chunk_size = 50  # Chunk size badha diya gaya hai
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     cached_master = {}
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
-    for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance...")
+    status_text.text("🚀 Hyper-Downloading Live Market Data (Parallel Mode)...")
+
+    def fetch_chunk(chunk):
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
-            if raw_data.empty: continue
-            
-            for ticker in chunk:
-                if isinstance(raw_data.columns, pd.MultiIndex):
-                    if ticker in raw_data.columns.get_level_values(0):
-                        t_data = raw_data[ticker].copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
-                else:
-                    if len(chunk) == 1 and not raw_data.empty:
-                        t_data = raw_data.copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
-            time.sleep(0.1)
+            # yfinance ka built-in multi-threading (threads=True) network calls ko fast karta hai
+            return yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True)
         except Exception:
-            continue
-        progress_bar.progress((c_idx + 1) / len(ticker_chunks))
+            return pd.DataFrame()
+
+    # Parallel downloading using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_chunk = {executor.submit(fetch_chunk, chunk): chunk for chunk in ticker_chunks}
         
+        for i, future in enumerate(as_completed(future_to_chunk)):
+            raw_data = future.result()
+            chunk = future_to_chunk[future]
+            
+            if not raw_data.empty:
+                for ticker in chunk:
+                    if isinstance(raw_data.columns, pd.MultiIndex):
+                        if ticker in raw_data.columns.get_level_values(0):
+                            t_data = raw_data[ticker].copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            if not t_data[t_data['Volume'] > 0].empty: 
+                                cached_master[ticker] = t_data[t_data['Volume'] > 0]
+                    else:
+                        if len(chunk) == 1:
+                            t_data = raw_data.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            if not t_data[t_data['Volume'] > 0].empty:
+                                cached_master[ticker] = t_data[t_data['Volume'] > 0]
+                                
+            # Progress bar ko smooth update karna
+            progress_bar.progress((i + 1) / len(ticker_chunks))
+            
     progress_bar.empty()
     status_text.empty()
     return cached_master
+
 
 # --- Sidebar Controls UI ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
