@@ -29,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(ttl=86400, persist="disk") # Cache for 24 Hours on Disk
@@ -229,20 +229,41 @@ if st.sidebar.button("🗑️ Force Refresh Market Data"):
     download_all_market_data.clear() # Clears the cache completely
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
-    st.sidebar.success("Cache Cleared! Data will download fresh.")
+    st.sidebar.success("Cache Cleared! Data will download fresh on next fetch.")
 
-# Auto Refresh Checkbox
 auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
 refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
 
-all_tickers = get_mega_nse_universe()
-st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
+st.sidebar.markdown("---")
+
+# === 🚀 SPEED OPTIMIZATION: UNIVERSE SELECTION & LAZY LOADING ===
+universe_choice = st.sidebar.radio(
+    "📊 Select Market Universe", 
+    ["Top 10 Stocks (Instant)", "Nifty 50 (Fast)", "All NSE 2300+ (Very Slow)"]
+)
+
+if universe_choice == "Top 10 Stocks (Instant)":
+    all_tickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LT.NS", "KOTAKBANK.NS"]
+elif universe_choice == "Nifty 50 (Fast)":
+    # Fallback to a quick Nifty 50 list for faster scanning
+    nifty_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
+    all_tickers = nifty_50
+else:
+    all_tickers = get_mega_nse_universe()
+
+st.sidebar.write(f"Total Active Stocks: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
-    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into Disk Cache. Relax for 2-3 mins (One-time Setup for the day)...")
-    st.session_state['master_market_data'] = download_all_market_data(all_tickers)
-    st.success("🏁 Updated successfully!")
-    st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
+    st.sidebar.warning("⚠️ Data is not loaded yet.")
+    if st.sidebar.button("📥 Fetch Market Data To Start"):
+        with st.spinner(f"Downloading {len(all_tickers)} stocks data..."):
+            st.session_state['master_market_data'] = download_all_market_data(all_tickers)
+            st.session_state['live_results'] = pd.DataFrame() 
+            st.sidebar.success("🏁 Data Loaded!")
+            st.rerun() # Refresh the app automatically after loading
+else:
+    st.sidebar.success(f"✅ Data Loaded ({len(st.session_state['master_market_data'])} stocks)")
+# ========================================================
 
 tab1, tab2 = st.tabs(["⚡ Live Scanner (Today)", "📊 2-Month Historical Backtester"])
 
@@ -250,6 +271,9 @@ def compute_analytics_on_cached_pool(mode="live"):
     results = []
     pool = st.session_state.get('master_market_data', {})
     
+    if not pool:
+        return pd.DataFrame()
+        
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
@@ -264,124 +288,130 @@ def compute_analytics_on_cached_pool(mode="live"):
 # --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Data Collected")
-    if st.button("🚀 Run", key="live_btn"):
-        with st.spinner("Processing filters over database..."):
-            st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
-        
-    res_df = st.session_state.get('live_results', pd.DataFrame())
     
-    if not res_df.empty:
-        res_df = res_df.sort_values(by="Score", ascending=False)
-        if 'Rank' not in res_df.columns:
-            res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-        st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
-        st.dataframe(res_df, use_container_width=True, hide_index=True)
-        
-        top_stock = res_df.iloc[0]['Symbol']
-        st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
-        chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
-        
-        if not chart_data.empty:
-            if isinstance(chart_data.columns, pd.MultiIndex):
-                chart_data.columns = chart_data.columns.get_level_values(0)
+    if 'master_market_data' not in st.session_state:
+        st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
+    else:
+        if st.button("🚀 Run", key="live_btn"):
+            with st.spinner("Processing filters over database..."):
+                st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
             
-            chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-            chart_data = chart_data[chart_data['Volume'] > 0]
+        res_df = st.session_state.get('live_results', pd.DataFrame())
+        
+        if not res_df.empty:
+            res_df = res_df.sort_values(by="Score", ascending=False)
+            if 'Rank' not in res_df.columns:
+                res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
+            st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
+            st.dataframe(res_df, use_container_width=True, hide_index=True)
+            
+            top_stock = res_df.iloc[0]['Symbol']
+            st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
+            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
-                fig = go.Figure(data=[go.Candlestick(
-                    x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
-                    low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
-                )])
-                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
+                if isinstance(chart_data.columns, pd.MultiIndex):
+                    chart_data.columns = chart_data.columns.get_level_values(0)
                 
-                live_sl = res_df.iloc[0]['Stop Loss (₹)']
-                live_tgt = res_df.iloc[0]['Target Price (₹)']
+                chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                chart_data = chart_data[chart_data['Volume'] > 0]
                 
-                fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
-                fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
-                
-                fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
-                st.plotly_chart(fig, use_container_width=True)
+                if not chart_data.empty:
+                    fig = go.Figure(data=[go.Candlestick(
+                        x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
+                        low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
+                    )])
+                    fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
+                    
+                    live_sl = res_df.iloc[0]['Stop Loss (₹)']
+                    live_tgt = res_df.iloc[0]['Target Price (₹)']
+                    
+                    fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                    fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
+                    
+                    fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("---")
-        st.subheader("🔮 Tomorrow's Prediction")
-        
-        future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
-        top_future_stock = future_df.iloc[0]['Symbol']
-        top_future_score = future_df.iloc[0]['Continuation Score (%)']
-        
-        st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
-        
-        f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
-        if not f_chart_data.empty:
-            if isinstance(f_chart_data.columns, pd.MultiIndex):
-                f_chart_data.columns = f_chart_data.columns.get_level_values(0)
-                
-            f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-            f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
+            st.markdown("---")
+            st.subheader("🔮 Tomorrow's Prediction")
             
+            future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
+            top_future_stock = future_df.iloc[0]['Symbol']
+            top_future_score = future_df.iloc[0]['Continuation Score (%)']
+            
+            st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
+            
+            f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
             if not f_chart_data.empty:
-                today_close = f_chart_data['Close'].iloc[-1]
-                today_high = f_chart_data['High'].iloc[-1]
-                tomorrow_trigger = today_high + (today_high * 0.002) 
-                tomorrow_target_1 = today_close + (today_close * 0.02) 
+                if isinstance(f_chart_data.columns, pd.MultiIndex):
+                    f_chart_data.columns = f_chart_data.columns.get_level_values(0)
+                    
+                f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
                 
-                fig_future = go.Figure()
-                fig_future.add_trace(go.Candlestick(
-                    x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
-                    low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
-                ))
+                if not f_chart_data.empty:
+                    today_close = f_chart_data['Close'].iloc[-1]
+                    today_high = f_chart_data['High'].iloc[-1]
+                    tomorrow_trigger = today_high + (today_high * 0.002) 
+                    tomorrow_target_1 = today_close + (today_close * 0.02) 
+                    
+                    fig_future = go.Figure()
+                    fig_future.add_trace(go.Candlestick(
+                        x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
+                        low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
+                    ))
+                    
+                    fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
+                                         annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
+                    fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
+                                         annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
+                    
+                    fig_future.update_layout(
+                        template="plotly_dark", 
+                        title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
+                        xaxis_rangeslider_visible=False,
+                        paper_bgcolor='#0d1117',
+                        plot_bgcolor='#161b22'
+                    )
+                    st.plotly_chart(fig_future, use_container_width=True)
                 
-                fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                     annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
-                fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                     annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
-                
-                fig_future.update_layout(
-                    template="plotly_dark", 
-                    title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
-                    xaxis_rangeslider_visible=False,
-                    paper_bgcolor='#0d1117',
-                    plot_bgcolor='#161b22'
-                )
-                st.plotly_chart(fig_future, use_container_width=True)
-            
-    else:
-        st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
+        else:
+            st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
 
 # --- TAB 2: Historical Backtest View ---
 with tab2:
     st.subheader("⏳ True Strategy Analytics Dashboard (2-Month Path Backtest)")
-    if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
-        with st.spinner("Simulating multi-day paths for every trigger..."):
-            st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
-        
-    bt_df = st.session_state.get('bt_results', pd.DataFrame())
     
-    if not bt_df.empty:
-        bt_df = bt_df.sort_values(by="Date", ascending=False)
-        closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
-        winning_trades = closed_trades[closed_trades['PnL (%)'] > 0]
-        accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2) if len(closed_trades) > 0 else 0.0
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Generated Signals", len(bt_df))
-        col2.metric("Closed/Evaluated Signals", len(closed_trades))
-        col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
-        
-        st.markdown("### 📋 Complete Historical Simulation Log")
-        st.dataframe(bt_df, use_container_width=True, hide_index=True)
-        
-        csv_data = bt_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
+    if 'master_market_data' not in st.session_state:
+        st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to run backtest.")
     else:
-        st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
+        if st.button("📊 Start Strict Backtest Simulation", key="bt_btn"):
+            with st.spinner("Simulating multi-day paths for every trigger..."):
+                st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
+            
+        bt_df = st.session_state.get('bt_results', pd.DataFrame())
+        
+        if not bt_df.empty:
+            bt_df = bt_df.sort_values(by="Date", ascending=False)
+            closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
+            winning_trades = closed_trades[closed_trades['PnL (%)'] > 0]
+            accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2) if len(closed_trades) > 0 else 0.0
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Generated Signals", len(bt_df))
+            col2.metric("Closed/Evaluated Signals", len(closed_trades))
+            col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
+            
+            st.markdown("### 📋 Complete Historical Simulation Log")
+            st.dataframe(bt_df, use_container_width=True, hide_index=True)
+            
+            csv_data = bt_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Accurate Backtest Log (CSV)", data=csv_data, file_name="strict_backtest_results.csv", mime="text/csv")
+        else:
+            st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
 # --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
 if auto_refresh:
-    # Adding a subtle visual cue that auto-refresh is active
     st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
     time.sleep(refresh_interval * 60)
-    # Rerun the script automatically to fetch new data and update UI
     st.rerun()
