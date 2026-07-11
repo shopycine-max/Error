@@ -2,6 +2,6 @@ streamlit
 pandas
 yfinance
 plotly
-numpy
+numpy<2.0.0
 pyarrow
 requests
