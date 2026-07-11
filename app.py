@@ -32,7 +32,7 @@ st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
-@st.cache_data(ttl=86400, persist="disk") # Cache for 24 Hours on Disk
+@st.cache_data(persist="disk", show_spinner=False) # Cache for 24 Hours on Disk
 def get_mega_nse_universe():
     try:
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
