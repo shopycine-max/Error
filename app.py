@@ -32,7 +32,7 @@ st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
-@st.cache_data(ttl=86400) # Cache for 24 Hours in Memory (Disk removed to prevent crashes)
+@st.cache_data(ttl=86400, persist="disk") # Cache for 24 Hours on Disk
 def get_mega_nse_universe():
     try:
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -177,8 +177,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER ---
-@st.cache_data(ttl=86400, show_spinner=False) # Data saved to memory for 1 full day (Disk removed)
+# --- OPTIMIZED CACHED BULK DOWNLOADER (DISK CACHE FOR 24 HOURS) ---
+@st.cache_data(ttl=86400, persist="disk", show_spinner=False) # Data saved to disk for 1 full day
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
