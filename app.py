@@ -32,7 +32,7 @@ st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
-@st.cache_data(ttl=86400) # Cache for 24 Hours
+@st.cache_data(ttl=86400, persist="disk") # Cache for 24 Hours on Disk
 def get_mega_nse_universe():
     try:
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -177,8 +177,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER (5 MIN CACHE FOR AUTO UPDATE) ---
-@st.cache_data(ttl=300, show_spinner=False) # TTL set to 300 seconds (5 Minutes)
+# --- OPTIMIZED CACHED BULK DOWNLOADER (DISK CACHE FOR 24 HOURS) ---
+@st.cache_data(ttl=86400, persist="disk", show_spinner=False) # Data saved to disk for 1 full day
 def download_all_market_data(tickers):
     chunk_size = 35
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -226,7 +226,7 @@ st.sidebar.header("🔄 Auto-Update & Data Controls")
 
 # Manual Force Refresh Button
 if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() # Clears the 5-min cache
+    download_all_market_data.clear() # Clears the cache completely
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
     st.sidebar.success("Cache Cleared! Data will download fresh.")
@@ -239,7 +239,7 @@ all_tickers = get_mega_nse_universe()
 st.sidebar.write(f"Total Active Stocks Monitored: **{len(all_tickers)}**")
 
 if 'master_market_data' not in st.session_state:
-    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into RAM Cache. Relax for 2-3 mins (One-time Setup)...")
+    st.info(f"🔄 Pre-loading {len(all_tickers)} Data Pool into Disk Cache. Relax for 2-3 mins (One-time Setup for the day)...")
     st.session_state['master_market_data'] = download_all_market_data(all_tickers)
     st.success("🏁 Updated successfully!")
     st.session_state['live_results'] = pd.DataFrame() # Reset live results on fresh download
@@ -264,7 +264,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 # --- TAB 1: Live Scanning View ---
 with tab1:
     st.subheader("⚡ Live Data Collected")
-    if st.button("🚀 Run Scanner", key="live_btn"):
+    if st.button("🚀 Run", key="live_btn"):
         with st.spinner("Processing filters over database..."):
             st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
         
