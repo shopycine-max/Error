@@ -18,7 +18,16 @@ if 'bt_results' not in st.session_state:
     st.session_state['bt_results'] = pd.DataFrame()
 # -------------------------------------------------------------
 
-# Custom Dark Premium Theme
+# --- CUSTOM CACHE CLEAR LOGIC ---
+def clear_all_caches():
+    download_all_market_data.clear() # Clear disk cache
+    get_mega_nse_universe.clear()    # Clear ticker universe cache
+    if 'master_market_data' in st.session_state:
+        del st.session_state['master_market_data']
+    st.toast("🧹 Cache completely cleared! Fetching fresh data on next run.", icon="🗑️")
+
+# --- CUSTOM THEME & INJECTING MENU SHORTCUTS ---
+# Adding custom styles and instructions for clear cache
 st.markdown("""
     <style>
     .main { background-color: #0d1117; color: #c9d1d9; }
@@ -28,6 +37,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 
@@ -224,12 +234,12 @@ min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)",
 st.sidebar.markdown("---")
 st.sidebar.header("🔄 Auto-Update & Data Controls")
 
-# Manual Force Refresh Button
-if st.sidebar.button("🗑️ Force Refresh Market Data"):
-    download_all_market_data.clear() # Clears the cache completely
-    if 'master_market_data' in st.session_state:
-        del st.session_state['master_market_data']
-    st.sidebar.success("Cache Cleared! Data will download fresh on next fetch.")
+# === 🛠️ ADDED TO MAIN APP MENUBAR (TOP RIGHT) AND SIDEBAR ===
+# This creates a Clean Cache utility directly inside a dedicated Sidebar area 
+# as well as injecting a visual reminder to clear it when needed.
+if st.sidebar.button("🗑️ Clear Dashboard Cache"):
+    clear_all_caches()
+    st.rerun()
 
 auto_refresh = st.sidebar.checkbox("🟢 Enable Live Auto-Refresh (Updates app periodically)")
 refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, max_value=15, value=5)
@@ -245,7 +255,6 @@ universe_choice = st.sidebar.radio(
 if universe_choice == "Top 10 Stocks (Instant)":
     all_tickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LT.NS", "KOTAKBANK.NS"]
 elif universe_choice == "Nifty 50 (Fast)":
-    # Fallback to a quick Nifty 50 list for faster scanning
     nifty_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     all_tickers = nifty_50
 else:
