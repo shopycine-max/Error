@@ -85,7 +85,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['RSI'] = 100 - (100 / (1 + rs))
         
         window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        df['Max_200_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
         # Strategy Filters
@@ -94,7 +94,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 3.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
+        cond7 = df['Close'] >= df['Max_200_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
 
