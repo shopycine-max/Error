@@ -40,36 +40,25 @@ st.markdown("""
 st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 
-# --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
-@st.cache_data(persist="disk", show_spinner=False) # Cache for 24 Hours on Disk
+# --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE (100% FAILPROOF METHOD) ---
+@st.cache_data(persist="disk", show_spinner=False)
 def get_mega_nse_universe():
     try:
-        # 🚀 STEP 1: असली ब्राउज़र जैसे Headers सेट करें ताकि NSE ब्लॉक न करे
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-        }
+        # 🚀 सीधा GitHub में अपलोड की गई लोकल फाइल से डेटा पढ़ेगा 
+        df = pd.read_csv("EQUITY_L.csv")
         
-        # 🚀 STEP 2: Session बनाएँ और Cookies लेने के लिए पहले होमपेज पर जाएँ
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें
+        tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and row['SERIES'] == 'EQ']
         
-        # 🚀 STEP 3: अब Cookies के साथ असल CSV डाउनलोड करें
-        url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-        response = session.get(url, headers=headers, timeout=15)
-        
-        if response.status_code == 200:
-            df = pd.read_csv(io.StringIO(response.text))
-            # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें
-            tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and row['SERIES'] == 'EQ']
-            if len(tickers) > 1000:
-                return sorted(list(set(tickers)))
-                
+        if len(tickers) > 1000:
+            return sorted(list(set(tickers)))
+            
+    except FileNotFoundError:
+        st.sidebar.error("❌ EQUITY_L.csv फाईल नहीं मिली! कृपया इसे GitHub रेपो में अपलोड करें।")
     except Exception as e:
-        st.sidebar.warning("⚠️ Streamlit Cloud IP Blocked by NSE. Using Backup Nifty 50 List...")
+        st.sidebar.error(f"⚠️ Error: {e}")
         
-    # 🛡️ STEP 4: अगर NSE फिर भी क्लाउड को ब्लॉक कर दे, तो बैकअप में 8 के बजाय Nifty 50 का पूरा डेटा दें
+    # 🛡️ बैकअप Nifty 50 लिस्ट
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
