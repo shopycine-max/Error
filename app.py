@@ -38,7 +38,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Pro Filters ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE (100% FAILPROOF METHOD) ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -50,7 +50,7 @@ def get_mega_nse_universe():
         # ✅ यह नई लाइन कॉलम के नामों से सभी एक्स्ट्रा स्पेस हटा देगी
         df.columns = df.columns.str.strip()
         
-        # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें (वैल्यू से भी स्पेस हटा रहे हैं ताकि कोई एरर ना आए)
+        # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें
         tickers = [f"{str(row['SYMBOL']).strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and str(row['SERIES']).strip() == 'EQ']
         
         if len(tickers) > 1000:
@@ -80,7 +80,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
+        
+        # EMAs Calculation
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+        df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
+        df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
         # RSI Calculation
         delta = df['Close'].diff()
@@ -104,8 +108,15 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
+        
+        # --- NEW ADVANCED FILTERS ADDED HERE ---
+        cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
+        cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
+        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter
+        # ---------------------------------------
 
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9
+        # Final Signal Generation
+        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
