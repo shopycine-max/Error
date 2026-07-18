@@ -44,20 +44,34 @@ st.caption("Engine Upgraded ⚙️ (Super Fast Edition ⚡)")
 @st.cache_data(persist="disk", show_spinner=False) # Cache for 24 Hours on Disk
 def get_mega_nse_universe():
     try:
-        url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url, headers=headers, timeout=10)
+        # 🚀 STEP 1: असली ब्राउज़र जैसे Headers सेट करें ताकि NSE ब्लॉक न करे
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
+        
+        # 🚀 STEP 2: Session बनाएँ और Cookies लेने के लिए पहले होमपेज पर जाएँ
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        
+        # 🚀 STEP 3: अब Cookies के साथ असल CSV डाउनलोड करें
+        url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+        response = session.get(url, headers=headers, timeout=15)
         
         if response.status_code == 200:
             df = pd.read_csv(io.StringIO(response.text))
-            # सिर्फ एक्टिव और सही सिम्बॉल्स को फ़िल्टर करना
+            # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें
             tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and row['SERIES'] == 'EQ']
-            return sorted(list(set(tickers)))
+            if len(tickers) > 1000:
+                return sorted(list(set(tickers)))
+                
     except Exception as e:
-        st.sidebar.error(f"Live NSE fetch failed: {e}. Using core fallback universe.")
+        st.sidebar.warning("⚠️ Streamlit Cloud IP Blocked by NSE. Using Backup Nifty 50 List...")
         
-    fallback = ["RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "SBIN", "BHARTIARTL", "ITC"]
-    return [f"{t}.NS" for t in fallback]
+    # 🛡️ STEP 4: अगर NSE फिर भी क्लाउड को ब्लॉक कर दे, तो बैकअप में 8 के बजाय Nifty 50 का पूरा डेटा दें
+    fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
+    return fallback
 
 # --- Core Technical Analytics Processor ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit):
@@ -190,7 +204,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 # --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    # बैच साइज को 35 से बढ़ाकर 50 किया ताकि डाउनलोडिंग फास्ट हो
     chunk_size = 50
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
@@ -201,7 +214,6 @@ def download_all_market_data(tickers):
     for c_idx, chunk in enumerate(ticker_chunks):
         status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... (Fetched {len(cached_master)} stocks)")
         try:
-            # threads=True और proxy/timeout हैंडलिंग जोड़ी गई है ताकि डेटा मिस न हो
             raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15)
             if raw_data.empty: continue
             
@@ -223,7 +235,6 @@ def download_all_market_data(tickers):
                                 cached_master[ticker] = t_data
                 except:
                     continue
-            # Yahoo Finance को ब्लॉक करने से रोकने के लिए छोटा सा कूलडाउन पीरियड (0.3 सेकंड)
             time.sleep(0.3)
         except Exception:
             continue
