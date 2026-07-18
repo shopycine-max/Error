@@ -50,7 +50,8 @@ def get_mega_nse_universe():
         
         if response.status_code == 200:
             df = pd.read_csv(io.StringIO(response.text))
-            tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL'])]
+            # सिर्फ एक्टिव और सही सिम्बॉल्स को फ़िल्टर करना
+            tickers = [f"{row['SYMBOL'].strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and row['SERIES'] == 'EQ']
             return sorted(list(set(tickers)))
     except Exception as e:
         st.sidebar.error(f"Live NSE fetch failed: {e}. Using core fallback universe.")
@@ -186,10 +187,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- OPTIMIZED CACHED BULK DOWNLOADER (DISK CACHE FOR 24 HOURS) ---
+# --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    chunk_size = 35
+    # बैच साइज को 35 से बढ़ाकर 50 किया ताकि डाउनलोडिंग फास्ट हो
+    chunk_size = 50
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     cached_master = {}
@@ -197,25 +199,32 @@ def download_all_market_data(tickers):
     status_text = st.empty()
     
     for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance...")
+        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... (Fetched {len(cached_master)} stocks)")
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker')
+            # threads=True और proxy/timeout हैंडलिंग जोड़ी गई है ताकि डेटा मिस न हो
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15)
             if raw_data.empty: continue
             
             for ticker in chunk:
-                if isinstance(raw_data.columns, pd.MultiIndex):
-                    if ticker in raw_data.columns.get_level_values(0):
-                        t_data = raw_data[ticker].copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
-                else:
-                    if len(chunk) == 1 and not raw_data.empty:
-                        t_data = raw_data.copy()
-                        t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                        t_data = t_data[t_data['Volume'] > 0]
-                        if not t_data.empty: cached_master[ticker] = t_data
-            time.sleep(0.1)
+                try:
+                    if isinstance(raw_data.columns, pd.MultiIndex):
+                        if ticker in raw_data.columns.get_level_values(0):
+                            t_data = raw_data[ticker].copy()
+                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            t_data = t_data[t_data['Volume'] > 0]
+                            if not t_data.empty and len(t_data) >= 50: 
+                                cached_master[ticker] = t_data
+                    else:
+                        if len(chunk) == 1 and not raw_data.empty:
+                            t_data = raw_data.copy()
+                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                            t_data = t_data[t_data['Volume'] > 0]
+                            if not t_data.empty and len(t_data) >= 50: 
+                                cached_master[ticker] = t_data
+                except:
+                    continue
+            # Yahoo Finance को ब्लॉक करने से रोकने के लिए छोटा सा कूलडाउन पीरियड (0.3 सेकंड)
+            time.sleep(0.3)
         except Exception:
             continue
         progress_bar.progress((c_idx + 1) / len(ticker_chunks))
@@ -303,7 +312,6 @@ with tab1:
         res_df = st.session_state.get('live_results', pd.DataFrame())
         
         if not res_df.empty:
-            # === CHANGED LINE: Sorted by Continuation Score (%) in Ascending Order ===
             res_df = res_df.sort_values(by="Continuation Score (%)", ascending=True)
             
             if 'Rank' not in res_df.columns:
