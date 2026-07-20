@@ -99,13 +99,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         # Strategy Filters
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
-        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 5.0 
-        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond8 = df['RSI'] >= rsi_filter 
-        cond9 = df['Close'] > df['EMA_20'] 
-        
+    
         # --- NEW ADVANCED FILTERS ADDED HERE ---
         cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
         cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
