@@ -99,8 +99,14 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         # Strategy Filters
         cond1 = df['Close'] >= 20 
-    
-        # --- NEW ADVANCED FILTERS ADDED HERE ---
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
+        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
+        cond4 = df['Return_20d'] >= 5.0 
+        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
+        cond8 = df['RSI'] >= rsi_filter 
+        cond9 = df['Close'] > df['EMA_20'] 
+        
+        # --- ADVANCED FILTERS ---
         cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
         cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
         cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter
@@ -429,7 +435,7 @@ with tab2:
         else:
             st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
-# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
+# --- AUTO REFRESH LOGIC ---
 if auto_refresh:
     st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
     time.sleep(refresh_interval * 60)
