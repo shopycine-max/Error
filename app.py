@@ -78,7 +78,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-        df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
         
         # EMAs Calculation
@@ -95,28 +94,24 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
         # Strategy Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 3.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
         
-        # --- NEW ADVANCED FILTERS ADDED HERE ---
+        # --- ADVANCED FILTERS ---
         cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
         cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
         cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter
         # ---------------------------------------
 
-        # Final Signal Generation
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+        # Final Signal Generation (All requested formulas removed)
+        df['Signal'] = cond1 & cond2 & cond3 & cond5 & cond8 & cond9 & cond10 & cond11 & cond12
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
