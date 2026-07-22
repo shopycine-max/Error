@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
-from datetime import datetime
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 🛠️ SESSION STATE INITIALIZATION ---
+# --- SESSION STATE INITIALIZATION ---
 if 'live_results' not in st.session_state: 
     st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
@@ -28,7 +28,7 @@ def clear_all_caches():
         del st.session_state['master_market_data']
     st.toast("🧹 Cache completely cleared! Ready for fresh engine reload.", icon="🗑️")
 
-# --- 💎 INSTITUTIONAL GLASSMORPHISM THEME & STYLES ---
+# --- INSTITUTIONAL GLASSMORPHISM THEME & STYLES ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -143,95 +143,96 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- MERGED FULL-PRECISION ANALYTICS ENGINE ---
+# --- HIGH-SPEED VECTORIZED ANALYTICS ENGINE ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, enable_precision_mode=True):
     try:
-        total_rows = len(df)
-        if total_rows < 50: return None 
-
-        df = df.copy()
-        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-        df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
-        
-        # --- Core Technical Indicators ---
-        df['Pct_Change'] = df['Close'].pct_change() * 100
-        df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-        df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
-        df['Turnover'] = df['Close'] * df['Volume']
-        
-        df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
-        df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
-        df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
-        
-        # RSI Calculation
-        delta = df['Close'].diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(com=13, adjust=False).mean()
-        avg_loss = loss.ewm(com=13, adjust=False).mean()
-        rs = avg_gain / (avg_loss + 1e-10)
-        df['RSI'] = 100 - (100 / (1 + rs))
-        
-        # 500-Day High (Breakout Level) & Low 5D
-        window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-        df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # --- Base Formula Conditions ---
-        cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
-        cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 3.0 
-        cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
-        cond8 = df['RSI'] >= rsi_filter 
-        cond9 = df['Close'] > df['EMA_20'] 
-        cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Golden Trend
-        cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection Filter
-        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter (Base)
+        close_arr = df['Close'].values
+        open_arr = df['Open'].values
+        high_arr = df['High'].values
+        low_arr = df['Low'].values
+        vol_arr = df['Volume'].values
+
+        # Rolling 20 Volume SMA using Vectorized Window
+        vol_sma20 = pd.Series(vol_arr).rolling(20).mean().values
+        pct_change = pd.Series(close_arr).pct_change().values * 100
+        return_20d = pd.Series(close_arr).pct_change(20).values * 100
+        turnover = close_arr * vol_arr
+
+        # EMA Calculations
+        ema_20 = pd.Series(close_arr).ewm(span=20, adjust=False).mean().values
+        ema_50 = pd.Series(close_arr).ewm(span=50, adjust=False).mean().values
+        ema_200 = pd.Series(close_arr).ewm(span=200, adjust=False).mean().values
+
+        # RSI Vectorized
+        delta = np.diff(close_arr, prepend=close_arr[0])
+        gain = np.where(delta > 0, delta, 0)
+        loss = np.where(delta < 0, -delta, 0)
+        avg_gain = pd.Series(gain).ewm(com=13, adjust=False).mean().values
+        avg_loss = pd.Series(loss).ewm(com=13, adjust=False).mean().values
+        rs = avg_gain / (avg_loss + 1e-10)
+        rsi = 100 - (100 / (1 + rs))
+
+        # 500-Day High (Shifted 1d) & 5-Day Low
+        win = min(500, len(df) - 2)
+        max_500_high = pd.Series(high_arr).shift(1).rolling(window=win, min_periods=1).max().values
+        low_5d = pd.Series(low_arr).rolling(5).min().values
+
+        # Base Conditions
+        cond1 = close_arr >= 20 
+        cond2 = (pct_change >= 1.0) & (pct_change <= 15.0) 
+        cond3 = vol_arr > (vol_sma20 * volume_multiplier) 
+        cond4 = return_20d >= 3.0 
+        cond5 = turnover > (turnover_limit * 10000000) 
+        cond7 = close_arr >= max_500_high 
+        cond8 = rsi >= rsi_filter 
+        cond9 = close_arr > ema_20 
+        cond10 = ema_50 > ema_200 
+        cond11 = (high_arr - close_arr) / (high_arr - low_arr + 1e-10) <= 0.4 
+        cond12 = close_arr <= (ema_20 * 1.15) 
 
         if enable_precision_mode:
-            # --- Additional Precision Breakout Filters ---
-            df['ATR_14'] = (df['High'] - df['Low']).rolling(14).mean()
-            df['Recent_Candle_Range'] = (df['High'].shift(1) - df['Low'].shift(1))
-            cond_vcp = df['Recent_Candle_Range'] <= (df['ATR_14'] * 1.2)  # Tight Consolidation Before Breakout
+            atr_14 = pd.Series(high_arr - low_arr).rolling(14).mean().values
+            recent_range = pd.Series(high_arr - low_arr).shift(1).values
+            cond_vcp = recent_range <= (atr_14 * 1.2)
             
-            df['Min_Vol_3d'] = df['Volume'].shift(1).rolling(3).min()
-            cond_vol_dry = df['Min_Vol_3d'] <= (df['Vol_SMA20'] * 0.85)  # Seller Volume Dry-Up
+            min_vol_3d = pd.Series(vol_arr).shift(1).rolling(3).min().values
+            cond_vol_dry = min_vol_3d <= (vol_sma20 * 0.85)
             
-            candle_body = (df['Close'] - df['Open']).abs()
-            candle_range = df['High'] - df['Low'] + 1e-10
-            cond_strong_body = (candle_body / candle_range) >= 0.45  # Strong Bullish Marubozu/Body
-            
-            cond_not_overextended_strict = df['Close'] <= (df['EMA_20'] * 1.12)  # Tight Over-extension Prevention
+            candle_body = np.abs(close_arr - open_arr)
+            candle_range = high_arr - low_arr + 1e-10
+            cond_strong_body = (candle_body / candle_range) >= 0.45
+            cond_not_overextended_strict = close_arr <= (ema_20 * 1.12)
 
-            # Combined Strict High-Precision Signal
-            df['Signal'] = (
-                cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & 
-                cond9 & cond10 & cond11 & cond12 & cond_vcp & cond_vol_dry & 
-                cond_strong_body & cond_not_overextended_strict
-            )
+            signal = (cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & 
+                      cond9 & cond10 & cond11 & cond12 & cond_vcp & cond_vol_dry & 
+                      cond_strong_body & cond_not_overextended_strict)
         else:
-            # Standard Combined Signal
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+            signal = (cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12)
+
+        df['Signal'] = signal
+        df['RSI'] = rsi
+        df['Vol_SMA20'] = vol_sma20
+        df['Low_5d'] = low_5d
+        df['Pct_Change'] = pct_change
 
         ticker_results = []
         
-        if mode == "live" and df['Signal'].iloc[-1]:
-            entry = df['Close'].iloc[-1]
-            sl = df['Low_5d'].iloc[-1]
+        if mode == "live" and signal[-1]:
+            entry = close_arr[-1]
+            sl = low_5d[-1]
             
             if sl >= entry or (entry - sl) / entry < 0.005: 
-                sl = entry * 0.965  # Default 3.5% SL
+                sl = entry * 0.965
                 
             risk = entry - sl
             rr_ratio = 2.5 if enable_precision_mode else 2.0
             target = entry + (rr_ratio * risk) 
-            vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
+            vol_spike = vol_arr[-1] / vol_sma20[-1] if vol_sma20[-1] > 0 else 0
             
-            day_high = df['High'].iloc[-1]
-            day_low = df['Low'].iloc[-1]
+            day_high = high_arr[-1]
+            day_low = low_arr[-1]
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
@@ -241,11 +242,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
                 "Risk:Reward": f"1:{rr_ratio}",
-                "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
-                "RSI": round(df['RSI'].iloc[-1], 2),
+                "Day Change (%)": round(pct_change[-1], 2),
+                "RSI": round(rsi[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Continuation Score (%)": round(close_pos, 1),
-                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10) + (close_pos / 2), 2)
+                "Score": round(rsi[-1] + (vol_spike * 10) + (close_pos / 2), 2)
             }]
             
         elif mode == "backtest":
@@ -309,46 +310,43 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         return None
     return None
 
-# --- FAST BATCH DATA DOWNLOADER ---
+# --- ULTRA-FAST ULTRA-PARALLEL DATA DOWNLOADER ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    chunk_size = 60
+    chunk_size = 200
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
-    
     cached_master = {}
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⚡ Fetching Data Batch {c_idx+1}/{len(ticker_chunks)} ({len(cached_master)} Loaded)...")
+
+    def fetch_chunk(chunk):
+        local_dict = {}
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=12)
-            if raw_data.empty: continue
+            raw_data = yf.download(chunk, period="1y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=10)
+            if raw_data.empty: return local_dict
             
             for ticker in chunk:
                 try:
                     if isinstance(raw_data.columns, pd.MultiIndex):
                         if ticker in raw_data.columns.get_level_values(0):
-                            t_data = raw_data[ticker].copy()
-                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                            t_data = t_data[t_data['Volume'] > 0]
+                            t_data = raw_data[ticker].dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
                             if not t_data.empty and len(t_data) >= 50: 
-                                cached_master[ticker] = t_data
+                                local_dict[ticker] = t_data
                     else:
                         if len(chunk) == 1 and not raw_data.empty:
-                            t_data = raw_data.copy()
-                            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                            t_data = t_data[t_data['Volume'] > 0]
+                            t_data = raw_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
                             if not t_data.empty and len(t_data) >= 50: 
-                                cached_master[ticker] = t_data
+                                local_dict[ticker] = t_data
                 except:
                     continue
         except Exception:
-            continue
-        progress_bar.progress((c_idx + 1) / len(ticker_chunks))
-        
-    progress_bar.empty()
-    status_text.empty()
+            pass
+        return local_dict
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        futures = [executor.submit(fetch_chunk, chunk) for chunk in ticker_chunks]
+        for future in as_completed(futures):
+            res = future.result()
+            if res: cached_master.update(res)
+
     return cached_master
 
 # --- SIDEBAR CONTROLS ---
@@ -380,7 +378,7 @@ st.sidebar.caption(f"Active Ticker Count: **{len(all_tickers)}**")
 if 'master_market_data' not in st.session_state:
     st.sidebar.warning("⚡ Engine Data Not Loaded")
     if st.sidebar.button("📥 Load Market Engine"):
-        with st.spinner("Downloading Market Data Pool..."):
+        with st.spinner("⚡ Lightning Download in Progress..."):
             st.session_state['master_market_data'] = download_all_market_data(all_tickers)
             st.session_state['live_results'] = pd.DataFrame() 
             st.sidebar.success("Engine Ready!")
@@ -404,7 +402,7 @@ def compute_analytics_on_cached_pool(mode="live"):
     pool = st.session_state.get('master_market_data', {})
     if not pool: return pd.DataFrame()
         
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=64) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, enable_precision): ticker 
             for ticker, df in pool.items()
@@ -425,8 +423,7 @@ with tab1:
             run_btn = st.button("🚀 Run Live Momentum Scan")
             
         if run_btn:
-            with st.spinner("Executing Multi-Threaded Precision Filter Engine..."):
-                st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
+            st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
             
         res_df = st.session_state.get('live_results', pd.DataFrame())
         
@@ -540,8 +537,7 @@ with tab2:
         st.info("👈 Please load market engine from the sidebar to execute backtests.")
     else:
         if st.button("📊 Execute Backtest Engine", key="bt_btn"):
-            with st.spinner("Processing historical multi-day paths..."):
-                st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
+            st.session_state['bt_results'] = compute_analytics_on_cached_pool(mode="backtest")
             
         bt_df = st.session_state.get('bt_results', pd.DataFrame())
         
