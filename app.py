@@ -19,6 +19,10 @@ if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
     st.session_state['bt_results'] = pd.DataFrame()
+if 'master_market_data' not in st.session_state:
+    st.session_state['master_market_data'] = {}
+if 'nifty_market_data' not in st.session_state:
+    st.session_state['nifty_market_data'] = pd.DataFrame()
 
 # --- CUSTOM CACHE CLEAR LOGIC ---
 def clear_all_caches():
@@ -26,6 +30,8 @@ def clear_all_caches():
     get_mega_nse_universe.clear()
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
+    if 'nifty_market_data' in st.session_state:
+        del st.session_state['nifty_market_data']
     st.toast("🧹 Cache completely cleared! Ready for fresh engine reload.", icon="🗑️")
 
 # --- 💎 INSTITUTIONAL GLASSMORPHISM THEME & STYLES ---
@@ -144,7 +150,7 @@ def get_mega_nse_universe():
     return fallback
 
 # --- MERGED FULL-PRECISION ANALYTICS ENGINE ---
-def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, enable_precision_mode=True):
+def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, nifty_df=None, breakout_window=252, enable_rs_filter=True, enable_precision_mode=True):
     try:
         total_rows = len(df)
         if total_rows < 50: return None 
@@ -173,10 +179,27 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        # 500-Day High (Breakout Level) & Low 5D
-        window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        # True Range & ATR 14 (For Balanced Dynamic SL & VCP)
+        tr = pd.concat([
+            df['High'] - df['Low'],
+            (df['High'] - df['Close'].shift(1)).abs(),
+            (df['Low'] - df['Close'].shift(1)).abs()
+        ], axis=1).max(axis=1)
+        df['ATR_14'] = tr.rolling(14).mean()
+
+        # Dynamic Breakout High Level (252 Days = 52W High, 500 Days = 2-Yr High)
+        window_size = min(breakout_window, len(df) - 2)
+        df['Max_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
+
+        # --- Benchmark Relative Strength vs Nifty 50 ---
+        if enable_rs_filter and nifty_df is not None and not nifty_df.empty and len(nifty_df) >= 20:
+            nifty_20d_ret = nifty_df['Close'].pct_change(20)
+            df['Nifty_20d_Ret'] = nifty_20d_ret.reindex(df.index, method='ffill')
+            df['RS_vs_Nifty'] = df['Return_20d'] - df['Nifty_20d_Ret']
+            cond_rs = df['RS_vs_Nifty'] > 0  # Stock is stronger than Nifty over 20 days
+        else:
+            cond_rs = True
 
         # --- Base Formula Conditions ---
         cond1 = df['Close'] >= 20 
@@ -184,7 +207,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 3.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
+        cond7 = df['Close'] >= df['Max_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
         cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Golden Trend
@@ -193,7 +216,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         if enable_precision_mode:
             # --- Additional Precision Breakout Filters ---
-            df['ATR_14'] = (df['High'] - df['Low']).rolling(14).mean()
             df['Recent_Candle_Range'] = (df['High'].shift(1) - df['Low'].shift(1))
             cond_vcp = df['Recent_Candle_Range'] <= (df['ATR_14'] * 1.2)  # Tight Consolidation Before Breakout
             
@@ -210,20 +232,29 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             df['Signal'] = (
                 cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & 
                 cond9 & cond10 & cond11 & cond12 & cond_vcp & cond_vol_dry & 
-                cond_strong_body & cond_not_overextended_strict
+                cond_strong_body & cond_not_overextended_strict & cond_rs
             )
         else:
             # Standard Combined Signal
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12 & cond_rs
 
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
-            sl = df['Low_5d'].iloc[-1]
             
-            if sl >= entry or (entry - sl) / entry < 0.005: 
-                sl = entry * 0.965  # Default 3.5% SL
+            # --- BALANCED DYNAMIC STOP LOSS LOGIC ---
+            # Smart SL: Pick tightest valid stop level among Low_5d, Breakout Low, and 1.5*ATR
+            sl_low5d = df['Low_5d'].iloc[-1]
+            sl_atr = entry - (1.5 * df['ATR_14'].iloc[-1])
+            sl_candle = df['Low'].iloc[-1]
+            
+            # Candidate SL must be lower than entry price
+            candidate_sls = [s for s in [sl_low5d, sl_atr, sl_candle] if s < entry]
+            sl = max(candidate_sls) if candidate_sls else entry * 0.965
+            
+            if (entry - sl) / entry < 0.005: 
+                sl = entry * 0.965  # Default 3.5% SL floor
                 
             risk = entry - sl
             rr_ratio = 2.5 if enable_precision_mode else 2.0
@@ -255,9 +286,16 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             for idx in triggers.index:
                 row = df.loc[idx]
                 b_entry = row['Close']
-                b_sl = row['Low_5d']
                 
-                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
+                # Dynamic SL in Backtest
+                b_sl_low5d = row['Low_5d']
+                b_sl_atr = b_entry - (1.5 * row['ATR_14'])
+                b_sl_candle = row['Low']
+                
+                candidates = [s for s in [b_sl_low5d, b_sl_atr, b_sl_candle] if s < b_entry]
+                b_sl = max(candidates) if candidates else b_entry * 0.965
+                
+                if (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
                 b_risk = b_entry - b_sl
                 b_rr_ratio = 2.5 if enable_precision_mode else 2.0
                 b_target = b_entry + (b_rr_ratio * b_risk)
@@ -312,10 +350,23 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 # --- FAST BATCH DATA DOWNLOADER ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
+    cached_master = {}
+    nifty_data = pd.DataFrame()
+    
+    # 1. Fetch Nifty Benchmark
+    try:
+        raw_nifty = yf.download("^NSEI", period="2y", interval="1d", progress=False)
+        if not raw_nifty.empty:
+            if isinstance(raw_nifty.columns, pd.MultiIndex):
+                raw_nifty.columns = raw_nifty.columns.get_level_values(0)
+            nifty_data = raw_nifty.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+    except Exception:
+        pass
+
+    # 2. Batch Download Tickers
     chunk_size = 60
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
-    cached_master = {}
     progress_bar = st.progress(0)
     status_text = st.empty()
     
@@ -349,7 +400,7 @@ def download_all_market_data(tickers):
         
     progress_bar.empty()
     status_text.empty()
-    return cached_master
+    return cached_master, nifty_data
 
 # --- SIDEBAR CONTROLS ---
 st.sidebar.markdown("### 🎛️ Strategy Parameters")
@@ -360,6 +411,10 @@ min_turnover = st.sidebar.number_input("Min Turnover (₹ Cr)", min_value=1, max
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎯 Accuracy & Precision Mode")
 enable_precision = st.sidebar.checkbox("🔥 High-Precision Filter Mode (VCP + Vol Dry-Up)", value=True)
+enable_rs_filter = st.sidebar.checkbox("📈 Relative Strength Filter (Stock > Nifty 50)", value=True)
+
+breakout_type = st.sidebar.radio("Breakout Lookup Period", ["52-Week High (252 Days - Standard)", "500-Day High (2 Years - Ultra Strict)"])
+breakout_window_val = 252 if "52-Week" in breakout_type else 500
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Market Universe Selection")
@@ -377,11 +432,13 @@ else:
 
 st.sidebar.caption(f"Active Ticker Count: **{len(all_tickers)}**")
 
-if 'master_market_data' not in st.session_state:
+if not st.session_state['master_market_data']:
     st.sidebar.warning("⚡ Engine Data Not Loaded")
     if st.sidebar.button("📥 Load Market Engine"):
-        with st.spinner("Downloading Market Data Pool..."):
-            st.session_state['master_market_data'] = download_all_market_data(all_tickers)
+        with st.spinner("Downloading Market Data Pool & Nifty Benchmark..."):
+            master_data, nifty_df = download_all_market_data(all_tickers)
+            st.session_state['master_market_data'] = master_data
+            st.session_state['nifty_market_data'] = nifty_df
             st.session_state['live_results'] = pd.DataFrame() 
             st.sidebar.success("Engine Ready!")
             st.rerun()
@@ -402,11 +459,16 @@ tab1, tab2 = st.tabs(["⚡ Live Breakout Scanner", "📈 Strategy Backtester"])
 def compute_analytics_on_cached_pool(mode="live"):
     results = []
     pool = st.session_state.get('master_market_data', {})
+    nifty_df = st.session_state.get('nifty_market_data', None)
     if not pool: return pd.DataFrame()
         
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, enable_precision): ticker 
+            executor.submit(
+                analyze_single_ticker, 
+                ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, 
+                nifty_df, breakout_window_val, enable_rs_filter, enable_precision
+            ): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
@@ -417,7 +479,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: LIVE SCANNER ---
 with tab1:
-    if 'master_market_data' not in st.session_state:
+    if not st.session_state['master_market_data']:
         st.info("👈 Please click **'Load Market Engine'** in the sidebar to start analytics.")
     else:
         col_run, _ = st.columns([1, 4])
@@ -536,7 +598,7 @@ with tab1:
 # --- TAB 2: BACKTESTER ---
 with tab2:
     st.subheader("📊 Institutional Strategy Simulation Log")
-    if 'master_market_data' not in st.session_state:
+    if not st.session_state['master_market_data']:
         st.info("👈 Please load market engine from the sidebar to execute backtests.")
     else:
         if st.button("📊 Execute Backtest Engine", key="bt_btn"):
