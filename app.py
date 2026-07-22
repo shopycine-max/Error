@@ -314,7 +314,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collected")
+    st.subheader("⚡ Live Data Collection")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
