@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Page Configurations ---
 st.set_page_config(
-    page_title="Aashiyana Pro Terminal | Institutional Momentum Analytics",
+    page_title="Aashiyana Pro Terminal | High-Precision Breakout Analytics",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,7 +31,6 @@ def clear_all_caches():
 # --- 💎 INSTITUTIONAL GLASSMORPHISM THEME & STYLES ---
 st.markdown("""
     <style>
-    /* Global Base Styling */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
     
     html, body, [class*="css"] {
@@ -43,7 +42,6 @@ st.markdown("""
         color: #E2E8F0;
     }
     
-    /* Header & Title Styling */
     .brand-title {
         background: linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%);
         -webkit-background-clip: text;
@@ -61,7 +59,6 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* Metric Cards Styling */
     div[data-testid="stMetric"] {
         background: rgba(17, 24, 39, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -91,7 +88,6 @@ st.markdown("""
         font-size: 1.6rem !important;
     }
 
-    /* Primary Buttons */
     .stButton>button {
         background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
         color: #FFFFFF;
@@ -110,13 +106,11 @@ st.markdown("""
         transform: translateY(-1px);
     }
 
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #0D1117;
         border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
 
-    /* Custom Informational Container */
     .pro-card {
         background: rgba(15, 23, 42, 0.6);
         border: 1px solid rgba(51, 65, 85, 0.6);
@@ -129,8 +123,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HEADER SECTION ---
-st.markdown('<div class="brand-title">Aashiyana Pro Terminal 🚀</div>', unsafe_allow_html=True)
-st.markdown('<div class="brand-sub">Institutional Momentum Engine & Real-Time Setup Analytics</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-title">Aashiyana Pro Terminal Pro Max 🚀</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-sub">Institutional Momentum Engine & High-Precision Breakout Analytics</div>', unsafe_allow_html=True)
 
 # --- TICKER FETCH ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -149,8 +143,8 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- EXACT TECHNICAL ANALYTICS ENGINE (100% UNCHANGED FORMULAS) ---
-def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit):
+# --- MERGED FULL-PRECISION ANALYTICS ENGINE ---
+def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, enable_precision_mode=True):
     try:
         total_rows = len(df)
         if total_rows < 50: return None 
@@ -160,7 +154,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
         
-        # EXACT ORIGINAL FORMULAS
+        # --- Core Technical Indicators ---
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -170,6 +164,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
+        # RSI Calculation
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -178,11 +173,12 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
+        # 500-Day High (Breakout Level) & Low 5D
         window_size = min(500, len(df) - 2)
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # Strategy Filters Logic
+        # --- Base Formula Conditions ---
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
@@ -191,20 +187,47 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
-        
-        cond10 = df['EMA_50'] > df['EMA_200']
-        cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4
-        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
+        cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Golden Trend
+        cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection Filter
+        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter (Base)
 
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+        if enable_precision_mode:
+            # --- Additional Precision Breakout Filters ---
+            df['ATR_14'] = (df['High'] - df['Low']).rolling(14).mean()
+            df['Recent_Candle_Range'] = (df['High'].shift(1) - df['Low'].shift(1))
+            cond_vcp = df['Recent_Candle_Range'] <= (df['ATR_14'] * 1.2)  # Tight Consolidation Before Breakout
+            
+            df['Min_Vol_3d'] = df['Volume'].shift(1).rolling(3).min()
+            cond_vol_dry = df['Min_Vol_3d'] <= (df['Vol_SMA20'] * 0.85)  # Seller Volume Dry-Up
+            
+            candle_body = (df['Close'] - df['Open']).abs()
+            candle_range = df['High'] - df['Low'] + 1e-10
+            cond_strong_body = (candle_body / candle_range) >= 0.45  # Strong Bullish Marubozu/Body
+            
+            cond_not_overextended_strict = df['Close'] <= (df['EMA_20'] * 1.12)  # Tight Over-extension Prevention
+
+            # Combined Strict High-Precision Signal
+            df['Signal'] = (
+                cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & 
+                cond9 & cond10 & cond11 & cond12 & cond_vcp & cond_vol_dry & 
+                cond_strong_body & cond_not_overextended_strict
+            )
+        else:
+            # Standard Combined Signal
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
             sl = df['Low_5d'].iloc[-1]
-            if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
+            
+            if sl >= entry or (entry - sl) / entry < 0.005: 
+                sl = entry * 0.965  # Default 3.5% SL
+                
             risk = entry - sl
-            target = entry + (2 * risk) 
+            rr_ratio = 2.5 if enable_precision_mode else 2.0
+            target = entry + (rr_ratio * risk) 
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             
             day_high = df['High'].iloc[-1]
@@ -217,6 +240,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Entry Price (₹)": round(entry, 2),
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
+                "Risk:Reward": f"1:{rr_ratio}",
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
@@ -235,7 +259,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 
                 if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
                 b_risk = b_entry - b_sl
-                b_target = b_entry + (2 * b_risk)
+                b_rr_ratio = 2.5 if enable_precision_mode else 2.0
+                b_target = b_entry + (b_rr_ratio * b_risk)
                 
                 post_df = df.loc[idx:].iloc[1:21] 
                 outcome = "Live/Pending ⏳"
@@ -333,6 +358,10 @@ volume_multiplier = st.sidebar.slider("Volume Shock Multiplier", 1.0, 3.0, 1.2, 
 min_turnover = st.sidebar.number_input("Min Turnover (₹ Cr)", min_value=1, max_value=50, value=2)
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎯 Accuracy & Precision Mode")
+enable_precision = st.sidebar.checkbox("🔥 High-Precision Filter Mode (VCP + Vol Dry-Up)", value=True)
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Market Universe Selection")
 universe_choice = st.sidebar.radio(
     "Choose Universe", 
@@ -377,7 +406,7 @@ def compute_analytics_on_cached_pool(mode="live"):
         
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
+            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, enable_precision): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
@@ -396,7 +425,7 @@ with tab1:
             run_btn = st.button("🚀 Run Live Momentum Scan")
             
         if run_btn:
-            with st.spinner("Executing High-Performance Multi-Thread Filter..."):
+            with st.spinner("Executing Multi-Threaded Precision Filter Engine..."):
                 st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
             
         res_df = st.session_state.get('live_results', pd.DataFrame())
@@ -404,16 +433,14 @@ with tab1:
         if not res_df.empty:
             res_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
             
-            # Key Metrics Display Panel
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Active Breakouts", len(res_df))
+            m1.metric("High-Precision Setups", len(res_df))
             m2.metric("Top Setup", res_df.iloc[0]['Symbol'])
             m3.metric("Avg RSI Strength", round(res_df['RSI'].mean(), 1))
             m4.metric("Avg Vol Spike", f"{round(res_df['Vol Spike (x)'].mean(), 1)}x")
             
-            st.markdown("### 🎯 Real-Time Momentum Signals")
+            st.markdown("### 🎯 High-Probability Momentum Breakout Signals")
             
-            # Interactive Styled Dataframe
             st.dataframe(
                 res_df, 
                 use_container_width=True, 
@@ -431,7 +458,6 @@ with tab1:
                 }
             )
             
-            # Chart Visualization
             top_stock = res_df.iloc[0]['Symbol']
             st.markdown(f"### 👑 Flagship Pattern Focus: **{top_stock}**")
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
@@ -465,7 +491,6 @@ with tab1:
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-            # Tomorrow Predictive Map
             st.markdown('<div class="pro-card">', unsafe_allow_html=True)
             st.markdown("### 🔮 Tomorrow's High-Prob Target Runway Map")
             top_future_stock = res_df.iloc[0]['Symbol']
@@ -506,7 +531,7 @@ with tab1:
                     st.plotly_chart(fig_future, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.caption("No breakout setups active under current parameters. Run the engine to check setups.")
+            st.caption("No breakout setups active under current precision parameters. Click Run to scan.")
 
 # --- TAB 2: BACKTESTER ---
 with tab2:
@@ -535,7 +560,7 @@ with tab2:
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
             
             csv_data = bt_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Export Backtest Data (CSV)", data=csv_data, file_name="pro_backtest_results.csv", mime="text/csv")
+            st.download_button("📥 Export Backtest Data (CSV)", data=csv_data, file_name="merged_precision_backtest_results.csv", mime="text/csv")
 
 # --- AUTO REFRESH LOOP ---
 if auto_refresh:
