@@ -38,7 +38,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout Formula Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & Volume Surge Formula Integrated ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -57,7 +57,7 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- MERGED CORE ANALYTICS PROCESSOR (Including Explosive Breakout Formula) ---
+# --- MERGED CORE ANALYTICS PROCESSOR ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, formula_version):
     try:
         total_rows = len(df)
@@ -84,7 +84,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         down_vol_10 = df['Red_Vol'].rolling(10).sum()
         df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
         
-        # 20-Day Range & Breakout Math (Explosive Breakout Formula)
+        # 20-Day Range & Breakout Math
         df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
         df['Low_20_Prev'] = df['Low'].shift(1).rolling(20).min()
         df['Range_20_Pct'] = ((df['High_20_Prev'] - df['Low_20_Prev']) / (df['Close'].shift(1) + 1e-10)) * 100
@@ -136,7 +136,14 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             risk = entry - sl
             target = entry + (2 * risk) 
             
-            vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
+            curr_vol = df['Volume'].iloc[-1]
+            avg_vol = df['Vol_SMA20'].iloc[-1]
+            vol_spike = curr_vol / avg_vol if avg_vol > 0 else 0
+            
+            # --- MASSIVE BUYING SURGE (%) FORMULA ---
+            # Calculates sudden percentage jump in volume compared to 20-day average
+            buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
+            
             accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
             range_20 = df['Range_20_Pct'].iloc[-1]
             is_breakout_20 = df['Close'].iloc[-1] > df['High_20_Prev'].iloc[-1]
@@ -146,7 +153,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
-            # --- EXPLOSIVE BREAKOUT FORMULA (ULTIMATE SETUP DETECTOR) ---
+            # --- EXPLOSIVE BREAKOUT FORMULA ---
             is_steady_accum_phase = (range_20 <= 12.0 or accum_ratio >= 1.5)
             is_heavy_buying_phase = (vol_spike >= 2.5 and is_breakout_20)
             
@@ -176,6 +183,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Accum Ratio (10d)": round(accum_ratio, 2),
                 "Continuation Score (%)": round(close_pos, 1),
+                "Massive Buying Surge (%)": round(buying_surge_pct, 1), # <-- NEW COLUMN ADDED HERE
                 "Score": total_score
             }]
             
