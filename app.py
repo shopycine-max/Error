@@ -44,29 +44,21 @@ st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Pro Filters ⚡)")
 @st.cache_data(persist="disk", show_spinner=False)
 def get_mega_nse_universe():
     try:
-        # 🚀 सीधा GitHub में अपलोड की गई लोकल फाइल से डेटा पढ़ेगा 
         df = pd.read_csv("EQUITY_L.csv")
-        
-        # ✅ यह नई लाइन कॉलम के नामों से सभी एक्स्ट्रा स्पेस हटा देगी
         df.columns = df.columns.str.strip()
-        
-        # सिर्फ 'EQ' (Equity) सीरीज फिल्टर करें
         tickers = [f"{str(row['SYMBOL']).strip()}.NS" for _, row in df.iterrows() if pd.notna(row['SYMBOL']) and str(row['SERIES']).strip() == 'EQ']
-        
         if len(tickers) > 1000:
             return sorted(list(set(tickers)))
-            
     except FileNotFoundError:
         st.sidebar.error("❌ EQUITY_L.csv फाईल नहीं मिली! कृपया इसे GitHub रेपो में अपलोड करें।")
     except Exception as e:
         st.sidebar.error(f"⚠️ Error: {e}")
         
-    # 🛡️ बैकअप Nifty 50 लिस्ट
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
 # --- Core Technical Analytics Processor ---
-def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit):
+def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, formula_version):
     try:
         total_rows = len(df)
         if total_rows < 50: return None 
@@ -95,9 +87,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
+        window_size = min(500, len(df) - 2)
+        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # Strategy Filters
+        # Base Strategy Filters
         cond1 = df['Close'] >= 20 
         cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
@@ -106,14 +100,17 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
         
-        # --- ADVANCED FILTERS ---
-        cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
-        cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
-        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter
-        # ---------------------------------------
+        # Formula Version Control
+        if formula_version == "Version 1 (With 500-day High & Strict Filters)":
+            cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
+            cond10 = df['EMA_50'] > df['EMA_200']  
+            cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  
+            cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+        else:
+            # Version 2 (Without 500-day High & Advanced Filters)
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9
 
-        # Final Signal Generation (Formulae removed from condition blend)
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond10 & cond11 & cond12
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
@@ -246,6 +243,16 @@ def download_all_market_data(tickers):
 
 # --- Sidebar Controls UI ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
+
+# 🎛️ NEW MENU OPTION FOR FORMULA DIFFERENCE SELECTION
+formula_version = st.sidebar.selectbox(
+    "📊 Select Strategy Formula Version",
+    [
+        "Version 1 (With 500-day High & Strict Filters)",
+        "Version 2 (Without 500-day High & Advanced Filters)"
+    ]
+)
+
 rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
 volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
 min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
@@ -300,7 +307,7 @@ def compute_analytics_on_cached_pool(mode="live"):
         
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover): ticker 
+            executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, formula_version): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
@@ -311,7 +318,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collection")
+    st.subheader("⚡ Live Data Collected")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
