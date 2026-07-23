@@ -95,8 +95,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         rs = avg_gain / (avg_loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        window_size = min(500, len(df) - 2)
-        df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
         # Strategy Filters
@@ -108,14 +106,14 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
         
-        # --- NEW ADVANCED FILTERS ADDED HERE ---
+        # --- ADVANCED FILTERS ---
         cond10 = df['EMA_50'] > df['EMA_200']  # Long-term Up-trend (Golden Cross)
         cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  # Upper Wick Rejection
         cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  # Over-extension Filter
         # ---------------------------------------
 
-        # Final Signal Generation
-        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+        # Final Signal Generation (Formulae removed from condition blend)
+        df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond10 & cond11 & cond12
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
@@ -313,7 +311,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collection")
+    st.subheader("⚡ Live Data Collected")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
