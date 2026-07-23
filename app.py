@@ -57,7 +57,7 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- Core Technical Analytics Processor ---
+# --- Core Technical Analytics Processor (बिना किसी बदलाव के) ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, formula_version):
     try:
         total_rows = len(df)
@@ -244,7 +244,6 @@ def download_all_market_data(tickers):
 # --- Sidebar Controls UI ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 
-# 🎛️ NEW MENU OPTION FOR FORMULA DIFFERENCE SELECTION
 formula_version = st.sidebar.selectbox(
     "📊 Select Strategy Formula Version",
     [
@@ -269,7 +268,6 @@ refresh_interval = st.sidebar.slider("Refresh Interval (Minutes)", min_value=1, 
 
 st.sidebar.markdown("---")
 
-# === 🚀 SPEED OPTIMIZATION: UNIVERSE SELECTION & LAZY LOADING ===
 universe_choice = st.sidebar.radio(
     "📊 Select Market Universe", 
     ["Top 10 Stocks (Instant)", "Nifty 50 (Fast)", "All NSE 2300+ (Very Slow)"]
@@ -316,7 +314,7 @@ def compute_analytics_on_cached_pool(mode="live"):
             
     return pd.DataFrame(results)
 
-# --- TAB 1: Live Scanning View ---
+# --- TAB 1: Live Scanning View (High-Buying Highlighting Merged) ---
 with tab1:
     st.subheader("⚡ Live Data Collection")
     
@@ -334,8 +332,21 @@ with tab1:
             
             if 'Rank' not in res_df.columns:
                 res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
+
+            # 🚀 NEW ALERT & HIGHLIGHTING LOGIC
+            if 'Alert' not in res_df.columns:
+                res_df.insert(1, 'Alert', ["🔥 Heavy Buying" if v >= 2.5 else "✅ Normal" for v in res_df['Vol Spike (x)']])
+            
+            def highlight_sudden_surge(row):
+                if row['Vol Spike (x)'] >= 2.5: 
+                    return ['background-color: rgba(255, 69, 0, 0.35); font-weight: bold'] * len(row)
+                return [''] * len(row)
+            
+            styled_df = res_df.style.apply(highlight_sudden_surge, axis=1)
+            # ----------------------------------
+            
             st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
-            st.dataframe(res_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
             top_stock = res_df.iloc[0]['Symbol']
             st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
