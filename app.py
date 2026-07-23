@@ -38,9 +38,9 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Pro Filters ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Pre-Breakout Buying Detection ⚡)")
 
-# --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE (100% FAILPROOF METHOD) ---
+# --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
 def get_mega_nse_universe():
     try:
@@ -57,7 +57,7 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- Core Technical Analytics Processor (बिना किसी बदलाव के) ---
+# --- MERGED CORE ANALYTICS PROCESSOR (Original Formula + Pre-Breakout Buying Logic) ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, formula_version):
     try:
         total_rows = len(df)
@@ -68,10 +68,21 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
         
+        # Base Technical Calculations
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
+        
+        # --- Heavy Buying & Pre-Breakout Accumulation Math ---
+        df['Is_Green'] = df['Close'] > df['Open']
+        df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
+        df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
+        
+        # 10-day Green Volume vs Red Volume Ratio
+        up_vol_10 = df['Green_Vol'].rolling(10).sum()
+        down_vol_10 = df['Red_Vol'].rolling(10).sum()
+        df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
         
         # EMAs Calculation
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
@@ -91,16 +102,17 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # Base Strategy Filters
+        # Shared Strategy Base Filters
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 15.0) 
+        cond2 = (df['Pct_Change'] >= 0.5) & (df['Pct_Change'] <= 15.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
-        cond4 = df['Return_20d'] >= 3.0 
+        cond4 = df['Return_20d'] >= 2.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
+        cond_accum = df['Accum_Ratio_10d'] >= 1.5  # Green day volume dominates red day volume
         
-        # Formula Version Control
+        # Formula Version Strategy Decision
         if formula_version == "Version 1 (With 500-day High & Strict Filters)":
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
@@ -108,8 +120,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
         else:
-            # Version 2 (Without 500-day High & Advanced Filters)
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9
+            # Version 2 (Includes Heavy Accumulation Filter)
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum
 
         ticker_results = []
         
@@ -119,23 +131,37 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
             risk = entry - sl
             target = entry + (2 * risk) 
+            
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
+            accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
             
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
+            # Dynamic Alert Classifier
+            if accum_ratio >= 2.0 and vol_spike >= 2.0:
+                alert_type = "🔥 Massive Heavy Buying"
+            elif accum_ratio >= 1.8:
+                alert_type = "🧱 Steady Accumulation"
+            elif vol_spike >= 2.5:
+                alert_type = "⚡ Sudden Volume Spike"
+            else:
+                alert_type = "✅ Normal Signal"
+
             return [{
                 "Symbol": ticker.replace(".NS", ""),
+                "Alert": alert_type,
                 "Entry Price (₹)": round(entry, 2),
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
+                "Accum Ratio (10d)": round(accum_ratio, 2),
                 "Continuation Score (%)": round(close_pos, 1),
-                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 10) + (close_pos / 2), 2)
+                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2), 2)
             }]
             
         elif mode == "backtest":
@@ -314,42 +340,40 @@ def compute_analytics_on_cached_pool(mode="live"):
             
     return pd.DataFrame(results)
 
-# --- TAB 1: Live Scanning View (High-Buying Highlighting Merged) ---
+# --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collection")
+    st.subheader("⚡ Live Data Collection & Accumulation Detection")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
     else:
-        if st.button("🚀 Run", key="live_btn"):
-            with st.spinner("Processing filters over database..."):
+        if st.button("🚀 Run Scanner", key="live_btn"):
+            with st.spinner("Searching for momentum & heavy buying setups..."):
                 st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
             
         res_df = st.session_state.get('live_results', pd.DataFrame())
         
         if not res_df.empty:
-            res_df = res_df.sort_values(by="Continuation Score (%)", ascending=True)
+            res_df = res_df.sort_values(by="Score", ascending=False)
             
             if 'Rank' not in res_df.columns:
                 res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
 
-            # 🚀 NEW ALERT & HIGHLIGHTING LOGIC
-            if 'Alert' not in res_df.columns:
-                res_df.insert(1, 'Alert', ["🔥 Heavy Buying" if v >= 2.5 else "✅ Normal" for v in res_df['Vol Spike (x)']])
-            
-            def highlight_sudden_surge(row):
-                if row['Vol Spike (x)'] >= 2.5: 
+            # Smart Color Highlighting for Pre-Breakout Buying
+            def highlight_buying(row):
+                if '🔥' in str(row.get('Alert', '')): 
                     return ['background-color: rgba(255, 69, 0, 0.35); font-weight: bold'] * len(row)
+                elif '🧱' in str(row.get('Alert', '')):
+                    return ['background-color: rgba(0, 150, 255, 0.25); font-weight: bold'] * len(row)
                 return [''] * len(row)
             
-            styled_df = res_df.style.apply(highlight_sudden_surge, axis=1)
-            # ----------------------------------
+            styled_df = res_df.style.apply(highlight_buying, axis=1)
             
-            st.success(f"🎉 Found {len(res_df)} high-momentum breakout setups instantly!")
+            st.success(f"🎉 Found {len(res_df)} breakout & accumulation setups!")
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
             top_stock = res_df.iloc[0]['Symbol']
-            st.markdown(f"### 👑 Top Ranked Momentum Setup: **{top_stock}**")
+            st.markdown(f"### 👑 Top Ranked Accumulation Setup: **{top_stock}**")
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
@@ -372,11 +396,11 @@ with tab1:
                     fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
                     fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
                     
-                    fig.update_layout(template="plotly_dark", title=f"{top_stock} Patterns Setup", xaxis_rangeslider_visible=False)
+                    fig.update_layout(template="plotly_dark", title=f"{top_stock} Setup Chart", xaxis_rangeslider_visible=False)
                     st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("---")
-            st.subheader("🔮 Tomorrow's Prediction")
+            st.subheader("🔮 Tomorrow's Prediction Runway")
             
             future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
             top_future_stock = future_df.iloc[0]['Symbol']
@@ -453,7 +477,7 @@ with tab2:
         else:
             st.caption("No backtest data loaded. Adjust settings on sidebar and click Start Simulation.")
 
-# --- AUTO REFRESH LOGIC (MUST BE AT THE VERY BOTTOM) ---
+# --- AUTO REFRESH LOGIC ---
 if auto_refresh:
     st.sidebar.caption(f"⏱️ Next auto-refresh in {refresh_interval} minute(s)...")
     time.sleep(refresh_interval * 60)
