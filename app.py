@@ -38,7 +38,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Pre-Breakout Buying Detection ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout Formula Integrated ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -57,7 +57,7 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- MERGED CORE ANALYTICS PROCESSOR (Original Formula + Pre-Breakout Buying Logic) ---
+# --- MERGED CORE ANALYTICS PROCESSOR (Including Explosive Breakout Formula) ---
 def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turnover_limit, formula_version):
     try:
         total_rows = len(df)
@@ -74,7 +74,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
         
-        # --- Heavy Buying & Pre-Breakout Accumulation Math ---
+        # --- Consolidation & Heavy Buying Math ---
         df['Is_Green'] = df['Close'] > df['Open']
         df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
         df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
@@ -83,6 +83,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         up_vol_10 = df['Green_Vol'].rolling(10).sum()
         down_vol_10 = df['Red_Vol'].rolling(10).sum()
         df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
+        
+        # 20-Day Range & Breakout Math (Explosive Breakout Formula)
+        df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
+        df['Low_20_Prev'] = df['Low'].shift(1).rolling(20).min()
+        df['Range_20_Pct'] = ((df['High_20_Prev'] - df['Low_20_Prev']) / (df['Close'].shift(1) + 1e-10)) * 100
         
         # EMAs Calculation
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
@@ -110,9 +115,9 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
-        cond_accum = df['Accum_Ratio_10d'] >= 1.5  # Green day volume dominates red day volume
+        cond_accum = df['Accum_Ratio_10d'] >= 1.5
         
-        # Formula Version Strategy Decision
+        # Strategy Decision
         if formula_version == "Version 1 (With 500-day High & Strict Filters)":
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
@@ -120,7 +125,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
         else:
-            # Version 2 (Includes Heavy Accumulation Filter)
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum
 
         ticker_results = []
@@ -134,14 +138,23 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             
             vol_spike = df['Volume'].iloc[-1] / df['Vol_SMA20'].iloc[-1] if df['Vol_SMA20'].iloc[-1] > 0 else 0
             accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
+            range_20 = df['Range_20_Pct'].iloc[-1]
+            is_breakout_20 = df['Close'].iloc[-1] > df['High_20_Prev'].iloc[-1]
             
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
-            # Dynamic Alert Classifier
-            if accum_ratio >= 2.0 and vol_spike >= 2.0:
+            # --- EXPLOSIVE BREAKOUT FORMULA (ULTIMATE SETUP DETECTOR) ---
+            is_steady_accum_phase = (range_20 <= 12.0 or accum_ratio >= 1.5)
+            is_heavy_buying_phase = (vol_spike >= 2.5 and is_breakout_20)
+            
+            bonus_score = 0
+            if is_steady_accum_phase and is_heavy_buying_phase:
+                alert_type = "⭐ Ultimate Explosive Setup"
+                bonus_score = 30 # Top priority ranking boost
+            elif accum_ratio >= 2.0 and vol_spike >= 2.0:
                 alert_type = "🔥 Massive Heavy Buying"
             elif accum_ratio >= 1.8:
                 alert_type = "🧱 Steady Accumulation"
@@ -149,6 +162,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 alert_type = "⚡ Sudden Volume Spike"
             else:
                 alert_type = "✅ Normal Signal"
+
+            total_score = round(df['RSI'].iloc[-1] + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2) + bonus_score, 2)
 
             return [{
                 "Symbol": ticker.replace(".NS", ""),
@@ -161,7 +176,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Accum Ratio (10d)": round(accum_ratio, 2),
                 "Continuation Score (%)": round(close_pos, 1),
-                "Score": round(df['RSI'].iloc[-1] + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2), 2)
+                "Score": total_score
             }]
             
         elif mode == "backtest":
@@ -359,12 +374,15 @@ with tab1:
             if 'Rank' not in res_df.columns:
                 res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
 
-            # Smart Color Highlighting for Pre-Breakout Buying
+            # --- SMART COLOR HIGHLIGHTING WITH YELLOW FOR ULTIMATE SETUP ---
             def highlight_buying(row):
-                if '🔥' in str(row.get('Alert', '')): 
-                    return ['background-color: rgba(255, 69, 0, 0.35); font-weight: bold'] * len(row)
-                elif '🧱' in str(row.get('Alert', '')):
-                    return ['background-color: rgba(0, 150, 255, 0.25); font-weight: bold'] * len(row)
+                alert = str(row.get('Alert', ''))
+                if '⭐' in alert or 'Ultimate' in alert:
+                    return ['background-color: #ffd700; color: #000000; font-weight: bold'] * len(row)  # Bright Yellow Highlight
+                elif '🔥' in alert:
+                    return ['background-color: rgba(255, 69, 0, 0.35); color: #ffffff; font-weight: bold'] * len(row)
+                elif '🧱' in alert:
+                    return ['background-color: rgba(0, 150, 255, 0.25); color: #ffffff; font-weight: bold'] * len(row)
                 return [''] * len(row)
             
             styled_df = res_df.style.apply(highlight_buying, axis=1)
