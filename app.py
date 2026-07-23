@@ -125,7 +125,6 @@ def get_mega_nse_universe():
 def _fetch_single_chunk(chunk):
   data_map = {}
   try:
-    # Period set to 1y for maximum speed & lightness
     raw_data = yf.download(
         chunk,
         period="1y",
@@ -167,7 +166,7 @@ def _fetch_single_chunk(chunk):
 # --- OPTIMIZED PARALLEL BULK DOWNLOADER ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-  chunk_size = 100  # Larger chunk size for fewer network calls
+  chunk_size = 100
   ticker_chunks = [
       tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
   ]
@@ -176,7 +175,6 @@ def download_all_market_data(tickers):
   progress_bar = st.progress(0)
   status_text = st.empty()
 
-  # Concurrent parallel batch fetching using ThreadPoolExecutor
   completed = 0
   with ThreadPoolExecutor(max_workers=8) as executor:
     future_to_chunk = {
@@ -198,7 +196,7 @@ def download_all_market_data(tickers):
   return cached_master
 
 
-# --- MERGED CORE ANALYTICS PROCESSOR (OPTIMIZED) ---
+# --- MERGED CORE ANALYTICS PROCESSOR ---
 def analyze_single_ticker(
     ticker,
     df,
@@ -212,13 +210,11 @@ def analyze_single_ticker(
     if len(df) < 50:
       return None
 
-    # Base Technical Calculations
     df["Pct_Change"] = df["Close"].pct_change() * 100
     df["Vol_SMA20"] = df["Volume"].rolling(20).mean()
     df["Return_20d"] = df["Close"].pct_change(periods=20) * 100
     df["Turnover"] = df["Close"] * df["Volume"]
 
-    # Consolidation & Volume Math
     df["Is_Green"] = df["Close"] > df["Open"]
     df["Green_Vol"] = df["Volume"].where(df["Is_Green"], 0)
     df["Red_Vol"] = df["Volume"].where(~df["Is_Green"], 0)
@@ -238,7 +234,6 @@ def analyze_single_ticker(
     df["EMA_50"] = df["Close"].ewm(span=50, adjust=False).mean()
     df["EMA_200"] = df["Close"].ewm(span=200, adjust=False).mean()
 
-    # RSI Calculation
     delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -253,7 +248,6 @@ def analyze_single_ticker(
     )
     df["Low_5d"] = df["Low"].rolling(window=5).min()
 
-    # Base Filters
     cond1 = df["Close"] >= 20
     cond2 = (df["Pct_Change"] >= 0.5) & (df["Pct_Change"] <= 15.0)
     cond3 = df["Volume"] > (df["Vol_SMA20"] * volume_multiplier)
@@ -365,7 +359,6 @@ def analyze_single_ticker(
       history_slice = df.iloc[-60:]
       triggers = history_slice[history_slice["Signal"] == True]
 
-      # Optimized array-based backtest execution
       for idx in triggers.index:
         row = df.loc[idx]
         b_entry = row["Close"]
@@ -381,7 +374,6 @@ def analyze_single_ticker(
         exit_date = "Running..."
         exit_price = df["Close"].iloc[-1]
 
-        # Sliced vectorized check instead of row-by-row iterrows
         hit_sl_mask = post_df["Low"] <= b_sl
         hit_tgt_mask = post_df["High"] >= b_target
 
@@ -571,7 +563,6 @@ def compute_analytics_on_cached_pool(mode="live"):
   if not pool:
     return pd.DataFrame()
 
-  # Dynamic max workers based on CPU count
   workers = min(32, (os.cpu_count() or 4) * 4)
   with ThreadPoolExecutor(max_workers=workers) as executor:
     futures = {
@@ -626,29 +617,28 @@ with tab1:
             " सभी 6 शर्तों पर 100% खरे उतरे हैं।"
         )
 
-        box_html = (
-            '<div style="background-color: #161b22; border: 2px solid'
-            " #ffd700; border-radius: 12px; padding: 18px; margin-bottom:"
-            ' 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom:'
-            f' 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)}'
-            " Found)</h2>"
-        )
+        box_html = f"""
+                <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+                    <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>
+                """
+
         for idx, row in ideal_matches_df.iterrows():
           rank = idx + 1
-          box_html += (
-              '<div style="border-bottom: 1px dashed #30363d; padding-bottom:'
-              ' 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin:'
-              f' 0;">#{rank} Stock: <u>{row["Symbol"]}</u> (Probability Score:'
-              f' {row["Score"]})</h3><p style="color: #c9d1d9; font-size: 14px;'
-              " margin-top: 6px; margin-bottom: 6px;"><b>Alert:</b>"
-              f' {row["Alert"]} | <b>Continuation Score:</b>'
-              f' {row["Continuation Score (%)"]}% | <b>Massive Buying'
-              f' Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b>'
-              f' {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold;'
-              f' margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price'
-              f' (₹)"]} के ऊपर खरीदें | SL: ₹{row["Stop Loss (₹)"]} | Target:'
-              f' ₹{row["Target Price (₹)"]}</p></div>'
-          )
+          box_html += f"""
+                  <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+                      <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row['Symbol']}</u> (Probability Score: {row['Score']})</h3>
+                      <p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;">
+                          <b>Alert:</b> {row['Alert']} | 
+                          <b>Continuation Score:</b> {row['Continuation Score (%)']}% | 
+                          <b>Massive Buying Surge:</b> {row['Massive Buying Surge (%)']}% | 
+                          <b>RSI:</b> {row['RSI']}
+                      </p>
+                      <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">
+                          🎯 Trigger: ₹{row['Entry Price (₹)']} के ऊपर खरीदें | SL: ₹{row['Stop Loss (₹)']} | Target: ₹{row['Target Price (₹)']}
+                      </p>
+                  </div>
+                  """
+
         box_html += "</div>"
         st.markdown(box_html, unsafe_allow_html=True)
 
