@@ -105,7 +105,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 3.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
         cond8 = df['RSI'] >= rsi_filter 
         cond9 = df['Close'] > df['EMA_20'] 
         
@@ -314,7 +313,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collected")
+    st.subheader("⚡ Live Data Collection")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
