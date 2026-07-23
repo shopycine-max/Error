@@ -409,30 +409,14 @@ with tab1:
             if not ideal_matches_df.empty:
                 st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी 6 शर्तों पर 100% खरे उतरे हैं।")
                 
-                # HTML Box Creation - Showing Numbered/Ranked Stocks
-                box_html = f"""
-                <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-                    <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>
-                """
+                # HTML Box Creation - Single-line Clean String
+                box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>'
                 
                 for idx, row in ideal_matches_df.iterrows():
                     rank = idx + 1
-                    box_html += f"""
-                    <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
-                        <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row['Symbol']}</u> (Probability Score: {row['Score']})</h3>
-                        <p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;">
-                            <b>Alert:</b> {row['Alert']} | 
-                            <b>Continuation Score:</b> {row['Continuation Score (%)']}% | 
-                            <b>Massive Buying Surge:</b> {row['Massive Buying Surge (%)']}% | 
-                            <b>RSI:</b> {row['RSI']}
-                        </p>
-                        <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">
-                            🎯 Trigger: ₹{row['Entry Price (₹)']} के ऊपर खरीदें | SL: ₹{row['Stop Loss (₹)']} | Target: ₹{row['Target Price (₹)']}
-                        </p>
-                    </div>
-                    """
+                    box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> (Probability Score: {row["Score"]})</h3><p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;"><b>Alert:</b> {row["Alert"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Massive Buying Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} के ऊपर खरीदें | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
                 
-                box_html += "</div>"
+                box_html += '</div>'
                 st.markdown(box_html, unsafe_allow_html=True)
                 
                 # --- TOP ULTIMATE BREAKOUT STOCK CANDLESTICK CHART ---
@@ -467,14 +451,7 @@ with tab1:
 
             else:
                 # 6 शर्तें पूरी न होने पर बॉक्स में "No Breakout Stock Found" प्रदर्शित होगा
-                st.markdown("""
-                <div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-                    <h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2>
-                    <p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">
-                        आज सभी 6 शर्तों पर 100% खरा उतरने वाला कोई Ideal Breakout Stock नहीं मिला है।
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown('<div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">आज सभी 6 शर्तों पर 100% खरा उतरने वाला कोई Ideal Breakout Stock नहीं मिला है।</p></div>', unsafe_allow_html=True)
 
             # --- SMART COLOR HIGHLIGHTING WITH YELLOW FOR ULTIMATE SETUP ---
             def highlight_buying(row):
