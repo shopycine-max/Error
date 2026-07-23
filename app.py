@@ -40,7 +40,7 @@ st.markdown(
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
     h1, h2, h3 { color: #58a6ff; }
     </style>
-""",
+    """,
     unsafe_allow_html=True,
 )
 
@@ -710,12 +710,14 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
       else:
         st.markdown(
-            '<div style="background-color: #161b22; border: 2px solid'
-            " #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom:"
-            ' 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock'
-            ' Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
-            " 8px; margin-bottom: 0px;">आज सभी 6 शर्तों पर 100% खरा उतरने वाला"
-            " कोई Ideal Breakout Stock नहीं मिला है।</p></div>",
+            """
+            <div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+                <h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2>
+                <p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">
+                    आज सभी 6 शर्तों पर 100% खरा उतरने वाला कोई Ideal Breakout Stock नहीं मिला है।
+                </p>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
