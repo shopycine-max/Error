@@ -249,7 +249,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 # --- 🎯 10/10 IDEAL BREAKOUT STOCK AUTOMATED FILTER ENGINE ---
 def filter_ideal_breakout_stock(df):
     if df.empty:
-        return None, pd.DataFrame()
+        return pd.DataFrame()
     
     # 6 शर्तों का सख्त फ़िल्टर (Ideal Checklist Criteria)
     cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
@@ -259,15 +259,14 @@ def filter_ideal_breakout_stock(df):
     cond_accum = df['Accum Ratio (10d)'] > 1.8
     cond_rsi = (df['RSI'] >= 60) & (df['RSI'] <= 72)
     
-    ideal_df = df[cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi]
+    ideal_df = df[cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi].copy()
     
     if not ideal_df.empty:
-        top_ideal = ideal_df.sort_values(by="Score", ascending=False).iloc[0]
-        return top_ideal, ideal_df
+        # Score के आधार पर Sort किया गया है ताकि सबसे ज़्यादा Probability वाला स्टॉक #1 पर आए
+        ideal_df = ideal_df.sort_values(by="Score", ascending=False).reset_index(drop=True)
+        return ideal_df
     
-    # Fallback: अगर 6 की 6 शर्तें 100% मैच न हों, तो सर्वोच्च Score वाला स्टॉक चुनें
-    top_fallback = df.sort_values(by="Score", ascending=False).iloc[0]
-    return top_fallback, pd.DataFrame()
+    return pd.DataFrame()
 
 # --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
@@ -405,25 +404,77 @@ with tab1:
                 res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
 
             # --- 🏆 AUTOMATED 10/10 IDEAL BREAKOUT FILTER SELECTION ---
-            top_stock_row, ideal_matches_df = filter_ideal_breakout_stock(res_df)
+            ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
             if not ideal_matches_df.empty:
                 st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी 6 शर्तों पर 100% खरे उतरे हैं।")
-                st.markdown(f"""
+                
+                # HTML Box Creation - Showing Numbered/Ranked Stocks
+                box_html = f"""
                 <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-                    <h2 style="color: #ffd700; margin: 0;">👑 #1 Ideal Breakout Stock: <u>{top_stock_row['Symbol']}</u></h2>
-                    <p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 8px;">
-                        <b>Alert:</b> {top_stock_row['Alert']} | 
-                        <b>Continuation Score:</b> {top_stock_row['Continuation Score (%)']}% | 
-                        <b>Massive Buying Surge:</b> {top_stock_row['Massive Buying Surge (%)']}% | 
-                        <b>RSI:</b> {top_stock_row['RSI']}
+                    <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>
+                """
+                
+                for idx, row in ideal_matches_df.iterrows():
+                    rank = idx + 1
+                    box_html += f"""
+                    <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+                        <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row['Symbol']}</u> (Probability Score: {row['Score']})</h3>
+                        <p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;">
+                            <b>Alert:</b> {row['Alert']} | 
+                            <b>Continuation Score:</b> {row['Continuation Score (%)']}% | 
+                            <b>Massive Buying Surge:</b> {row['Massive Buying Surge (%)']}% | 
+                            <b>RSI:</b> {row['RSI']}
+                        </p>
+                        <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">
+                            🎯 Trigger: ₹{row['Entry Price (₹)']} के ऊपर खरीदें | SL: ₹{row['Stop Loss (₹)']} | Target: ₹{row['Target Price (₹)']}
+                        </p>
+                    </div>
+                    """
+                
+                box_html += "</div>"
+                st.markdown(box_html, unsafe_allow_html=True)
+                
+                # --- TOP ULTIMATE BREAKOUT STOCK CANDLESTICK CHART ---
+                top_stock_row = ideal_matches_df.iloc[0]
+                top_stock = top_stock_row['Symbol']
+                
+                st.markdown(f"### 👑 Chart View for #1 Ultimate Stock: **{top_stock}**")
+                chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+                
+                if not chart_data.empty:
+                    if isinstance(chart_data.columns, pd.MultiIndex):
+                        chart_data.columns = chart_data.columns.get_level_values(0)
+                    
+                    chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                    chart_data = chart_data[chart_data['Volume'] > 0]
+                    
+                    if not chart_data.empty:
+                        fig = go.Figure(data=[go.Candlestick(
+                            x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
+                            low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
+                        )])
+                        fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
+                        
+                        live_sl = top_stock_row['Stop Loss (₹)']
+                        live_tgt = top_stock_row['Target Price (₹)']
+                        
+                        fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                        fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
+                        
+                        fig.update_layout(template="plotly_dark", title=f"{top_stock} Setup Chart", xaxis_rangeslider_visible=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            else:
+                # 6 शर्तें पूरी न होने पर बॉक्स में "No Breakout Stock Found" प्रदर्शित होगा
+                st.markdown("""
+                <div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+                    <h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2>
+                    <p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">
+                        आज सभी 6 शर्तों पर 100% खरा उतरने वाला कोई Ideal Breakout Stock नहीं मिला है।
                     </p>
-                    <h3 style="color: #58a6ff; margin: 0;">🎯 Trigger: ₹{top_stock_row['Entry Price (₹)']} के ऊपर खरीदें | SL: ₹{top_stock_row['Stop Loss (₹)']} | Target: ₹{top_stock_row['Target Price (₹)']}</h3>
                 </div>
                 """, unsafe_allow_html=True)
-            else:
-                st.warning("⚠️ आज 6 की 6 शर्तें 100% मैच करने वाला कोई स्टॉक नहीं मिला। ओवरऑल Score के आधार पर बेस्ट स्टॉक नीचे दिया गया है:")
-                st.info(f"👉 **#1 Overall Stock:** **{top_stock_row['Symbol']}** (Score: {top_stock_row['Score']} | Continuation Score: {top_stock_row['Continuation Score (%)']}%)")
 
             # --- SMART COLOR HIGHLIGHTING WITH YELLOW FOR ULTIMATE SETUP ---
             def highlight_buying(row):
@@ -438,36 +489,8 @@ with tab1:
             
             styled_df = res_df.style.apply(highlight_buying, axis=1)
             
-            st.subheader(f"📊 Total Active Breakout Setups Found: {len(res_df)}")
+            st.subheader(f"📊 Total Active Signals Found: {len(res_df)}")
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
-            
-            # --- TOP STOCK CANDLESTICK CHART ---
-            top_stock = top_stock_row['Symbol']
-            st.markdown(f"### 👑 Chart View for #1 Stock: **{top_stock}**")
-            chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
-            
-            if not chart_data.empty:
-                if isinstance(chart_data.columns, pd.MultiIndex):
-                    chart_data.columns = chart_data.columns.get_level_values(0)
-                
-                chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                chart_data = chart_data[chart_data['Volume'] > 0]
-                
-                if not chart_data.empty:
-                    fig = go.Figure(data=[go.Candlestick(
-                        x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], 
-                        low=chart_data['Low'], close=chart_data['Close'], name='Candlestick'
-                    )])
-                    fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
-                    
-                    live_sl = top_stock_row['Stop Loss (₹)']
-                    live_tgt = top_stock_row['Target Price (₹)']
-                    
-                    fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
-                    fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
-                    
-                    fig.update_layout(template="plotly_dark", title=f"{top_stock} Setup Chart", xaxis_rangeslider_visible=False)
-                    st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("---")
             st.subheader("🔮 Tomorrow's Prediction Runway")
