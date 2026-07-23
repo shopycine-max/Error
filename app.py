@@ -38,7 +38,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & Volume Surge Formula Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & 10/10 Ideal Stock Filter Integrated ⚡)")
 
 # --- AUTOMATED 2300+ NSE TICKER FETCH-ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -141,7 +141,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             vol_spike = curr_vol / avg_vol if avg_vol > 0 else 0
             
             # --- MASSIVE BUYING SURGE (%) FORMULA ---
-            # Calculates sudden percentage jump in volume compared to 20-day average
             buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
             
             accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
@@ -183,7 +182,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Accum Ratio (10d)": round(accum_ratio, 2),
                 "Continuation Score (%)": round(close_pos, 1),
-                "Massive Buying Surge (%)": round(buying_surge_pct, 1), # <-- NEW COLUMN ADDED HERE
+                "Massive Buying Surge (%)": round(buying_surge_pct, 1),
                 "Score": total_score
             }]
             
@@ -246,6 +245,29 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
     except Exception:
         return None
     return None
+
+# --- 🎯 10/10 IDEAL BREAKOUT STOCK AUTOMATED FILTER ENGINE ---
+def filter_ideal_breakout_stock(df):
+    if df.empty:
+        return None, pd.DataFrame()
+    
+    # 6 शर्तों का सख्त फ़िल्टर (Ideal Checklist Criteria)
+    cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
+    cond_cont = df['Continuation Score (%)'] > 85
+    cond_surge = df['Massive Buying Surge (%)'] > 150
+    cond_vol = df['Vol Spike (x)'] > 2.5
+    cond_accum = df['Accum Ratio (10d)'] > 1.8
+    cond_rsi = (df['RSI'] >= 60) & (df['RSI'] <= 72)
+    
+    ideal_df = df[cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi]
+    
+    if not ideal_df.empty:
+        top_ideal = ideal_df.sort_values(by="Score", ascending=False).iloc[0]
+        return top_ideal, ideal_df
+    
+    # Fallback: अगर 6 की 6 शर्तें 100% मैच न हों, तो सर्वोच्च Score वाला स्टॉक चुनें
+    top_fallback = df.sort_values(by="Score", ascending=False).iloc[0]
+    return top_fallback, pd.DataFrame()
 
 # --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
@@ -382,11 +404,32 @@ with tab1:
             if 'Rank' not in res_df.columns:
                 res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
 
+            # --- 🏆 AUTOMATED 10/10 IDEAL BREAKOUT FILTER SELECTION ---
+            top_stock_row, ideal_matches_df = filter_ideal_breakout_stock(res_df)
+            
+            if not ideal_matches_df.empty:
+                st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी 6 शर्तों पर 100% खरे उतरे हैं।")
+                st.markdown(f"""
+                <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+                    <h2 style="color: #ffd700; margin: 0;">👑 #1 Ideal Breakout Stock: <u>{top_stock_row['Symbol']}</u></h2>
+                    <p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 8px;">
+                        <b>Alert:</b> {top_stock_row['Alert']} | 
+                        <b>Continuation Score:</b> {top_stock_row['Continuation Score (%)']}% | 
+                        <b>Massive Buying Surge:</b> {top_stock_row['Massive Buying Surge (%)']}% | 
+                        <b>RSI:</b> {top_stock_row['RSI']}
+                    </p>
+                    <h3 style="color: #58a6ff; margin: 0;">🎯 Trigger: ₹{top_stock_row['Entry Price (₹)']} के ऊपर खरीदें | SL: ₹{top_stock_row['Stop Loss (₹)']} | Target: ₹{top_stock_row['Target Price (₹)']}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.warning("⚠️ आज 6 की 6 शर्तें 100% मैच करने वाला कोई स्टॉक नहीं मिला। ओवरऑल Score के आधार पर बेस्ट स्टॉक नीचे दिया गया है:")
+                st.info(f"👉 **#1 Overall Stock:** **{top_stock_row['Symbol']}** (Score: {top_stock_row['Score']} | Continuation Score: {top_stock_row['Continuation Score (%)']}%)")
+
             # --- SMART COLOR HIGHLIGHTING WITH YELLOW FOR ULTIMATE SETUP ---
             def highlight_buying(row):
                 alert = str(row.get('Alert', ''))
                 if '⭐' in alert or 'Ultimate' in alert:
-                    return ['background-color: #ffd700; color: #000000; font-weight: bold'] * len(row)  # Bright Yellow Highlight
+                    return ['background-color: #ffd700; color: #000000; font-weight: bold'] * len(row)
                 elif '🔥' in alert:
                     return ['background-color: rgba(255, 69, 0, 0.35); color: #ffffff; font-weight: bold'] * len(row)
                 elif '🧱' in alert:
@@ -395,11 +438,12 @@ with tab1:
             
             styled_df = res_df.style.apply(highlight_buying, axis=1)
             
-            st.success(f"🎉 Found {len(res_df)} breakout & accumulation setups!")
+            st.subheader(f"📊 Total Active Breakout Setups Found: {len(res_df)}")
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
-            top_stock = res_df.iloc[0]['Symbol']
-            st.markdown(f"### 👑 Top Ranked Accumulation Setup: **{top_stock}**")
+            # --- TOP STOCK CANDLESTICK CHART ---
+            top_stock = top_stock_row['Symbol']
+            st.markdown(f"### 👑 Chart View for #1 Stock: **{top_stock}**")
             chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
             
             if not chart_data.empty:
@@ -416,8 +460,8 @@ with tab1:
                     )])
                     fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                     
-                    live_sl = res_df.iloc[0]['Stop Loss (₹)']
-                    live_tgt = res_df.iloc[0]['Target Price (₹)']
+                    live_sl = top_stock_row['Stop Loss (₹)']
+                    live_tgt = top_stock_row['Target Price (₹)']
                     
                     fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
                     fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
