@@ -131,15 +131,10 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         
         if mode == "live" and df['Signal'].iloc[-1]:
             entry = df['Close'].iloc[-1]
-            
-            # --- DAILY SUPPORT & RESISTANCE (PIVOT POINTS) ---
-            day_high = df['High'].iloc[-1]
-            day_low = df['Low'].iloc[-1]
-            day_close = df['Close'].iloc[-1]
-            
-            pivot = (day_high + day_low + day_close) / 3.0
-            support_1 = (2 * pivot) - day_high
-            resistance_1 = (2 * pivot) - day_low
+            sl = df['Low_5d'].iloc[-1]
+            if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
+            risk = entry - sl
+            target = entry + (2 * risk) 
             
             curr_vol = df['Volume'].iloc[-1]
             avg_vol = df['Vol_SMA20'].iloc[-1]
@@ -152,6 +147,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             range_20 = df['Range_20_Pct'].iloc[-1]
             is_breakout_20 = df['Close'].iloc[-1] > df['High_20_Prev'].iloc[-1]
             
+            day_high = df['High'].iloc[-1]
+            day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
@@ -177,9 +174,9 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             return [{
                 "Symbol": ticker.replace(".NS", ""),
                 "Alert": alert_type,
-                "Price (₹)": round(entry, 2),
-                "Support (S1) (₹)": round(support_1, 2),
-                "Resistance (R1) (₹)": round(resistance_1, 2),
+                "Entry Price (₹)": round(entry, 2),
+                "Stop Loss (₹)": round(sl, 2),
+                "Target Price (₹)": round(target, 2),
                 "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
                 "RSI": round(df['RSI'].iloc[-1], 2),
                 "Vol Spike (x)": round(vol_spike, 1),
@@ -196,23 +193,41 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             for idx in triggers.index:
                 row = df.loc[idx]
                 b_entry = row['Close']
+                b_sl = row['Low_5d']
                 
-                # Daily Support & Resistance calculation for backtest slice
-                b_high = row['High']
-                b_low = row['Low']
-                b_pivot = (b_high + b_low + b_entry) / 3.0
-                b_supp = (2 * b_pivot) - b_high
-                b_res = (2 * b_pivot) - b_low
+                if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
+                b_risk = b_entry - b_sl
+                b_target = b_entry + (2 * b_risk)
                 
                 post_df = df.loc[idx:].iloc[1:21] 
                 outcome = "Live/Pending ⏳"
                 exit_date = "Running..."
                 exit_price = df['Close'].iloc[-1]
                 
-                if len(post_df) > 0:
+                for f_date, f_row in post_df.iterrows():
+                    hit_sl = f_row['Low'] <= b_sl
+                    hit_tgt = f_row['High'] >= b_target
+                    
+                    if hit_sl and hit_tgt:
+                        outcome = "Hit SL 🛑"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_sl
+                        break
+                    elif hit_sl:
+                        outcome = "Hit SL 🛑"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_sl
+                        break
+                    elif hit_tgt:
+                        outcome = "Hit Target 🎯"
+                        exit_date = f_date.strftime('%Y-%m-%d')
+                        exit_price = b_target
+                        break
+                
+                if outcome == "Live/Pending ⏳" and len(post_df) == 20:
                     exit_price = post_df['Close'].iloc[-1]
                     exit_date = post_df.index[-1].strftime('%Y-%m-%d')
-                    outcome = "Evaluated ⏳"
+                    outcome = "Timed Out ⏳"
                 
                 pnl = ((exit_price - b_entry) / b_entry) * 100
                 
@@ -220,8 +235,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                     "Date": idx.strftime('%Y-%m-%d'),
                     "Symbol": ticker.replace(".NS", ""),
                     "Entry (₹)": round(b_entry, 2),
-                    "Support (S1) (₹)": round(b_supp, 2),
-                    "Resistance (R1) (₹)": round(b_res, 2),
+                    "Stop Loss (₹)": round(b_sl, 2),
+                    "Target Price (₹)": round(b_target, 2),
                     "Outcome": outcome,
                     "Exit Date": exit_date,
                     "PnL (%)": round(pnl, 2)
@@ -253,11 +268,10 @@ def filter_ideal_breakout_stock(df):
     
     return pd.DataFrame()
 
-# --- OPTIMIZED FAST BULK DOWNLOADER WITH HIGH PARALLELISM ---
+# --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    # Dynamic Chunk size setup for maximum network speed
-    chunk_size = 250 if len(tickers) > 500 else 100
+    chunk_size = 50
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     cached_master = {}
@@ -265,10 +279,9 @@ def download_all_market_data(tickers):
     status_text = st.empty()
     
     for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⚡ Turbo Fetching Batch {c_idx+1}/{len(ticker_chunks)}... ({len(cached_master)} stocks ready)")
+        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... (Fetched {len(cached_master)} stocks)")
         try:
-            # Multi-threading enabled inside Yahoo Finance engine directly
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=10)
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15)
             if raw_data.empty: continue
             
             for ticker in chunk:
@@ -289,6 +302,7 @@ def download_all_market_data(tickers):
                                 cached_master[ticker] = t_data
                 except:
                     continue
+            time.sleep(0.3)
         except Exception:
             continue
         progress_bar.progress((c_idx + 1) / len(ticker_chunks))
@@ -359,8 +373,7 @@ def compute_analytics_on_cached_pool(mode="live"):
     if not pool:
         return pd.DataFrame()
         
-    # Increased thread max_workers to 32 for ultra-fast parallel evaluation
-    with ThreadPoolExecutor(max_workers=32) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, formula_version): ticker 
             for ticker, df in pool.items()
@@ -401,7 +414,7 @@ with tab1:
                 
                 for idx, row in ideal_matches_df.iterrows():
                     rank = idx + 1
-                    box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> (Probability Score: {row["Score"]})</h3><p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;"><b>Alert:</b> {row["Alert"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Massive Buying Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">📊 CMP: ₹{row["Price (₹)"]} | Support (S1): ₹{row["Support (S1) (₹)"]} | Resistance (R1): ₹{row["Resistance (R1) (₹)"]}</p></div>'
+                    box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> (Probability Score: {row["Score"]})</h3><p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;"><b>Alert:</b> {row["Alert"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Massive Buying Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} के ऊपर खरीदें | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
                 
                 box_html += '</div>'
                 st.markdown(box_html, unsafe_allow_html=True)
@@ -411,13 +424,7 @@ with tab1:
                 top_stock = top_stock_row['Symbol']
                 
                 st.markdown(f"### 👑 Chart View for #1 Ultimate Stock: **{top_stock}**")
-                
-                # OPTIMIZED: Fetching chart data directly from already cached master data
-                ticker_full_name = f"{top_stock}.NS"
-                if ticker_full_name in st.session_state['master_market_data']:
-                    chart_data = st.session_state['master_market_data'][ticker_full_name].tail(60)
-                else:
-                    chart_data = yf.download(ticker_full_name, period="3mo", interval="1d", progress=False)
+                chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
                 
                 if not chart_data.empty:
                     if isinstance(chart_data.columns, pd.MultiIndex):
@@ -433,11 +440,11 @@ with tab1:
                         )])
                         fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
                         
-                        live_s1 = top_stock_row['Support (S1) (₹)']
-                        live_r1 = top_stock_row['Resistance (R1) (₹)']
+                        live_sl = top_stock_row['Stop Loss (₹)']
+                        live_tgt = top_stock_row['Target Price (₹)']
                         
-                        fig.add_hline(y=live_s1, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Support (S1): ₹{live_s1}", annotation_position="bottom left")
-                        fig.add_hline(y=live_r1, line_dash="dash", line_color="red", line_width=2, annotation_text=f"Resistance (R1): ₹{live_r1}", annotation_position="top left")
+                        fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
+                        fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
                         
                         fig.update_layout(template="plotly_dark", title=f"{top_stock} Setup Chart", xaxis_rangeslider_visible=False)
                         st.plotly_chart(fig, use_container_width=True)
@@ -471,13 +478,7 @@ with tab1:
             
             st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
             
-            # OPTIMIZED: Fetching chart data directly from already cached master data
-            f_ticker_full = f"{top_future_stock}.NS"
-            if f_ticker_full in st.session_state['master_market_data']:
-                f_chart_data = st.session_state['master_market_data'][f_ticker_full].tail(30)
-            else:
-                f_chart_data = yf.download(f_ticker_full, period="1mo", interval="1d", progress=False)
-
+            f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
             if not f_chart_data.empty:
                 if isinstance(f_chart_data.columns, pd.MultiIndex):
                     f_chart_data.columns = f_chart_data.columns.get_level_values(0)
@@ -529,14 +530,14 @@ with tab2:
         
         if not bt_df.empty:
             bt_df = bt_df.sort_values(by="Date", ascending=False)
-            closed_trades = bt_df[bt_df['Outcome'].str.contains("Evaluated", na=False)].copy()
+            closed_trades = bt_df[bt_df['Outcome'].str.contains("Hit|Timed", na=False)].copy()
             winning_trades = closed_trades[closed_trades['PnL (%)'] > 0]
             accuracy = round((len(winning_trades) / len(closed_trades)) * 100, 2) if len(closed_trades) > 0 else 0.0
             
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Generated Signals", len(bt_df))
-            col2.metric("Evaluated Signals", len(closed_trades))
-            col3.metric("Positive PnL Rate (%)", f"{accuracy}%")
+            col2.metric("Closed/Evaluated Signals", len(closed_trades))
+            col3.metric("True Strategy Win Rate (PnL > 0)", f"{accuracy}%")
             
             st.markdown("### 📋 Complete Historical Simulation Log")
             st.dataframe(bt_df, use_container_width=True, hide_index=True)
