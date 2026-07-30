@@ -1,4 +1,4 @@
-Import streamlit as st
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
@@ -253,10 +253,11 @@ def filter_ideal_breakout_stock(df):
     
     return pd.DataFrame()
 
-# --- OPTIMIZED BULK DOWNLOADER WITH RATE LIMIT PROTECTION ---
+# --- OPTIMIZED FAST BULK DOWNLOADER WITH HIGH PARALLELISM ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    chunk_size = 50
+    # Dynamic Chunk size setup for maximum network speed
+    chunk_size = 250 if len(tickers) > 500 else 100
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     cached_master = {}
@@ -264,9 +265,10 @@ def download_all_market_data(tickers):
     status_text = st.empty()
     
     for c_idx, chunk in enumerate(ticker_chunks):
-        status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... (Fetched {len(cached_master)} stocks)")
+        status_text.text(f"⚡ Turbo Fetching Batch {c_idx+1}/{len(ticker_chunks)}... ({len(cached_master)} stocks ready)")
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15)
+            # Multi-threading enabled inside Yahoo Finance engine directly
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=10)
             if raw_data.empty: continue
             
             for ticker in chunk:
@@ -287,7 +289,6 @@ def download_all_market_data(tickers):
                                 cached_master[ticker] = t_data
                 except:
                     continue
-            time.sleep(0.3)
         except Exception:
             continue
         progress_bar.progress((c_idx + 1) / len(ticker_chunks))
@@ -358,7 +359,8 @@ def compute_analytics_on_cached_pool(mode="live"):
     if not pool:
         return pd.DataFrame()
         
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    # Increased thread max_workers to 32 for ultra-fast parallel evaluation
+    with ThreadPoolExecutor(max_workers=32) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, formula_version): ticker 
             for ticker, df in pool.items()
@@ -409,7 +411,13 @@ with tab1:
                 top_stock = top_stock_row['Symbol']
                 
                 st.markdown(f"### 👑 Chart View for #1 Ultimate Stock: **{top_stock}**")
-                chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+                
+                # OPTIMIZED: Fetching chart data directly from already cached master data
+                ticker_full_name = f"{top_stock}.NS"
+                if ticker_full_name in st.session_state['master_market_data']:
+                    chart_data = st.session_state['master_market_data'][ticker_full_name].tail(60)
+                else:
+                    chart_data = yf.download(ticker_full_name, period="3mo", interval="1d", progress=False)
                 
                 if not chart_data.empty:
                     if isinstance(chart_data.columns, pd.MultiIndex):
@@ -463,7 +471,13 @@ with tab1:
             
             st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
             
-            f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
+            # OPTIMIZED: Fetching chart data directly from already cached master data
+            f_ticker_full = f"{top_future_stock}.NS"
+            if f_ticker_full in st.session_state['master_market_data']:
+                f_chart_data = st.session_state['master_market_data'][f_ticker_full].tail(30)
+            else:
+                f_chart_data = yf.download(f_ticker_full, period="1mo", interval="1d", progress=False)
+
             if not f_chart_data.empty:
                 if isinstance(f_chart_data.columns, pd.MultiIndex):
                     f_chart_data.columns = f_chart_data.columns.get_level_values(0)
