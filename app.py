@@ -5,8 +5,56 @@ import plotly.graph_objects as go
 from datetime import datetime
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-# --- Page Configurations ---
+# --- EMAIL CONFIGURATION ---
+SENDER_EMAIL = "shopycine@gmail.com"
+SENDER_PASSWORD = "qldp qufx agal ttbf"  # Generated Google App Password
+RECEIVER_EMAIL = "shopycine@gmail.com"
+
+def send_email_alert(symbol, entry, sl, target, score):
+    """Automatic Email Notification Sender"""
+    try:
+        subject = f"🚀 10/10 Ideal Breakout Alert: {symbol}"
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 20px;">
+            <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
+                <h2 style="color: #28a745; margin-top: 0;">🚀 10/10 Ideal Breakout Match Found!</h2>
+                <p>Stock <b>{symbol}</b> ne sabhi 6 conditions 100% complete kar li hain.</p>
+                <hr style="border: 0.5px solid #30363d;">
+                <p><b>📊 Stock Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
+                <p><b>⭐ Probability Score:</b> {score}</p>
+                <p><b>🎯 Trigger / Entry Price:</b> ₹{entry}</p>
+                <p><b>🛑 Stop Loss:</b> ₹{sl}</p>
+                <p><b>🏁 Target Price:</b> ₹{target}</p>
+                <hr style="border: 0.5px solid #30363d;">
+                <p style="font-size: 12px; color: #8b949e;">Sent automatically from Aashiyana Dashboard Pro Max 🚀</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'html'))
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Email Alert Failed: {e}")
+        return False
+
+# --- PAGE CONFIGURATIONS ---
 st.set_page_config(page_title="Aashiyana Dashboard Pro Max 🚀", page_icon="📈", layout="wide")
 
 # --- SAFELY INITIALIZE SESSION STATE ---
@@ -14,6 +62,8 @@ if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
 if 'bt_results' not in st.session_state: 
     st.session_state['bt_results'] = pd.DataFrame()
+if 'sent_email_alerts' not in st.session_state:
+    st.session_state['sent_email_alerts'] = set()
 
 # --- CUSTOM CACHE CLEAR LOGIC ---
 def clear_all_caches():
@@ -21,6 +71,7 @@ def clear_all_caches():
     get_mega_nse_universe.clear()
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
+    st.session_state['sent_email_alerts'] = set()
     st.toast("🧹 Cache completely cleared! Fetching fresh data on next run.", icon="🗑️")
 
 # --- CUSTOM THEME ---
@@ -35,7 +86,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & 10/10 Ideal Stock Filter Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & Email Notification Integrated ⚡)")
 
 # --- AUTOMATED NSE TICKER FETCH ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -380,6 +431,22 @@ with tab1:
             if not ideal_matches_df.empty:
                 st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी 6 शर्तों पर 100% खरे उतरे हैं।")
                 
+                # --- AUTOMATIC EMAIL TRIGGER ---
+                for _, row in ideal_matches_df.iterrows():
+                    stock_symbol = row["Symbol"]
+                    if stock_symbol not in st.session_state['sent_email_alerts']:
+                        sent_status = send_email_alert(
+                            symbol=stock_symbol,
+                            entry=row["Entry Price (₹)"],
+                            sl=row["Stop Loss (₹)"],
+                            target=row["Target Price (₹)"],
+                            score=row["Score"]
+                        )
+                        if sent_status:
+                            st.session_state['sent_email_alerts'].add(stock_symbol)
+                            st.toast(f"📧 Email alert sent for {stock_symbol}!", icon="📩")
+                # -------------------------------
+
                 box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>'
                 for idx, row in ideal_matches_df.iterrows():
                     rank = idx + 1
