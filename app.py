@@ -24,7 +24,7 @@ def send_email_alert(symbol, entry, sl, target, score):
         <body style="font-family: Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 20px;">
             <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
                 <h2 style="color: #28a745; margin-top: 0;">🚀 10/10 Ideal Breakout Match Found!</h2>
-                <p>Stock <b>{symbol}</b> ne sabhi 6 conditions 100% complete kar li hain.</p>
+                <p>Stock <b>{symbol}</b> ne sabhi Anti-False Breakout conditions 100% complete kar li hain.</p>
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Stock Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
                 <p><b>⭐ Probability Score:</b> {score}</p>
@@ -86,7 +86,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Super Fast Edition + Explosive Breakout & Email Notification Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Anti-False Breakout Engine + Explosive Volume Filter Integrated ⚡)")
 
 # --- AUTOMATED NSE TICKER FETCH ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -137,6 +137,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
+        # RSI Logic
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -149,24 +150,33 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
+        # --- 🛡️ ANTI-FALSE BREAKOUT FILTERS ---
+        # 1. Candle upper wick filter (Avoid rejection candles where High - Close is large)
+        candle_range = df['High'] - df['Low']
+        upper_wick = df['High'] - df['Close']
+        df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
+        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick must be <= 25% of total candle height
+        
+        # 2. Strict Breakout above 20-Day High
+        cond_breakout = df['Close'] > df['High_20_Prev']
+
         # Shared Strategy Base Filters
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 0.5) & (df['Pct_Change'] <= 15.0) 
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0) # Filter out exhausted >12% jump
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 2.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond8 = df['RSI'] >= rsi_filter 
+        cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)  # Cap RSI at 75 to avoid overbought traps
         cond9 = df['Close'] > df['EMA_20'] 
         cond_accum = df['Accum_Ratio_10d'] >= 1.5
         
         if formula_version == "Version 1 (With 500-day High & Strict Filters)":
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
-            cond11 = (df['High'] - df['Close']) / (df['High'] - df['Low'] + 1e-10) <= 0.4  
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond11 & cond12
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_no_wick & cond_breakout
         else:
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
 
         ticker_results = []
         
@@ -184,7 +194,6 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
             accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
             range_20 = df['Range_20_Pct'].iloc[-1]
-            is_breakout_20 = df['Close'].iloc[-1] > df['High_20_Prev'].iloc[-1]
             
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
@@ -192,7 +201,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
             is_steady_accum_phase = (range_20 <= 12.0 or accum_ratio >= 1.5)
-            is_heavy_buying_phase = (vol_spike >= 2.5 and is_breakout_20)
+            is_heavy_buying_phase = (vol_spike >= 2.5 and cond_breakout.iloc[-1])
             
             bonus_score = 0
             if is_steady_accum_phase and is_heavy_buying_phase:
@@ -289,11 +298,11 @@ def filter_ideal_breakout_stock(df):
     if df.empty: return pd.DataFrame()
     
     cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-    cond_cont = df['Continuation Score (%)'] > 85
-    cond_surge = df['Massive Buying Surge (%)'] > 150
-    cond_vol = df['Vol Spike (x)'] > 2.5
-    cond_accum = df['Accum Ratio (10d)'] > 1.8
-    cond_rsi = (df['RSI'] >= 60) & (df['RSI'] <= 72)
+    cond_cont = df['Continuation Score (%)'] > 80
+    cond_surge = df['Massive Buying Surge (%)'] > 120
+    cond_vol = df['Vol Spike (x)'] > 2.2
+    cond_accum = df['Accum Ratio (10d)'] > 1.6
+    cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
     
     ideal_df = df[cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi].copy()
     
@@ -351,9 +360,9 @@ formula_version = st.sidebar.selectbox(
     ]
 )
 
-rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 55)
-volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 3.0, 1.2, step=0.1)
-min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=2)
+rsi_filter = st.sidebar.slider("Minimum RSI (Trend Strength)", 45, 75, 58)
+volume_multiplier = st.sidebar.slider("Volume Shock (Multiplier)", 1.0, 4.0, 2.2, step=0.1)
+min_turnover = st.sidebar.number_input("Minimum Daily Turnover (in ₹ Crores)", min_value=1, max_value=50, value=3)
 
 st.sidebar.markdown("---")
 st.sidebar.header("🔄 Auto-Update & Data Controls")
@@ -415,7 +424,7 @@ with tab1:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
     else:
         if st.button("🚀 Run Scanner", key="live_btn"):
-            with st.spinner("Searching for momentum & heavy buying setups..."):
+            with st.spinner("Searching for real high-probability breakout setups..."):
                 st.session_state['live_results'] = compute_analytics_on_cached_pool(mode="live")
             
         res_df = st.session_state.get('live_results', pd.DataFrame())
@@ -429,7 +438,7 @@ with tab1:
             ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
             if not ideal_matches_df.empty:
-                st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी 6 शर्तों पर 100% खरे उतरे हैं।")
+                st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी शर्तों पर 100% खरे उतरे हैं।")
                 
                 # --- AUTOMATIC EMAIL TRIGGER ---
                 for _, row in ideal_matches_df.iterrows():
@@ -445,7 +454,6 @@ with tab1:
                         if sent_status:
                             st.session_state['sent_email_alerts'].add(stock_symbol)
                             st.toast(f"📧 Email alert sent for {stock_symbol}!", icon="📩")
-                # -------------------------------
 
                 box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>'
                 for idx, row in ideal_matches_df.iterrows():
@@ -484,7 +492,7 @@ with tab1:
                         st.plotly_chart(fig)
 
             else:
-                st.markdown('<div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">आज सभी 6 शर्तों पर 100% खरा उतरने वाला कोई Ideal Breakout Stock नहीं मिला है।</p></div>', unsafe_allow_html=True)
+                st.markdown('<div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">आज Anti-False Breakout की सभी शर्तों पर 100% खरा उतरने वाला कोई Stock नहीं मिला है।</p></div>', unsafe_allow_html=True)
 
             def highlight_buying(row):
                 alert = str(row.get('Alert', ''))
