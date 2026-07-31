@@ -14,10 +14,10 @@ SENDER_EMAIL = "shopycine@gmail.com"
 SENDER_PASSWORD = "qldp qufx agal ttbf"  # Generated Google App Password
 RECEIVER_EMAIL = "shopycine@gmail.com"
 
-def send_email_alert(symbol, entry, sl, target, score):
-    """Automatic Email Notification Sender"""
+def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
+    """Automatic Email Notification Sender with Execution Logic"""
     try:
-        subject = f"🚀 10/10 Ideal Breakout Alert: {symbol}"
+        subject = f"🚀 [{rank}] 10/10 Ideal Breakout Alert: {symbol}"
         
         body = f"""
         <html>
@@ -27,6 +27,9 @@ def send_email_alert(symbol, entry, sl, target, score):
                 <p>Stock <b>{symbol}</b> ne sabhi Anti-False Breakout conditions 100% complete kar li hain.</p>
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Stock Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
+                <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
+                <p><b>⏰ Entry Time Window:</b> {window}</p>
+                <p><b>⚡ Execution Rule:</b> {condition}</p>
                 <p><b>⭐ Probability Score:</b> {score}</p>
                 <p><b>🎯 Trigger / Entry Price:</b> ₹{entry}</p>
                 <p><b>🛑 Stop Loss:</b> ₹{sl}</p>
@@ -86,7 +89,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Anti-False Breakout Engine + Explosive Volume Filter Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Execution Priority Rank & 9:15-9:45 Timing Matrix Integrated ⚡)")
 
 # --- AUTOMATED NSE TICKER FETCH ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -123,7 +126,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         
         df['Is_Green'] = df['Close'] > df['Open']
         df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
-        df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
+        df['Red_Vol'] = df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
         
         up_vol_10 = df['Green_Vol'].rolling(10).sum()
         down_vol_10 = df['Red_Vol'].rolling(10).sum()
@@ -137,7 +140,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # RSI Logic
+        # RSI
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -151,22 +154,19 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
         # --- 🛡️ ANTI-FALSE BREAKOUT FILTERS ---
-        # 1. Candle upper wick filter (Avoid rejection candles where High - Close is large)
         candle_range = df['High'] - df['Low']
         upper_wick = df['High'] - df['Close']
         df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick must be <= 25% of total candle height
+        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick must be <= 25% of candle
         
-        # 2. Strict Breakout above 20-Day High
         cond_breakout = df['Close'] > df['High_20_Prev']
 
-        # Shared Strategy Base Filters
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0) # Filter out exhausted >12% jump
+        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 2.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
-        cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)  # Cap RSI at 75 to avoid overbought traps
+        cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)  
         cond9 = df['Close'] > df['EMA_20'] 
         cond_accum = df['Accum_Ratio_10d'] >= 1.5
         
@@ -200,19 +200,28 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
-            is_steady_accum_phase = (range_20 <= 12.0 or accum_ratio >= 1.5)
-            is_heavy_buying_phase = (vol_spike >= 2.5 and cond_breakout.iloc[-1])
-            
+            # --- 🎯 PROBABILITY RANK & OPENING EXECUTION FORMULA ---
+            if close_pos >= 90.0 and buying_surge_pct >= 200.0:
+                exec_rank = "🥇 Rank 1 (Top Winner)"
+                entry_window = "9:15 AM - 9:30 AM"
+                exec_condition = f"Hold above ₹{round(entry, 2)} with early volume"
+            elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
+                exec_rank = "🥈 Rank 2 (High Priority)"
+                entry_window = "9:20 AM - 9:35 AM"
+                exec_condition = f"Break & Hold above ₹{round(entry, 2)}"
+            else:
+                exec_rank = "🥉 Rank 3 (Wait & Watch)"
+                entry_window = "9:30 AM - 9:45 AM"
+                exec_condition = f"15-Min Candle Close above ₹{round(entry, 2)}"
+
             bonus_score = 0
-            if is_steady_accum_phase and is_heavy_buying_phase:
+            if close_pos >= 85.0 and vol_spike >= 2.5:
                 alert_type = "⭐ Ultimate Explosive Setup"
                 bonus_score = 30
             elif accum_ratio >= 2.0 and vol_spike >= 2.0:
                 alert_type = "🔥 Massive Heavy Buying"
             elif accum_ratio >= 1.8:
                 alert_type = "🧱 Steady Accumulation"
-            elif vol_spike >= 2.5:
-                alert_type = "⚡ Sudden Volume Spike"
             else:
                 alert_type = "✅ Normal Signal"
 
@@ -220,6 +229,9 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
             return [{
                 "Symbol": ticker.replace(".NS", ""),
+                "Execution Rank": exec_rank,
+                "Entry Window": entry_window,
+                "Execution Condition": exec_condition,
                 "Alert": alert_type,
                 "Entry Price (₹)": round(entry, 2),
                 "Stop Loss (₹)": round(sl, 2),
@@ -418,7 +430,7 @@ def compute_analytics_on_cached_pool(mode="live"):
 
 # --- TAB 1: Live Scanning View ---
 with tab1:
-    st.subheader("⚡ Live Data Collection & Accumulation Detection")
+    st.subheader("⚡ Live Data Collection & Execution Priority Scanning")
     
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
@@ -432,9 +444,6 @@ with tab1:
         if not res_df.empty:
             res_df = res_df.sort_values(by="Score", ascending=False)
             
-            if 'Rank' not in res_df.columns:
-                res_df.insert(0, 'Rank', range(1, len(res_df) + 1))
-
             ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
             if not ideal_matches_df.empty:
@@ -449,16 +458,19 @@ with tab1:
                             entry=row["Entry Price (₹)"],
                             sl=row["Stop Loss (₹)"],
                             target=row["Target Price (₹)"],
-                            score=row["Score"]
+                            score=row["Score"],
+                            rank=row["Execution Rank"],
+                            window=row["Entry Window"],
+                            condition=row["Execution Condition"]
                         )
                         if sent_status:
                             st.session_state['sent_email_alerts'].add(stock_symbol)
                             st.toast(f"📧 Email alert sent for {stock_symbol}!", icon="📩")
 
-                box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Stocks ({len(ideal_matches_df)} Found)</h2>'
+                box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>'
                 for idx, row in ideal_matches_df.iterrows():
                     rank = idx + 1
-                    box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> (Probability Score: {row["Score"]})</h3><p style="color: #c9d1d9; font-size: 14px; margin-top: 6px; margin-bottom: 6px;"><b>Alert:</b> {row["Alert"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Massive Buying Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} के ऊपर खरीदें | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
+                    box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> ({row["Execution Rank"]})</h3><p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {row["Entry Window"]} | ⚡ Execution Rule: {row["Execution Condition"]}</p><p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {row["Score"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
                 box_html += '</div>'
                 st.markdown(box_html, unsafe_allow_html=True)
                 
@@ -509,49 +521,6 @@ with tab1:
             st.subheader(f"📊 Total Active Signals Found: {len(res_df)}")
             st.dataframe(styled_df, hide_index=True)
 
-            st.markdown("---")
-            st.subheader("🔮 Tomorrow's Prediction Runway")
-            
-            future_df = res_df.sort_values(by="Continuation Score (%)", ascending=False)
-            top_future_stock = future_df.iloc[0]['Symbol']
-            top_future_score = future_df.iloc[0]['Continuation Score (%)']
-            
-            st.info(f"🎯 **{top_future_stock}** कल के लिए सबसे मजबूत दावेदार है क्योंकि इसका Continuation Score **{top_future_score}%** है।")
-            
-            f_chart_data = yf.download(f"{top_future_stock}.NS", period="1mo", interval="1d", progress=False)
-            if not f_chart_data.empty:
-                if isinstance(f_chart_data.columns, pd.MultiIndex):
-                    f_chart_data.columns = f_chart_data.columns.get_level_values(0)
-                    
-                f_chart_data = f_chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-                f_chart_data = f_chart_data[f_chart_data['Volume'] > 0]
-                
-                if not f_chart_data.empty:
-                    today_close = f_chart_data['Close'].iloc[-1]
-                    today_high = f_chart_data['High'].iloc[-1]
-                    tomorrow_trigger = today_high + (today_high * 0.002) 
-                    tomorrow_target_1 = today_close + (today_close * 0.02) 
-                    
-                    fig_future = go.Figure()
-                    fig_future.add_trace(go.Candlestick(
-                        x=f_chart_data.index, open=f_chart_data['Open'], high=f_chart_data['High'],
-                        low=f_chart_data['Low'], close=f_chart_data['Close'], name='Price action'
-                    ))
-                    
-                    fig_future.add_hline(y=tomorrow_trigger, line_dash="dashdot", line_color="#58a6ff", line_width=2.5, 
-                                         annotation_text=f"कल इसके ऊपर खरीदें: ₹{round(tomorrow_trigger, 2)}", annotation_position="top right")
-                    fig_future.add_hline(y=tomorrow_target_1, line_dash="dot", line_color="#00cc66", line_width=2, 
-                                         annotation_text=f"कल का संभावित Target: ₹{round(tomorrow_target_1, 2)}", annotation_position="bottom right")
-                    
-                    fig_future.update_layout(
-                        template="plotly_dark", 
-                        title=f"📈 {top_future_stock} - Tomorrow's Continuation Runway Map",
-                        xaxis_rangeslider_visible=False,
-                        paper_bgcolor='#0d1117',
-                        plot_bgcolor='#161b22'
-                    )
-                    st.plotly_chart(fig_future)
-                
         else:
             st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
 
