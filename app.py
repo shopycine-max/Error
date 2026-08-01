@@ -11,11 +11,15 @@ from email.mime.multipart import MIMEMultipart
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = st.secrets.get("SENDER_EMAIL", "shopycine@gmail.com")
-SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "qldp qufx agal ttbf")  # Secrets recommended
-RECEIVER_EMAIL = "shopycine@gmail.com"
+SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "")  # Add via .streamlit/secrets.toml
+RECEIVER_EMAIL = st.secrets.get("RECEIVER_EMAIL", "shopycine@gmail.com")
 
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
     """Automatic Email Notification Sender with Execution Logic"""
+    if not SENDER_PASSWORD:
+        st.warning("⚠️ Email Password Not Configured in Secrets.")
+        return False
+        
     try:
         subject = f"🚀 [{rank}] 10/10 Ideal Breakout Alert: {symbol}"
         
@@ -47,14 +51,14 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'html'))
 
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
         return True
     except Exception as e:
-        st.error(f"Email Alert Failed: {e}")
+        st.error(f"Email Alert Failed for {symbol}: {e}")
         return False
 
 # --- PAGE CONFIGURATIONS ---
@@ -92,7 +96,7 @@ st.markdown("""
 st.title("Aashiyana Dashboard Pro Max 🚀")
 st.caption("Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated ⚡)")
 
-# --- 🚦 NEW: NIFTY 50 TREND FILTER ENGINE ---
+# --- 🚦 NIFTY 50 TREND FILTER ENGINE ---
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_nifty_market_status():
     """Fetches Nifty 50 (^NSEI) data and calculates EMA-20 Trend Status"""
@@ -118,7 +122,7 @@ def get_nifty_market_status():
                 "nifty_ema20": round(last_ema20, 2),
                 "pct_diff": pct_diff
             }
-    except Exception as e:
+    except Exception:
         pass
     
     return {
@@ -139,7 +143,7 @@ def get_mega_nse_universe():
         if len(tickers) > 1000:
             return sorted(list(set(tickers)))
     except FileNotFoundError:
-        st.sidebar.error("❌ EQUITY_L.csv फ़ाइल नहीं मिली! कृपया इसे अपलोड करें।")
+        st.sidebar.error("❌ EQUITY_L.csv फ़ाइल नहीं मिली! fallback list use ho rahi hai.")
     except Exception as e:
         st.sidebar.error(f"⚠️ Error: {e}")
         
@@ -164,7 +168,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         
         df['Is_Green'] = df['Close'] > df['Open']
         df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
-        df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)  # Fixed Red_Vol bug
+        df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
         
         up_vol_10 = df['Green_Vol'].rolling(10).sum()
         down_vol_10 = df['Red_Vol'].rolling(10).sum()
@@ -191,11 +195,11 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # --- 🛡️ ANTI-FALSE BREAKOUT FILTERS ---
+        # --- ANTI-FALSE BREAKOUT FILTERS ---
         candle_range = df['High'] - df['Low']
         upper_wick = df['High'] - df['Close']
         df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick <= 25% of candle
+        cond_no_wick = df['Wick_Ratio'] <= 0.25 
         
         cond_breakout = df['Close'] > df['High_20_Prev']
 
@@ -231,14 +235,12 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             
             buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
             accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
-            range_20 = df['Range_20_Pct'].iloc[-1]
             
             day_high = df['High'].iloc[-1]
             day_low = df['Low'].iloc[-1]
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
-            # --- 🎯 PROBABILITY RANK & OPENING EXECUTION FORMULA ---
             if close_pos >= 90.0 and buying_surge_pct >= 200.0:
                 exec_rank = "🥇 Rank 1 (Top Winner)"
                 entry_window = "9:15 AM - 9:30 AM"
@@ -360,7 +362,7 @@ def filter_ideal_breakout_stock(df):
         return ideal_df.sort_values(by="Score", ascending=False).reset_index(drop=True)
     return pd.DataFrame()
 
-# --- OPTIMIZED BULK DOWNLOADER ---
+# --- OPTIMIZED BULK DOWNLOADER (SAFE FIX APPLIED) ---
 @st.cache_data(ttl=86400, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 50
@@ -378,9 +380,11 @@ def download_all_market_data(tickers):
             
             for ticker in chunk:
                 try:
+                    # Safe Extraction Logic Fix
                     if isinstance(raw_data.columns, pd.MultiIndex):
                         if ticker in raw_data.columns.get_level_values(0):
-                            t_data = raw_data[ticker].copy()
+                            t_data = raw_data.xs(ticker, axis=1, level=0, drop_level=True).copy()
+                        else: continue
                     else:
                         t_data = raw_data.copy()
                         
@@ -390,7 +394,7 @@ def download_all_market_data(tickers):
                         cached_master[ticker] = t_data
                 except Exception:
                     continue
-            time.sleep(0.2)
+            time.sleep(0.1)
         except Exception:
             continue
         progress_bar.progress((c_idx + 1) / len(ticker_chunks))
@@ -467,7 +471,7 @@ def compute_analytics_on_cached_pool(mode="live"):
     pool = st.session_state.get('master_market_data', {})
     if not pool: return pd.DataFrame()
         
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df, mode, volume_multiplier, rsi_filter, min_turnover, formula_version): ticker 
             for ticker, df in pool.items()
