@@ -11,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = st.secrets.get("SENDER_EMAIL", "shopycine@gmail.com")
-SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "")  # Add via .streamlit/secrets.toml
+SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "qldp qufx agal ttbf")  # Add via .streamlit/secrets.toml
 RECEIVER_EMAIL = st.secrets.get("RECEIVER_EMAIL", "shopycine@gmail.com")
 
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
