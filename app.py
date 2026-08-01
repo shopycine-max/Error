@@ -10,8 +10,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = "shopycine@gmail.com"
-SENDER_PASSWORD = "qldp qufx agal ttbf"  # Generated Google App Password
+SENDER_EMAIL = st.secrets.get("SENDER_EMAIL", "shopycine@gmail.com")
+SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "qldp qufx agal ttbf")  # Secrets recommended
 RECEIVER_EMAIL = "shopycine@gmail.com"
 
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
@@ -72,6 +72,7 @@ if 'sent_email_alerts' not in st.session_state:
 def clear_all_caches():
     download_all_market_data.clear()
     get_mega_nse_universe.clear()
+    get_nifty_market_status.clear()
     if 'master_market_data' in st.session_state:
         del st.session_state['master_market_data']
     st.session_state['sent_email_alerts'] = set()
@@ -89,7 +90,44 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (Execution Priority Rank & 9:15-9:45 Timing Matrix Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated ⚡)")
+
+# --- 🚦 NEW: NIFTY 50 TREND FILTER ENGINE ---
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_nifty_market_status():
+    """Fetches Nifty 50 (^NSEI) data and calculates EMA-20 Trend Status"""
+    try:
+        nifty = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
+        if isinstance(nifty.columns, pd.MultiIndex):
+            nifty.columns = nifty.columns.get_level_values(0)
+        
+        nifty = nifty.dropna(subset=['Close'])
+        if len(nifty) >= 20:
+            nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
+            last_close = float(nifty['Close'].iloc[-1])
+            last_ema20 = float(nifty['EMA_20'].iloc[-1])
+            pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
+            
+            is_bullish = last_close > last_ema20
+            status_text = "🟢 TRADE MODE ACTIVE (High Probability)" if is_bullish else "🔴 AVOID / STRICT FILTER MODE (Bearish Trend)"
+            
+            return {
+                "status": status_text,
+                "is_bullish": is_bullish,
+                "nifty_close": round(last_close, 2),
+                "nifty_ema20": round(last_ema20, 2),
+                "pct_diff": pct_diff
+            }
+    except Exception as e:
+        pass
+    
+    return {
+        "status": "⚠️ UNKNOWN (Data Error)",
+        "is_bullish": True,
+        "nifty_close": 0.0,
+        "nifty_ema20": 0.0,
+        "pct_diff": 0.0
+    }
 
 # --- AUTOMATED NSE TICKER FETCH ENGINE ---
 @st.cache_data(persist="disk", show_spinner=False)
@@ -126,7 +164,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         
         df['Is_Green'] = df['Close'] > df['Open']
         df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
-        df['Red_Vol'] = df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
+        df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)  # Fixed Red_Vol bug
         
         up_vol_10 = df['Green_Vol'].rolling(10).sum()
         down_vol_10 = df['Red_Vol'].rolling(10).sum()
@@ -157,7 +195,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         candle_range = df['High'] - df['Low']
         upper_wick = df['High'] - df['Close']
         df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick must be <= 25% of candle
+        cond_no_wick = df['Wick_Ratio'] <= 0.25  # Upper wick <= 25% of candle
         
         cond_breakout = df['Close'] > df['High_20_Prev']
 
@@ -361,6 +399,18 @@ def download_all_market_data(tickers):
     status_text.empty()
     return cached_master
 
+# --- DISPLAY NIFTY TREND BANNER ---
+nifty_info = get_nifty_market_status()
+
+if nifty_info["is_bullish"]:
+    st.success(f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n"
+               f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | "
+               f"**Strength:** +{nifty_info['pct_diff']}% above EMA. **(Take Fresh Long Trades)**")
+else:
+    st.error(f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n"
+             f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | "
+             f"**Weakness:** {nifty_info['pct_diff']}% below EMA. **(Avoid New Long Positions / High False Breakout Risk)**")
+
 # --- Sidebar Controls ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 
@@ -432,6 +482,9 @@ def compute_analytics_on_cached_pool(mode="live"):
 with tab1:
     st.subheader("⚡ Live Data Collection & Execution Priority Scanning")
     
+    if not nifty_info["is_bullish"]:
+        st.warning("⚠️ **MARKET WARNING:** Nifty 50 index EMA-20 ke niche hai. Is market condition me Breakout trades fail hone ke chances jyada hote hain.")
+
     if 'master_market_data' not in st.session_state:
         st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
     else:
