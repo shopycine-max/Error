@@ -9,10 +9,18 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+# --- SAFE SECRETS HELPER ---
+def safe_get_secret(key, default_val=""):
+    """Safely fetch secrets without crashing if secrets.toml is missing"""
+    try:
+        return st.secrets.get(key, default_val)
+    except Exception:
+        return default_val
+
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = st.secrets.get("SENDER_EMAIL", "shopycine@gmail.com")
-SENDER_PASSWORD = st.secrets.get("SENDER_PASSWORD", "qldp qufx agal ttbf")  # Add via .streamlit/secrets.toml
-RECEIVER_EMAIL = st.secrets.get("RECEIVER_EMAIL", "shopycine@gmail.com")
+SENDER_EMAIL = safe_get_secret("SENDER_EMAIL", "shopycine@gmail.com")
+SENDER_PASSWORD = safe_get_secret("SENDER_PASSWORD", "qldp qufx agal ttbf")
+RECEIVER_EMAIL = safe_get_secret("RECEIVER_EMAIL", "shopycine@gmail.com")
 
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
     """Automatic Email Notification Sender with Execution Logic"""
@@ -53,7 +61,7 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
 
         server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
         server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.login(SENDER_EMAIL, SENDER_PASSWORD.replace(" ", "")) # Handles password with/without spaces
         server.send_message(msg)
         server.quit()
         return True
@@ -71,6 +79,20 @@ if 'bt_results' not in st.session_state:
     st.session_state['bt_results'] = pd.DataFrame()
 if 'sent_email_alerts' not in st.session_state:
     st.session_state['sent_email_alerts'] = set()
+
+# --- HELPER: SAFE MULTIINDEX FLATTENING FOR YFINANCE ---
+def flatten_yfinance_df(df):
+    """Safe MultiIndex flattener for yfinance dataframes"""
+    if df.empty:
+        return df
+    if isinstance(df.columns, pd.MultiIndex):
+        if 'Close' in df.columns.get_level_values(0):
+            df.columns = df.columns.get_level_values(0)
+        elif 'Close' in df.columns.get_level_values(1):
+            df.columns = df.columns.get_level_values(1)
+        else:
+            df.columns = df.columns.get_level_values(0)
+    return df
 
 # --- CUSTOM CACHE CLEAR LOGIC ---
 def clear_all_caches():
@@ -102,8 +124,7 @@ def get_nifty_market_status():
     """Fetches Nifty 50 (^NSEI) data and calculates EMA-20 Trend Status"""
     try:
         nifty = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
-        if isinstance(nifty.columns, pd.MultiIndex):
-            nifty.columns = nifty.columns.get_level_values(0)
+        nifty = flatten_yfinance_df(nifty)
         
         nifty = nifty.dropna(subset=['Close'])
         if len(nifty) >= 20:
@@ -182,7 +203,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # RSI
+        # RSI Calculation
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -197,7 +218,9 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
 
         # --- ANTI-FALSE BREAKOUT FILTERS ---
         candle_range = df['High'] - df['Low']
-        upper_wick = df['High'] - df['Close']
+        real_body_top = df[['Open', 'Close']].max(axis=1)
+        upper_wick = df['High'] - real_body_top
+        
         df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
         cond_no_wick = df['Wick_Ratio'] <= 0.25 
         
@@ -216,28 +239,28 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_no_wick & cond_breakout
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout
         else:
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
 
         ticker_results = []
         
         if mode == "live" and df['Signal'].iloc[-1]:
-            entry = df['Close'].iloc[-1]
-            sl = df['Low_5d'].iloc[-1]
+            entry = float(df['Close'].iloc[-1])
+            sl = float(df['Low_5d'].iloc[-1])
             if sl >= entry or (entry - sl) / entry < 0.005: sl = entry * 0.965  
             risk = entry - sl
             target = entry + (2 * risk) 
             
-            curr_vol = df['Volume'].iloc[-1]
-            avg_vol = df['Vol_SMA20'].iloc[-1]
+            curr_vol = float(df['Volume'].iloc[-1])
+            avg_vol = float(df['Vol_SMA20'].iloc[-1])
             vol_spike = curr_vol / avg_vol if avg_vol > 0 else 0
             
             buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
-            accum_ratio = df['Accum_Ratio_10d'].iloc[-1]
+            accum_ratio = float(df['Accum_Ratio_10d'].iloc[-1])
             
-            day_high = df['High'].iloc[-1]
-            day_low = df['Low'].iloc[-1]
+            day_high = float(df['High'].iloc[-1])
+            day_low = float(df['Low'].iloc[-1])
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
@@ -265,7 +288,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             else:
                 alert_type = "✅ Normal Signal"
 
-            total_score = round(df['RSI'].iloc[-1] + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2) + bonus_score, 2)
+            total_score = round(float(df['RSI'].iloc[-1]) + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2) + bonus_score, 2)
 
             return [{
                 "Symbol": ticker.replace(".NS", ""),
@@ -276,8 +299,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 "Entry Price (₹)": round(entry, 2),
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
-                "Day Change (%)": round(df['Pct_Change'].iloc[-1], 2),
-                "RSI": round(df['RSI'].iloc[-1], 2),
+                "Day Change (%)": round(float(df['Pct_Change'].iloc[-1]), 2),
+                "RSI": round(float(df['RSI'].iloc[-1]), 2),
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Accum Ratio (10d)": round(accum_ratio, 2),
                 "Continuation Score (%)": round(close_pos, 1),
@@ -291,8 +314,8 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
             
             for idx in triggers.index:
                 row = df.loc[idx]
-                b_entry = row['Close']
-                b_sl = row['Low_5d']
+                b_entry = float(row['Close'])
+                b_sl = float(row['Low_5d'])
                 
                 if b_sl >= b_entry or (b_entry - b_sl) / b_entry < 0.005: b_sl = b_entry * 0.965
                 b_risk = b_entry - b_sl
@@ -301,7 +324,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                 post_df = df.loc[idx:].iloc[1:21] 
                 outcome = "Live/Pending ⏳"
                 exit_date = "Running..."
-                exit_price = df['Close'].iloc[-1]
+                exit_price = float(df['Close'].iloc[-1])
                 
                 for f_date, f_row in post_df.iterrows():
                     hit_sl = f_row['Low'] <= b_sl
@@ -324,7 +347,7 @@ def analyze_single_ticker(ticker, df, mode, volume_multiplier, rsi_filter, turno
                         break
                 
                 if outcome == "Live/Pending ⏳" and len(post_df) == 20:
-                    exit_price = post_df['Close'].iloc[-1]
+                    exit_price = float(post_df['Close'].iloc[-1])
                     exit_date = post_df.index[-1].strftime('%Y-%m-%d')
                     outcome = "Timed Out ⏳"
                 
@@ -362,10 +385,10 @@ def filter_ideal_breakout_stock(df):
         return ideal_df.sort_values(by="Score", ascending=False).reset_index(drop=True)
     return pd.DataFrame()
 
-# --- OPTIMIZED BULK DOWNLOADER (SAFE FIX APPLIED) ---
-@st.cache_data(ttl=86400, persist="disk", show_spinner=False)
+# --- OPTIMIZED BULK DOWNLOADER (SAFE RATE-LIMIT & TTL FIX) ---
+@st.cache_data(ttl=900, persist="disk", show_spinner=False)
 def download_all_market_data(tickers):
-    chunk_size = 50
+    chunk_size = 25  # Chunk size to avoid Yahoo Finance IP Blocks
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     
     cached_master = {}
@@ -375,15 +398,16 @@ def download_all_market_data(tickers):
     for c_idx, chunk in enumerate(ticker_chunks):
         status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... (Fetched {len(cached_master)} stocks)")
         try:
-            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15)
+            raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=20)
             if raw_data.empty: continue
             
             for ticker in chunk:
                 try:
-                    # Safe Extraction Logic Fix
                     if isinstance(raw_data.columns, pd.MultiIndex):
                         if ticker in raw_data.columns.get_level_values(0):
                             t_data = raw_data.xs(ticker, axis=1, level=0, drop_level=True).copy()
+                        elif ticker in raw_data.columns.get_level_values(1):
+                            t_data = raw_data.xs(ticker, axis=1, level=1, drop_level=True).copy()
                         else: continue
                     else:
                         t_data = raw_data.copy()
@@ -394,9 +418,13 @@ def download_all_market_data(tickers):
                         cached_master[ticker] = t_data
                 except Exception:
                     continue
-            time.sleep(0.1)
+            
+            time.sleep(0.5) # Anti-blocking rate limit
+            
         except Exception:
+            time.sleep(1.0)
             continue
+            
         progress_bar.progress((c_idx + 1) / len(ticker_chunks))
         
     progress_bar.empty()
@@ -500,7 +528,6 @@ with tab1:
         
         if not res_df.empty:
             res_df = res_df.sort_values(by="Score", ascending=False)
-            
             ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
             if not ideal_matches_df.empty:
@@ -536,11 +563,9 @@ with tab1:
                 
                 st.markdown(f"### 👑 Chart View for #1 Ultimate Stock: **{top_stock}**")
                 chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+                chart_data = flatten_yfinance_df(chart_data)
                 
                 if not chart_data.empty:
-                    if isinstance(chart_data.columns, pd.MultiIndex):
-                        chart_data.columns = chart_data.columns.get_level_values(0)
-                    
                     chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
                     chart_data = chart_data[chart_data['Volume'] > 0]
                     
