@@ -8,9 +8,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- PAGE CONFIGURATION (Must be at the top) ---
-st.set_page_config(page_title="Aashiyana Dashboard Pro Max 🚀", page_icon="📈", layout="wide")
-
 # --- SAFE SECRETS HELPER ---
 def safe_get_secret(key, default_val=""):
     """Safely fetch secrets without crashing if secrets.toml is missing"""
@@ -71,6 +68,9 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
     except Exception as e:
         st.error(f"Email Alert Failed for {symbol}: {e}")
         return False
+
+# --- PAGE CONFIGURATIONS ---
+st.set_page_config(page_title="Aashiyana Dashboard Pro Max 🚀", page_icon="📈", layout="wide")
 
 # --- SAFELY INITIALIZE SESSION STATE ---
 if 'live_results' not in st.session_state: 
@@ -162,7 +162,7 @@ def get_mega_nse_universe():
         if len(tickers) > 1000:
             return sorted(list(set(tickers)))
     except FileNotFoundError:
-        st.sidebar.error("❌ EQUITY_L.csv फ़ाइल नहीं मिली! Fallback list use ho rahi hai.")
+        st.sidebar.error("❌ EQUITY_L.csv फ़ाइल नहीं मिली! fallback list use ho rahi hai.")
     except Exception as e:
         st.sidebar.error(f"⚠️ Error: {e}")
         
@@ -384,7 +384,7 @@ else:
              f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | "
              f"**Weakness:** {nifty_info['pct_diff']}% below EMA. **(Avoid New Long Positions / High False Breakout Risk)**")
 
-# --- SIDEBAR CONTROLS ---
+# --- Sidebar Controls ---
 st.sidebar.header("⚙️ Pro Scanner Controls")
 
 formula_version = st.sidebar.selectbox(
@@ -451,7 +451,7 @@ def compute_analytics_on_cached_pool():
     return pd.DataFrame(results)
 
 
-# --- MAIN VIEW: LIVE SCANNING VIEW ---
+# --- MAIN VIEW: Live Scanning View ---
 st.subheader("⚡ Live Data Collection & Execution Priority Scanning")
 
 if not nifty_info["is_bullish"]:
