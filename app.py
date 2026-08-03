@@ -23,20 +23,20 @@ SENDER_PASSWORD = safe_get_secret("SENDER_PASSWORD", "qldp qufx agal ttbf")
 RECEIVER_EMAIL = safe_get_secret("RECEIVER_EMAIL", "shopycine@gmail.com")
 
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
-    """Automatic Email Notification Sender with Execution Logic"""
+    """Automatic Email Notification Sender for Rank 2 Stocks"""
     if not SENDER_PASSWORD:
         st.warning("⚠️ Email Password Not Configured in Secrets.")
         return False
         
     try:
-        subject = f"🚀 [{rank}] 10/10 Ideal Breakout Alert: {symbol}"
+        subject = f"🚀 [{rank}] High Priority Alert: {symbol}"
         
         body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 20px;">
             <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
-                <h2 style="color: #28a745; margin-top: 0;">🚀 10/10 Ideal Breakout Match Found!</h2>
-                <p>Stock <b>{symbol}</b> ne sabhi Anti-False Breakout conditions 100% complete kar li hain.</p>
+                <h2 style="color: #28a745; margin-top: 0;">🚀 Rank 2 Breakout Alert Found!</h2>
+                <p>Stock <b>{symbol}</b> ne Rank 2 Breakout conditions complete kar li hain.</p>
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Stock Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
                 <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
@@ -528,28 +528,30 @@ with tab1:
         
         if not res_df.empty:
             res_df = res_df.sort_values(by="Score", ascending=False)
+            
+            # --- AUTOMATIC EMAIL TRIGGER (STRICTLY FOR RANK 2 ONLY) ---
+            rank2_df = res_df[res_df['Execution Rank'].str.contains("Rank 2", na=False)]
+            for _, row in rank2_df.iterrows():
+                stock_symbol = row["Symbol"]
+                if stock_symbol not in st.session_state['sent_email_alerts']:
+                    sent_status = send_email_alert(
+                        symbol=stock_symbol,
+                        entry=row["Entry Price (₹)"],
+                        sl=row["Stop Loss (₹)"],
+                        target=row["Target Price (₹)"],
+                        score=row["Score"],
+                        rank=row["Execution Rank"],
+                        window=row["Entry Window"],
+                        condition=row["Execution Condition"]
+                    )
+                    if sent_status:
+                        st.session_state['sent_email_alerts'].add(stock_symbol)
+                        st.toast(f"📧 Rank 2 Email alert sent for {stock_symbol}!", icon="📩")
+
             ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
             if not ideal_matches_df.empty:
                 st.success(f"🎉 **10/10 MATCH FOUND!** {len(ideal_matches_df)} स्टॉक आपकी सभी शर्तों पर 100% खरे उतरे हैं।")
-                
-                # --- AUTOMATIC EMAIL TRIGGER ---
-                for _, row in ideal_matches_df.iterrows():
-                    stock_symbol = row["Symbol"]
-                    if stock_symbol not in st.session_state['sent_email_alerts']:
-                        sent_status = send_email_alert(
-                            symbol=stock_symbol,
-                            entry=row["Entry Price (₹)"],
-                            sl=row["Stop Loss (₹)"],
-                            target=row["Target Price (₹)"],
-                            score=row["Score"],
-                            rank=row["Execution Rank"],
-                            window=row["Entry Window"],
-                            condition=row["Execution Condition"]
-                        )
-                        if sent_status:
-                            st.session_state['sent_email_alerts'].add(stock_symbol)
-                            st.toast(f"📧 Email alert sent for {stock_symbol}!", icon="📩")
 
                 box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>'
                 for idx, row in ideal_matches_df.iterrows():
