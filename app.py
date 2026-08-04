@@ -327,7 +327,8 @@ def filter_ideal_breakout_stock(df):
     return pd.DataFrame()
 
 # --- OPTIMIZED BULK DOWNLOADER (SAFE RATE-LIMIT & TTL FIX) ---
-@st.cache_data(ttl=900, persist="disk", show_spinner=False)
+# FIX 1: Removed persist="disk" to stop stale data loading
+@st.cache_data(ttl=900, show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 25
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
@@ -422,17 +423,20 @@ else:
 
 st.sidebar.write(f"Total Active Stocks: **{len(all_tickers)}**")
 
+# FIX 2: Enhanced sidebar data refresh logic
 if 'master_market_data' not in st.session_state:
     st.sidebar.warning("⚠️ Data is not loaded yet.")
-    if st.sidebar.button("📥 Fetch Market Data To Start"):
-        with st.spinner(f"Downloading {len(all_tickers)} stocks data..."):
-            st.session_state['master_market_data'] = download_all_market_data(all_tickers)
-            st.session_state['live_results'] = pd.DataFrame() 
-            st.sidebar.success("🏁 Data Loaded!")
-            st.rerun()
 else:
     st.sidebar.success(f"✅ Data Loaded ({len(st.session_state['master_market_data'])} stocks)")
 
+# This button is always visible so you can refresh data anytime
+if st.sidebar.button("📥 Fetch / Refresh Market Data"):
+    with st.spinner(f"Downloading fresh data for {len(all_tickers)} stocks..."):
+        download_all_market_data.clear() # Force clear the old cache
+        st.session_state['master_market_data'] = download_all_market_data(all_tickers)
+        st.session_state['live_results'] = pd.DataFrame() 
+        st.sidebar.success("🏁 Fresh Data Loaded!")
+        st.rerun()
 
 def compute_analytics_on_cached_pool():
     results = []
@@ -450,7 +454,6 @@ def compute_analytics_on_cached_pool():
             
     return pd.DataFrame(results)
 
-
 # --- MAIN VIEW: Live Scanning View ---
 st.subheader("⚡ Live Data Collection & Execution Priority Scanning")
 
@@ -458,7 +461,7 @@ if not nifty_info["is_bullish"]:
     st.warning("⚠️ **MARKET WARNING:** Nifty 50 index EMA-20 ke niche hai. Is market condition me Breakout trades fail hone ke chances jyada hote hain.")
 
 if 'master_market_data' not in st.session_state:
-    st.info("👈 Please click 'Fetch Market Data To Start' from the sidebar first to see results.")
+    st.info("👈 Please click 'Fetch / Refresh Market Data' from the sidebar first to see results.")
 else:
     if st.button("🚀 Run Scanner", key="live_btn"):
         with st.spinner("Searching for real high-probability breakout setups..."):
