@@ -114,7 +114,7 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (Pivot R1-R3 Breakout, NIFTY 50 Trend Filter & Execution Rank Integrated ⚡)")
 
 # --- 🚦 NIFTY 50 TREND FILTER ENGINE ---
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -199,6 +199,19 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
+
+        # --- 🎯 CLASSIC PIVOT POINTS CALCULATION (R1, R2, R3) ---
+        prev_high = df['High'].shift(1)
+        prev_low = df['Low'].shift(1)
+        prev_close = df['Close'].shift(1)
+        
+        pivot = (prev_high + prev_low + prev_close) / 3.0
+        r1 = (2 * pivot) - prev_low
+        r2 = pivot + (prev_high - prev_low)
+        r3 = prev_high + 2 * (pivot - prev_low)
+
+        # R1, R2, aur R3 teeno ko cross karne ki condition (Close > R3 automatically means Close > R2 & R1)
+        cond_pivot_r3 = df['Close'] > r3
         
         # RSI Calculation
         delta = df['Close'].diff()
@@ -236,9 +249,9 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout & cond_pivot_r3
         else:
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout & cond_pivot_r3
         
         # Check Signal on last candle with safety checks
         if not df['Signal'].empty and bool(df['Signal'].iloc[-1]) and pd.notna(df['Close'].iloc[-1]):
@@ -295,6 +308,7 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
                 "Execution Condition": exec_condition,
                 "Alert": alert_type,
                 "Entry Price (₹)": round(entry, 2),
+                "R3 Level (₹)": round(float(r3.iloc[-1]), 2),
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
                 "Day Change (%)": round(float(df['Pct_Change'].iloc[-1]), 2),
@@ -326,8 +340,7 @@ def filter_ideal_breakout_stock(df):
         return ideal_df.sort_values(by="Score", ascending=False).reset_index(drop=True)
     return pd.DataFrame()
 
-# --- OPTIMIZED BULK DOWNLOADER (SAFE RATE-LIMIT & TTL FIX) ---
-# FIX 1: Removed persist="disk" to stop stale data loading
+# --- OPTIMIZED BULK DOWNLOADER ---
 @st.cache_data(ttl=900, show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 25
@@ -423,16 +436,14 @@ else:
 
 st.sidebar.write(f"Total Active Stocks: **{len(all_tickers)}**")
 
-# FIX 2: Enhanced sidebar data refresh logic
 if 'master_market_data' not in st.session_state:
     st.sidebar.warning("⚠️ Data is not loaded yet.")
 else:
     st.sidebar.success(f"✅ Data Loaded ({len(st.session_state['master_market_data'])} stocks)")
 
-# This button is always visible so you can refresh data anytime
 if st.sidebar.button("📥 Fetch / Refresh Market Data"):
     with st.spinner(f"Downloading fresh data for {len(all_tickers)} stocks..."):
-        download_all_market_data.clear() # Force clear the old cache
+        download_all_market_data.clear()
         st.session_state['master_market_data'] = download_all_market_data(all_tickers)
         st.session_state['live_results'] = pd.DataFrame() 
         st.sidebar.success("🏁 Fresh Data Loaded!")
@@ -499,7 +510,7 @@ else:
             box_html = f'<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Ideal Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>'
             for idx, row in ideal_matches_df.iterrows():
                 rank = idx + 1
-                box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> ({row["Execution Rank"]})</h3><p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {row["Entry Window"]} | ⚡ Execution Rule: {row["Execution Condition"]}</p><p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {row["Score"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
+                box_html += f'<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u> ({row["Execution Rank"]})</h3><p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {row["Entry Window"]} | ⚡ Execution Rule: {row["Execution Condition"]}</p><p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {row["Score"]} | <b>Continuation Score:</b> {row["Continuation Score (%)"]}% | <b>Surge:</b> {row["Massive Buying Surge (%)"]}% | <b>RSI:</b> {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price (₹)"]} (Crossed R3 ₹{row["R3 Level (₹)"]}) | SL: ₹{row["Stop Loss (₹)"]} | Target: ₹{row["Target Price (₹)"]}</p></div>'
             box_html += '</div>'
             st.markdown(box_html, unsafe_allow_html=True)
             
@@ -523,7 +534,9 @@ else:
                     
                     live_sl = top_stock_row['Stop Loss (₹)']
                     live_tgt = top_stock_row['Target Price (₹)']
+                    live_r3 = top_stock_row['R3 Level (₹)']
                     
+                    fig.add_hline(y=live_r3, line_dash="dash", line_color="yellow", line_width=1.5, annotation_text=f"R3 Resistance: ₹{live_r3}", annotation_position="top right")
                     fig.add_hline(y=live_sl, line_dash="dash", line_color="red", line_width=2, annotation_text=f"SL: ₹{live_sl}", annotation_position="bottom left")
                     fig.add_hline(y=live_tgt, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Target: ₹{live_tgt}", annotation_position="top left")
                     
@@ -531,7 +544,7 @@ else:
                     st.plotly_chart(fig)
 
         else:
-            st.markdown('<div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">आज Anti-False Breakout की सभी शर्तों पर 100% खरा उतरने वाला कोई Stock नहीं मिला है।</p></div>', unsafe_allow_html=True)
+            st.markdown('<div style="background-color: #161b22; border: 2px solid #ff4d4d; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Breakout Stock Found</h2><p style="color: #c9d1d9; font-size: 15px; margin-top: 8px; margin-bottom: 0px;">आज Anti-False Breakout aur R1, R2, R3 Breakout की सभी शर्तों पर 100% खरा उतरने वाला कोई Stock नहीं मिला है।</p></div>', unsafe_allow_html=True)
 
         def highlight_buying(row):
             alert = str(row.get('Alert', ''))
