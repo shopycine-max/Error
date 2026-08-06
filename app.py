@@ -1,4 +1,4 @@
-Import streamlit as st
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
@@ -240,24 +240,27 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         else:
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
         
-        # Check Signal on last candle with safety checks
-        if not df['Signal'].empty and bool(df['Signal'].iloc[-1]) and pd.notna(df['Close'].iloc[-1]):
-            entry = float(df['Close'].iloc[-1])
-            sl = float(df['Low_5d'].iloc[-1]) if pd.notna(df['Low_5d'].iloc[-1]) else entry * 0.95
+        # Check Signal on last candle safely
+        is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
+        last_close_val = df['Close'].values[-1] if not df['Close'].empty else None
+
+        if is_signal and pd.notna(last_close_val):
+            entry = float(last_close_val)
+            sl = float(df['Low_5d'].values[-1]) if pd.notna(df['Low_5d'].values[-1]) else entry * 0.95
             if sl >= entry or (entry - sl) / entry < 0.005: 
                 sl = entry * 0.965  
             risk = entry - sl
             target = entry + (2 * risk) 
             
-            curr_vol = float(df['Volume'].iloc[-1])
-            avg_vol = float(df['Vol_SMA20'].iloc[-1])
+            curr_vol = float(df['Volume'].values[-1])
+            avg_vol = float(df['Vol_SMA20'].values[-1])
             vol_spike = curr_vol / avg_vol if avg_vol > 0 else 0
             
             buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
-            accum_ratio = float(df['Accum_Ratio_10d'].iloc[-1]) if pd.notna(df['Accum_Ratio_10d'].iloc[-1]) else 1.0
+            accum_ratio = float(df['Accum_Ratio_10d'].values[-1]) if pd.notna(df['Accum_Ratio_10d'].values[-1]) else 1.0
             
-            day_high = float(df['High'].iloc[-1])
-            day_low = float(df['Low'].iloc[-1])
+            day_high = float(df['High'].values[-1])
+            day_low = float(df['Low'].values[-1])
             day_range = day_high - day_low
             close_pos = ((entry - day_low) / day_range * 100) if day_range > 0 else 50
             
@@ -285,7 +288,7 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
             else:
                 alert_type = "✅ Normal Signal"
 
-            rsi_val = float(df['RSI'].iloc[-1]) if pd.notna(df['RSI'].iloc[-1]) else 50.0
+            rsi_val = float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
             total_score = round(rsi_val + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2) + bonus_score, 2)
 
             return [{
@@ -297,7 +300,7 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
                 "Entry Price (₹)": round(entry, 2),
                 "Stop Loss (₹)": round(sl, 2),
                 "Target Price (₹)": round(target, 2),
-                "Day Change (%)": round(float(df['Pct_Change'].iloc[-1]), 2),
+                "Day Change (%)": round(float(df['Pct_Change'].values[-1]), 2),
                 "RSI": round(rsi_val, 2),
                 "Vol Spike (x)": round(vol_spike, 1),
                 "Accum Ratio (10d)": round(accum_ratio, 2),
@@ -326,8 +329,7 @@ def filter_ideal_breakout_stock(df):
         return ideal_df.sort_values(by="Score", ascending=False).reset_index(drop=True)
     return pd.DataFrame()
 
-# --- OPTIMIZED BULK DOWNLOADER (SAFE RATE-LIMIT & TTL FIX) ---
-# FIX 1: Removed persist="disk" to stop stale data loading
+# --- OPTIMIZED BULK DOWNLOADER ---
 @st.cache_data(ttl=900, show_spinner=False)
 def download_all_market_data(tickers):
     chunk_size = 25
@@ -423,16 +425,14 @@ else:
 
 st.sidebar.write(f"Total Active Stocks: **{len(all_tickers)}**")
 
-# FIX 2: Enhanced sidebar data refresh logic
 if 'master_market_data' not in st.session_state:
     st.sidebar.warning("⚠️ Data is not loaded yet.")
 else:
     st.sidebar.success(f"✅ Data Loaded ({len(st.session_state['master_market_data'])} stocks)")
 
-# This button is always visible so you can refresh data anytime
 if st.sidebar.button("📥 Fetch / Refresh Market Data"):
     with st.spinner(f"Downloading fresh data for {len(all_tickers)} stocks..."):
-        download_all_market_data.clear() # Force clear the old cache
+        download_all_market_data.clear()
         st.session_state['master_market_data'] = download_all_market_data(all_tickers)
         st.session_state['live_results'] = pd.DataFrame() 
         st.sidebar.success("🏁 Fresh Data Loaded!")
@@ -549,4 +549,4 @@ else:
         st.dataframe(styled_df, hide_index=True)
 
     else:
-        st.caption("No breakout setups currently active. Click the run button above to apply modified filters")
+        st.caption("No breakout setups currently active. Click the run button above to apply modified filters.")
