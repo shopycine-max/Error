@@ -114,22 +114,25 @@ st.markdown("""
 
 # Main Title
 st.title("Aashiyana Dashboard Pro Max 🚀")
-st.caption("Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated ⚡)")
+st.caption("Engine Upgraded ⚙️ (ATR Expansion, VCP Tightness & Relative Strength Integrated ⚡)")
 
-# --- 🚦 NIFTY 50 TREND FILTER ENGINE ---
+# --- 🚦 NIFTY 50 TREND & RETURN FETCHER ---
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_nifty_market_status():
-    """Fetches Nifty 50 (^NSEI) data and calculates EMA-20 Trend Status"""
+    """Fetches Nifty 50 (^NSEI) data, calculates EMA-20 Status & 20-Day Return"""
     try:
         nifty = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
         nifty = flatten_yfinance_df(nifty)
-        
         nifty = nifty.dropna(subset=['Close'])
+        
         if len(nifty) >= 20:
             nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
             last_close = float(nifty['Close'].iloc[-1])
             last_ema20 = float(nifty['EMA_20'].iloc[-1])
             pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
+            
+            # Nifty 20-Day Return for Relative Strength Comparison
+            nifty_20d_return = float(((last_close - nifty['Close'].iloc[-20]) / nifty['Close'].iloc[-20]) * 100)
             
             is_bullish = last_close > last_ema20
             status_text = "🟢 TRADE MODE ACTIVE (High Probability)" if is_bullish else "🔴 AVOID / STRICT FILTER MODE (Bearish Trend)"
@@ -139,7 +142,8 @@ def get_nifty_market_status():
                 "is_bullish": is_bullish,
                 "nifty_close": round(last_close, 2),
                 "nifty_ema20": round(last_ema20, 2),
-                "pct_diff": pct_diff
+                "pct_diff": pct_diff,
+                "nifty_20d_return": nifty_20d_return
             }
     except Exception:
         pass
@@ -149,7 +153,8 @@ def get_nifty_market_status():
         "is_bullish": True,
         "nifty_close": 0.0,
         "nifty_ema20": 0.0,
-        "pct_diff": 0.0
+        "pct_diff": 0.0,
+        "nifty_20d_return": 0.0
     }
 
 # --- AUTOMATED NSE TICKER FETCH ENGINE ---
@@ -169,8 +174,8 @@ def get_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     return fallback
 
-# --- CORE ANALYTICS PROCESSOR ---
-def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_limit, formula_version):
+# --- ENHANCED CORE ANALYTICS PROCESSOR ---
+def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_limit, formula_version, nifty_20d_return=0.0):
     try:
         if len(df) < 50: return None 
 
@@ -179,12 +184,37 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         df = df[df['Volume'] > 0]
         if len(df) < 50: return None 
         
-        # Calculations
+        # 1. Standard Calculations
         df['Pct_Change'] = df['Close'].pct_change() * 100
         df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
         df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
         df['Turnover'] = df['Close'] * df['Volume']
         
+        # 2. ATR (Average True Range) Calculation for Range Expansion
+        high_low = df['High'] - df['Low']
+        high_close = (df['High'] - df['Close'].shift(1)).abs()
+        low_close = (df['Low'] - df['Close'].shift(1)).abs()
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        df['ATR_14'] = tr.rolling(14).mean()
+        
+        # Range Expansion Filter: Breakout candle size must be > 1.3x ATR
+        df['Candle_Range'] = df['High'] - df['Low']
+        cond_atr_expansion = df['Candle_Range'] > (1.3 * df['ATR_14'])
+        
+        # 3. Consolidation Tightness (Price Squeeze before Breakout)
+        prior_5d_high = df['High'].shift(1).rolling(5).max()
+        prior_5d_low = df['Low'].shift(1).rolling(5).min()
+        prior_tightness = ((prior_5d_high - prior_5d_low) / df['Close'].shift(1)) * 100
+        cond_tight_consolidation = prior_tightness <= 7.0  # Tight 5-day range (<= 7%)
+        
+        # 4. Volume Dry-Up (Volume was low before today's explosion)
+        prior_3d_vol_avg = df['Volume'].shift(1).rolling(3).mean()
+        cond_vol_dryup = prior_3d_vol_avg <= (df['Vol_SMA20'].shift(1) * 1.2)
+        
+        # 5. Relative Strength vs Nifty 50
+        cond_relative_strength = df['Return_20d'] > nifty_20d_return
+
+        # Accumulation & Moving Averages
         df['Is_Green'] = df['Close'] > df['Open']
         df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
         df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
@@ -194,8 +224,6 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
         
         df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
-        df['Low_20_Prev'] = df['Low'].shift(1).rolling(20).min()
-        
         df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -213,18 +241,17 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
         df['Low_5d'] = df['Low'].rolling(window=5).min()
 
-        # --- ANTI-FALSE BREAKOUT FILTERS ---
+        # Upper Wick Filter (No selling pressure from top)
         candle_range = df['High'] - df['Low']
         real_body_top = df[['Open', 'Close']].max(axis=1)
         upper_wick = df['High'] - real_body_top
-        
         df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
         cond_no_wick = df['Wick_Ratio'] <= 0.25 
         
         cond_breakout = df['Close'] > df['High_20_Prev']
 
         cond1 = df['Close'] >= 20 
-        cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0) 
+        cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 12.0) 
         cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier) 
         cond4 = df['Return_20d'] >= 2.0 
         cond5 = df['Turnover'] > (turnover_limit * 10000000) 
@@ -232,13 +259,16 @@ def analyze_single_ticker(ticker, df, volume_multiplier, rsi_filter, turnover_li
         cond9 = df['Close'] > df['EMA_20'] 
         cond_accum = df['Accum_Ratio_10d'] >= 1.5
         
+        # Momentum Filters Bundle
+        momentum_filters = cond_atr_expansion & cond_tight_consolidation & cond_vol_dryup & cond_relative_strength
+        
         if formula_version == "Version 1 (With 500-day High & Strict Filters)":
             cond7 = df['Close'] >= df['Max_500_High_1d_Ago'] 
             cond10 = df['EMA_50'] > df['EMA_200']  
             cond12 = df['Close'] <= (df['EMA_20'] * 1.15)  
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout & momentum_filters
         else:
-            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
+            df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout & momentum_filters
         
         # Check Signal on last candle safely
         is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
@@ -442,10 +472,12 @@ def compute_analytics_on_cached_pool():
     results = []
     pool = st.session_state.get('master_market_data', {})
     if not pool: return pd.DataFrame()
+    
+    nifty_return = nifty_info.get("nifty_20d_return", 0.0)
         
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, volume_multiplier, rsi_filter, min_turnover, formula_version): ticker 
+            executor.submit(analyze_single_ticker, ticker, df, volume_multiplier, rsi_filter, min_turnover, formula_version, nifty_return): ticker 
             for ticker, df in pool.items()
         }
         for future in as_completed(futures):
