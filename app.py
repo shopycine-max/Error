@@ -447,7 +447,7 @@ def download_market_data_safe(
 ):
   """
   FIXED YF RATE LIMIT ERROR:
-  Reduced chunk_size to 20, threads=False, lowered Max Workers and added delay
+  Reduced chunk_size to 40, threads=False, lowered Max Workers and added delay
   to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
   """
   cached_master = {}
