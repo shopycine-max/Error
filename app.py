@@ -479,10 +479,10 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# SAFE RATE-LIMITED BATCH DOWNLOADER
+# SAFE & BALANCED DOWNLOADER (Fast + No Rate Limit + Accurately Calculates EMA 200)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='1y', interval='1d', chunk_size=15, sleep_sec=1.5
+    tickers, period='1y', interval='1d', chunk_size=100, sleep_sec=0.5
 ):
   cached_master = {}
   ticker_chunks = [
@@ -494,12 +494,12 @@ def download_market_data_safe(
       try:
         raw_data = yf.download(
             tickers=chunk,
-            period=period,
+            period=period,  # 1y kept so EMA 200 works accurately
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=False,
-            timeout=20,
+            threads=False,  # Single thread to avoid Yahoo IP Ban
+            timeout=15,
             session=session,
         )
         if raw_data.empty:
@@ -534,7 +534,7 @@ def download_market_data_safe(
         if 'Rate' in str(e) or '429' in str(e):
           time.sleep(3 * (attempt + 1))
         else:
-          time.sleep(1)
+          time.sleep(0.5)
 
     time.sleep(sleep_sec)
 
@@ -556,7 +556,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='1y', interval='1d', chunk_size=15, sleep_sec=1.5
+      tickers, period='1y', interval='1d', chunk_size=100, sleep_sec=0.5
   )
 
   log_msg(
@@ -637,9 +637,10 @@ def run_streamlit_app():
   def cached_universe():
     return fetch_mega_nse_universe()
 
+  # STREAMLIT CACHED DOWNLOADER
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
-    chunk_size = 15
+    chunk_size = 100
     ticker_chunks = [
         tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
     ]
@@ -649,12 +650,12 @@ def run_streamlit_app():
 
     for c_idx, chunk in enumerate(ticker_chunks):
       status_text.text(
-          f'⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo'
-          f' Finance... ({len(cached_master)} loaded)'
+          f'⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)}'
+          f' ({len(cached_master)} loaded)...'
       )
 
       batch_res = download_market_data_safe(
-          chunk, period='2y', interval='1d', chunk_size=15, sleep_sec=1.0
+          chunk, period='1y', interval='1d', chunk_size=100, sleep_sec=0.5
       )
       cached_master.update(batch_res)
 
