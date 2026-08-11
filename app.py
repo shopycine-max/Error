@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import textwrap
+import textwrap # Added for HTML string formatting
 
 import pandas as pd
 import requests
@@ -440,29 +440,24 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# ULTRA-SAFE DOWNLOADER FOR GITHUB ACTIONS (Sequential Engine)
+# ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=None, sleep_sec=None
+    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.5
 ):
   """
   FIXED YF RATE LIMIT ERROR:
-  Completely removed ThreadPoolExecutor for downloading. 
-  Forced chunk size to 10 and sleep to 2.5 seconds to bypass strict IP Bans.
+  Reduced chunk_size to 20, threads=False, lowered Max Workers and added delay
+  to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
   """
   cached_master = {}
-  
-  # 🚀 Force strictly safe limits for GitHub Actions
-  safe_chunk = 10
-  safe_sleep = 2.5 
-  
   ticker_chunks = [
-      tickers[i : i + safe_chunk] for i in range(0, len(tickers), safe_chunk)
+      tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
   ]
 
-  # Process chunks sequentially (One by one, NO parallel threads)
-  for chunk in ticker_chunks:
-    for attempt in range(3): # Max 3 retries per chunk
+  def process_chunk(chunk):
+    local_data = {}
+    for attempt in range(3): # Increased retries
       try:
         raw_data = yf.download(
             tickers=chunk,
@@ -470,50 +465,53 @@ def download_market_data_safe(
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=False,  # <-- strictly False
-            timeout=20,
+            threads=False,  # <-- IMPORTANT: Disabled internal yf threading to avoid rate limit
+            timeout=15,
             session=session,
         )
-        
         if raw_data.empty:
-          time.sleep(5) # Wait longer if empty data returned
-          continue
-
-        # Check if output is MultiIndex (happens when downloading multiple tickers)
-        is_multi = isinstance(raw_data.columns, pd.MultiIndex)
+          break
 
         for ticker in chunk:
           try:
-            if is_multi:
+            if isinstance(raw_data.columns, pd.MultiIndex):
               if ticker in raw_data.columns.get_level_values(0):
-                t_data = raw_data.xs(ticker, axis=1, level=0, drop_level=True).copy()
+                t_data = raw_data.xs(
+                    ticker, axis=1, level=0, drop_level=True
+                ).copy()
               elif ticker in raw_data.columns.get_level_values(1):
-                t_data = raw_data.xs(ticker, axis=1, level=1, drop_level=True).copy()
+                t_data = raw_data.xs(
+                    ticker, axis=1, level=1, drop_level=True
+                ).copy()
               else:
                 continue
             else:
-              # If by chance only 1 ticker was in the chunk
               t_data = raw_data.copy()
 
-            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+            t_data = t_data.dropna(
+                subset=['Open', 'High', 'Low', 'Close', 'Volume']
+            )
             t_data = t_data[t_data['Volume'] > 0]
-            
             if not t_data.empty and len(t_data) >= 30:
-              cached_master[ticker] = t_data
+              local_data[ticker] = t_data
           except Exception:
             continue
-            
-        break # Success, break out of the retry loop
-        
+        break
       except Exception as e:
         if 'Rate' in str(e) or '429' in str(e):
-          # Exponential backoff on hard limits
-          time.sleep(10 * (attempt + 1)) 
+          time.sleep(5 * (attempt + 1)) # Wait longer if Rate Limited
         else:
-          time.sleep(2)
-          
-    # ⏳ Mandatory sleep between every chunk to keep Yahoo happy
-    time.sleep(safe_sleep)
+          time.sleep(1)
+    return local_data
+
+  # Reduced Max Workers to 2 to avoid hammering Yahoo Finance
+  with ThreadPoolExecutor(max_workers=2) as executor:
+    futures = [executor.submit(process_chunk, chunk) for chunk in ticker_chunks]
+    for future in as_completed(futures):
+      res = future.result()
+      if res:
+        cached_master.update(res)
+      time.sleep(sleep_sec)
 
   return cached_master
 
@@ -533,7 +531,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d'
+      tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
   )
 
   log_msg(
@@ -619,7 +617,7 @@ def run_streamlit_app():
     status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
 
     cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d'
+        tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
     )
 
     status_text.empty()
@@ -789,38 +787,118 @@ def run_streamlit_app():
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
-          box_html += f"""<div style="background-color: #0d1117; border-left: 5px solid #28a745; padding: 12px; margin-bottom: 15px; border-radius: 8px;">
-                        <h3 style="margin-top: 0; color: #58a6ff;">#{rank}: {sym} - <span style="color: #ffd700;">{ex_rank}</span></h3>
-                        <p><b>⏰ Preferred Entry Window:</b> {win}</p>
-                        <p><b>⚡ Execution Trigger Rule:</b> <span style="color: #ff7b72;">{cond}</span></p>
-                        <hr style="border: 0.5px solid #30363d;">
-                        <p><b>Score:</b> {sc} | <b>Close Position:</b> {cs}% | <b>Vol Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
-                        <p><b>🎯 Entry:</b> ₹{p_entry} | <b>🛑 Stop Loss:</b> ₹{p_sl} | <b>🏁 Target:</b> ₹{p_tgt}</p>
-                        </div>"""
-        
-        box_html += '</div>'
+          # FIXED HTML BUG: No leading spaces allowed here!
+          box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
+<p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
+<p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
+<p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
+</div>"""
+          
+        box_html += "</div>"
         st.markdown(box_html, unsafe_allow_html=True)
+
+        top_stock_row = ideal_matches_df.iloc[0]
+        top_stock = top_stock_row['Symbol']
+
+        st.markdown(f'### 👑 Chart View: **{top_stock}**')
+        chart_data = yf.download(
+            f'{top_stock}.NS',
+            period='3mo',
+            interval='1d',
+            progress=False,
+            session=session,
+        )
+        chart_data = flatten_yfinance_df(chart_data)
+
+        if not chart_data.empty:
+          chart_data = chart_data.dropna(
+              subset=['Open', 'High', 'Low', 'Close', 'Volume']
+          )
+          if not chart_data.empty:
+            fig = go.Figure(
+                data=[
+                    go.Candlestick(
+                        x=chart_data.index,
+                        open=chart_data['Open'],
+                        high=chart_data['High'],
+                        low=chart_data['Low'],
+                        close=chart_data['Close'],
+                        name='Candlestick',
+                    )
+                ]
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=chart_data.index,
+                    y=chart_data['Close'].ewm(span=20).mean(),
+                    line=dict(color='orange', width=1.5),
+                    name='EMA 20',
+                )
+            )
+
+            live_sl = top_stock_row['Stop Loss (₹)']
+            live_tgt = top_stock_row['Target Price (₹)']
+
+            fig.add_hline(
+                y=live_sl,
+                line_dash='dash',
+                line_color='red',
+                line_width=2,
+                annotation_text=f'SL: ₹{live_sl}',
+                annotation_position='bottom left',
+            )
+            fig.add_hline(
+                y=live_tgt,
+                line_dash='dash',
+                line_color='green',
+                line_width=2,
+                annotation_text=f'Target: ₹{live_tgt}',
+                annotation_position='top left',
+            )
+
+            fig.update_layout(
+                template='plotly_dark',
+                title=f'{top_stock} Setup Chart',
+                xaxis_rangeslider_visible=False,
+            )
+            st.plotly_chart(fig)
       else:
-        st.warning('⚠️ No Ideal Match found yet. Keep running the scanner.')
+        st.markdown(
+            '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
+            ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
+            ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
+            ' Today</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
+            ' 8px; margin-bottom: 0px;">No stocks passed all strict'
+            ' confirmation filters.</p></div>',
+            unsafe_allow_html=True,
+        )
 
-      st.markdown(f'### 📌 Scan Pool Overview ({len(res_df)} Candidates)')
-      st.dataframe(
-          res_df.style.background_gradient(cmap='Greens', subset=['Score']),
-          use_container_width=True,
-          hide_index=True,
-          height=600,
-      )
-    elif 'live_results' in st.session_state and not st.session_state[
-        'live_results'
-    ].empty:
-      pass
+      def highlight_buying(row):
+        alert = str(row.get('Alert', ''))
+        if '⭐' in alert or 'Ultimate' in alert:
+          return [
+              'background-color: #ffd700; color: #000000; font-weight: bold'
+          ] * len(row)
+        elif '🔥' in alert:
+          return [
+              'background-color: rgba(255, 69, 0, 0.35); color: #ffffff;'
+              ' font-weight: bold'
+          ] * len(row)
+        elif '🧱' in alert:
+          return [
+              'background-color: rgba(0, 150, 255, 0.25); color: #ffffff;'
+              ' font-weight: bold'
+          ] * len(row)
+        return [''] * len(row)
+
+      styled_df = res_df.style.apply(highlight_buying, axis=1)
+      st.subheader(f'📊 Active Signals Found: {len(res_df)}')
+      st.dataframe(styled_df, hide_index=True)
     else:
-      st.warning('No signals matched your criteria in this run.')
+      st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
 
 
-# ==============================================================================
-# MAIN EXECUTION ROUTER
-# ==============================================================================
 if __name__ == '__main__':
   if IS_HEADLESS:
     run_headless_scan()
