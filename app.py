@@ -133,33 +133,38 @@ def flatten_yfinance_df(df):
             df.columns = df.columns.get_level_values(0)
     return df
 
-# --- NIFTY TREND FILTER (UPDATED & FIXED) ---
+# --- NIFTY TREND FILTER (WITH RETRIES & RATE LIMIT FIX) ---
 def fetch_nifty_market_status():
-    try:
-        nifty_ticker = yf.Ticker("^NSEI")
-        nifty = nifty_ticker.history(period="6mo", interval="1d")
-        
-        if not nifty.empty and len(nifty) >= 20:
-            nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
-            last_close = float(nifty['Close'].iloc[-1])
-            last_ema20 = float(nifty['EMA_20'].iloc[-1])
-            pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
-            
-            is_bullish = last_close > last_ema20
-            status_text = "🟢 TRADE MODE ACTIVE (Bullish Trend)" if is_bullish else "🔴 AVOID / BEARISH TREND"
-            
-            return {
-                "status": status_text,
-                "is_bullish": is_bullish,
-                "nifty_close": round(last_close, 2),
-                "nifty_ema20": round(last_ema20, 2),
-                "pct_diff": pct_diff
-            }
-    except Exception as e:
-        log_msg(f"Nifty Status Fetch Error: {e}", "warning")
+    symbols = ["^NSEI", "NIFTY_50.NS"]
     
+    for symbol in symbols:
+        for attempt in range(3):
+            try:
+                nifty_ticker = yf.Ticker(symbol)
+                nifty = nifty_ticker.history(period="6mo", interval="1d")
+                
+                if not nifty.empty and len(nifty) >= 20:
+                    nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
+                    last_close = float(nifty['Close'].iloc[-1])
+                    last_ema20 = float(nifty['EMA_20'].iloc[-1])
+                    pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
+                    
+                    is_bullish = last_close > last_ema20
+                    status_text = "🟢 TRADE MODE ACTIVE (Bullish Trend)" if is_bullish else "🔴 AVOID / BEARISH TREND"
+                    
+                    return {
+                        "status": status_text,
+                        "is_bullish": is_bullish,
+                        "nifty_close": round(last_close, 2),
+                        "nifty_ema20": round(last_ema20, 2),
+                        "pct_diff": pct_diff
+                    }
+            except Exception:
+                time.sleep(1.5)
+                continue
+
     return {
-        "status": "⚠️ UNKNOWN",
+        "status": "⚠️ UNKNOWN (Rate Limited)",
         "is_bullish": True,
         "nifty_close": 0.0,
         "nifty_ema20": 0.0,
