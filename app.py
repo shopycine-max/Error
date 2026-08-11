@@ -492,7 +492,6 @@ def download_market_data_safe(
   for chunk in ticker_chunks:
     for attempt in range(2):
       try:
-        # Crucial Fix: threads=False prevents Yahoo Finance rate limit blocking
         raw_data = yf.download(
             tickers=chunk,
             period=period,
@@ -537,7 +536,6 @@ def download_market_data_safe(
         else:
           time.sleep(1)
 
-    # Delay between requests to bypass rate limits
     time.sleep(sleep_sec)
 
   return cached_master
@@ -557,7 +555,6 @@ def run_headless_scan():
   tickers = fetch_mega_nse_universe()
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
-  # Download safely with rate-limit protections
   cached_master = download_market_data_safe(
       tickers, period='1y', interval='1d', chunk_size=15, sleep_sec=1.5
   )
@@ -656,7 +653,6 @@ def run_streamlit_app():
           f' Finance... ({len(cached_master)} loaded)'
       )
 
-      # Batch download with rate-limiting safety
       batch_res = download_market_data_safe(
           chunk, period='2y', interval='1d', chunk_size=15, sleep_sec=1.0
       )
@@ -802,7 +798,7 @@ def run_streamlit_app():
         'UPL.NS',
         'ULTRACEMCO.NS',
         'WIPRO.NS',
-    ]
+  ]
   else:
     all_tickers = cached_universe()
 
@@ -891,32 +887,36 @@ def run_streamlit_app():
             ' 100% criteria.'
         )
 
-        box_html = (
-            '<div style="background-color: #161b22; border: 2px solid #ffd700;'
-            ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
-            ' style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑'
-            ' Breakout Execution Roadmap'
-            f' ({len(ideal_matches_df)} Found)</h2>'
-        )
+        box_html = f"""
+        <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+            <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>
+        """
         for idx, row in ideal_matches_df.iterrows():
           rank = idx + 1
-          box_html += (
-              '<div style="border-bottom: 1px dashed #30363d; padding-bottom:'
-              ' 12px; margin-bottom: 12px;"><h3 style="color: #58a6ff;'
-              f' margin: 0;">#{rank} Stock: <u>{row["Symbol"]}</u>'
-              f' ({row["Execution Rank"]})</h3><p style="color: #ffd700;'
-              ' font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰'
-              f' Entry Window: {row["Entry Window"]} | ⚡ Execution Rule:'
-              f' {row["Execution Condition"]}</p><p style="color: #c9d1d9;'
-              ' font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b>'
-              f' {row["Score"]} | <b>Continuation Score:</b>'
-              f' {row["Continuation Score (%)"]}% | <b>Surge:</b>'
-              f' {row["Massive Buying Surge (%)"]}% | <b>RSI:</b>'
-              f' {row["RSI"]}</p><p style="color: #00ff7f; font-weight: bold;'
-              f' margin: 0; font-size: 15px;">🎯 Trigger: ₹{row["Entry Price'
-              f' (₹)"]} | SL: ₹{row["Stop Loss (₹)"]} | Target:'
-              f' ₹{row["Target Price (₹)"]}</p></div>'
-          )
+          sym = row['Symbol']
+          ex_rank = row['Execution Rank']
+          win = row['Entry Window']
+          cond = row['Execution Condition']
+          sc = row['Score']
+          cs = row['Continuation Score (%)']
+          mbs = row['Massive Buying Surge (%)']
+          rsi_v = row['RSI']
+          p_entry = row['Entry Price (₹)']
+          p_sl = row['Stop Loss (₹)']
+          p_tgt = row['Target Price (₹)']
+
+          box_html += f"""
+            <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+                <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
+                <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
+                <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;">
+                    <b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}
+                </p>
+                <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">
+                    🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}
+                </p>
+            </div>
+          """
         box_html += '</div>'
         st.markdown(box_html, unsafe_allow_html=True)
 
