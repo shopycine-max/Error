@@ -827,6 +827,24 @@ def run_streamlit_app():
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
+                 box_html = f"""
+        <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
+            <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>
+        """
+        for idx, row in ideal_matches_df.iterrows():
+          rank = idx + 1
+          sym = row['Symbol']
+          ex_rank = row['Execution Rank']
+          win = row['Entry Window']
+          cond = row['Execution Condition']
+          sc = row['Score']
+          cs = row['Continuation Score (%)']
+          mbs = row['Massive Buying Surge (%)']
+          rsi_v = row['RSI']
+          p_entry = row['Entry Price (₹)']
+          p_sl = row['Stop Loss (₹)']
+          p_tgt = row['Target Price (₹)']
+
           box_html += f"""
             <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
                 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
@@ -840,7 +858,10 @@ def run_streamlit_app():
             </div>
           """
         box_html += '</div>'
+        
+        # ⚠️ यह लाइन बहुत जरूरी है जो HTML को UI में डिजाइन के रूप में रेंडर करेगी
         st.markdown(box_html, unsafe_allow_html=True)
+ 
 
         top_stock_row = ideal_matches_df.iloc[0]
         top_stock = top_stock_row['Symbol']
