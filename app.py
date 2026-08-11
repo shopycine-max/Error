@@ -5,10 +5,17 @@ import time
 import datetime
 import pandas as pd
 import yfinance as yf
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+# --- YFINANCE IP BLOCKING BYPASS SESSION ---
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+})
 
 # Detect if running in Headless (Background CLI) mode
 IS_HEADLESS = "--headless" in sys.argv
@@ -33,7 +40,6 @@ def log_msg(msg, level="info"):
 
 # --- SECRETS & ENVIRONMENT HELPER ---
 def safe_get_secret(key, default_val=""):
-    """Fetch secrets from Streamlit secrets (UI mode) or Environment variables (CLI mode)"""
     if not IS_HEADLESS:
         try:
             val = st.secrets.get(key, None)
@@ -43,13 +49,11 @@ def safe_get_secret(key, default_val=""):
             pass
     return os.getenv(key, default_val)
 
-# --- CONFIGURATION ---
 SENDER_EMAIL = safe_get_secret("SENDER_EMAIL", "")
 SENDER_PASSWORD = safe_get_secret("SENDER_PASSWORD", "")
 RECEIVER_EMAIL = safe_get_secret("RECEIVER_EMAIL", "")
 SENT_LOG_FILE = "sent_alerts.json"
 
-# --- PERSISTENT EMAIL LOG FOR DUP-PREVENTION ---
 def get_already_sent_stocks():
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     if os.path.exists(SENT_LOG_FILE):
@@ -72,10 +76,9 @@ def mark_stock_as_sent(symbol):
     except Exception as e:
         log_msg(f"Could not save sent log: {e}", "warning")
 
-# --- EMAIL ALERT ENGINE ---
 def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
     if not SENDER_PASSWORD or not SENDER_EMAIL:
-        log_msg("⚠️ Email Credentials Not Configured (SENDER_EMAIL / SENDER_PASSWORD missing).", "warning")
+        log_msg("⚠️ Email Credentials Missing (SENDER_EMAIL / SENDER_PASSWORD). Check GitHub Secrets!", "warning")
         return False
         
     try:
@@ -109,18 +112,18 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'html'))
 
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
         server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD.replace(" ", ""))
+        # Ensure 16-character Gmail App Password without spaces
+        server.login(SENDER_EMAIL.strip(), SENDER_PASSWORD.replace(" ", "").strip())
         server.send_message(msg)
         server.quit()
         log_msg(f"✅ Email Alert Sent Successfully for {symbol}", "success")
         return True
     except Exception as e:
-        log_msg(f"Email Alert Failed for {symbol}: {e}", "error")
+        log_msg(f"❌ Email Alert Failed for {symbol}: {e}", "error")
         return False
 
-# --- DATA FLATTENER ---
 def flatten_yfinance_df(df):
     if df.empty:
         return df
@@ -133,14 +136,13 @@ def flatten_yfinance_df(df):
             df.columns = df.columns.get_level_values(0)
     return df
 
-# --- NIFTY TREND FILTER (WITH RETRIES & RATE LIMIT FIX) ---
 def fetch_nifty_market_status():
     symbols = ["^NSEI", "NIFTY_50.NS"]
     
     for symbol in symbols:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
-                nifty_ticker = yf.Ticker(symbol)
+                nifty_ticker = yf.Ticker(symbol, session=session)
                 nifty = nifty_ticker.history(period="6mo", interval="1d")
                 
                 if not nifty.empty and len(nifty) >= 20:
@@ -160,18 +162,18 @@ def fetch_nifty_market_status():
                         "pct_diff": pct_diff
                     }
             except Exception:
-                time.sleep(1.5)
+                time.sleep(1)
                 continue
 
+    # Fallback to True so scanner runs even if NIFTY rate limits on GitHub
     return {
-        "status": "⚠️ UNKNOWN (Rate Limited)",
+        "status": "⚠️ UNKNOWN (Bypassed Rate Limit)",
         "is_bullish": True,
         "nifty_close": 0.0,
         "nifty_ema20": 0.0,
         "pct_diff": 0.0
     }
 
-# --- UNIVERSE FETCH ENGINE ---
 def fetch_mega_nse_universe():
     fallback = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS", "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"]
     try:
@@ -185,7 +187,6 @@ def fetch_mega_nse_universe():
         log_msg(f"Error reading EQUITY_L.csv: {e}", "warning")
     return fallback
 
-# --- CORE ANALYTICS PROCESSOR ---
 def analyze_single_ticker(ticker, df, volume_multiplier=2.2, rsi_filter=58, turnover_limit=3, formula_version="Version 2"):
     try:
         if len(df) < 50: return None 
@@ -334,26 +335,26 @@ def filter_ideal_breakout_stock(df):
     return pd.DataFrame()
 
 # ==============================================================================
-# MODE 1: HEADLESS / BACKGROUND SCANNER EXECUTION (`python app.py --headless`)
+# MODE 1: HEADLESS / BACKGROUND SCANNER EXECUTION
 # ==============================================================================
 def run_headless_scan():
     log_msg("🚀 Starting Background Headless Market Scanner...", "info")
     
     nifty = fetch_nifty_market_status()
     if not nifty["is_bullish"]:
-        log_msg("🔴 Nifty is Bearish. Skipping alert triggers to reduce false breakout risks.", "warning")
+        log_msg("🔴 Nifty is Bearish. Skipping alert triggers.", "warning")
         return
 
     tickers = fetch_mega_nse_universe()
-    log_msg(f"Downloading data for {len(tickers)} stocks...", "info")
+    log_msg(f"Downloading market data for {len(tickers)} stocks...", "info")
     
-    chunk_size = 50
+    chunk_size = 20
     ticker_chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     cached_master = {}
     
     for chunk in ticker_chunks:
         try:
-            raw_data = yf.download(chunk, period="1y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=20)
+            raw_data = yf.download(chunk, period="1y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=15, session=session)
             if raw_data.empty: continue
             for ticker in chunk:
                 try:
@@ -371,9 +372,14 @@ def run_headless_scan():
         except Exception:
             continue
 
-    log_msg(f"Analyzing {len(cached_master)} stocks...", "info")
+    log_msg(f"Successfully loaded {len(cached_master)} stocks. Running analysis...", "info")
+    
+    if not cached_master:
+        log_msg("❌ No stock data downloaded. Yahoo Finance may be rate-limiting.", "error")
+        return
+
     results = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {
             executor.submit(analyze_single_ticker, ticker, df): ticker 
             for ticker, df in cached_master.items()
@@ -384,13 +390,16 @@ def run_headless_scan():
 
     res_df = pd.DataFrame(results)
     if res_df.empty:
-        log_msg("No breakout signals found today.", "info")
+        log_msg("No breakout signals found in this pass.", "info")
         return
 
     already_sent = get_already_sent_stocks()
-    high_priority_df = res_df[res_df['Execution Rank'].str.contains("Rank 1|Rank 2", na=False)]
+    # Match Rank 1, Rank 2, Rank 3 or any valid breakout found
+    alert_candidates = res_df[res_df['Execution Rank'].str.contains("Rank 1|Rank 2|Rank 3", na=False)]
     
-    for _, row in high_priority_df.iterrows():
+    log_msg(f"Found {len(alert_candidates)} potential breakout candidates.", "info")
+
+    for _, row in alert_candidates.iterrows():
         symbol = row["Symbol"]
         if symbol not in already_sent:
             ok = send_email_alert(
@@ -408,9 +417,6 @@ def run_headless_scan():
 
     log_msg("🏁 Headless Scan Completed Successfully.", "success")
 
-# ==============================================================================
-# MODE 2: STREAMLIT WEB DASHBOARD EXECUTION (`streamlit run app.py`)
-# ==============================================================================
 def run_streamlit_app():
     st.set_page_config(page_title="Aashiyana Dashboard Pro Max 🚀", page_icon="📈", layout="wide")
 
@@ -438,7 +444,7 @@ def run_streamlit_app():
         for c_idx, chunk in enumerate(ticker_chunks):
             status_text.text(f"⏳ Downloading Batch {c_idx+1}/{len(ticker_chunks)} from Yahoo Finance... ({len(cached_master)} loaded)")
             try:
-                raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=20)
+                raw_data = yf.download(chunk, period="2y", interval="1d", progress=False, group_by='ticker', threads=True, timeout=20, session=session)
                 if raw_data.empty: continue
                 for ticker in chunk:
                     try:
@@ -564,7 +570,7 @@ def run_streamlit_app():
         if not res_df.empty:
             res_df = res_df.sort_values(by="Score", ascending=False)
             
-            rank2_df = res_df[res_df['Execution Rank'].str.contains("Rank 2", na=False)]
+            rank2_df = res_df[res_df['Execution Rank'].str.contains("Rank 1|Rank 2", na=False)]
             for _, row in rank2_df.iterrows():
                 stock_symbol = row["Symbol"]
                 if stock_symbol not in st.session_state['sent_email_alerts']:
@@ -580,7 +586,7 @@ def run_streamlit_app():
                     )
                     if sent_status:
                         st.session_state['sent_email_alerts'].add(stock_symbol)
-                        st.toast(f"📧 Rank 2 Email alert sent for {stock_symbol}!", icon="📩")
+                        st.toast(f"📧 Email alert sent for {stock_symbol}!", icon="📩")
 
             ideal_matches_df = filter_ideal_breakout_stock(res_df)
             
@@ -598,7 +604,7 @@ def run_streamlit_app():
                 top_stock = top_stock_row['Symbol']
                 
                 st.markdown(f"### 👑 Chart View: **{top_stock}**")
-                chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False)
+                chart_data = yf.download(f"{top_stock}.NS", period="3mo", interval="1d", progress=False, session=session)
                 chart_data = flatten_yfinance_df(chart_data)
                 
                 if not chart_data.empty:
@@ -637,7 +643,6 @@ def run_streamlit_app():
         else:
             st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
 
-# --- SWITCH ENGINE BASED ON EXECUTION MODE ---
 if __name__ == "__main__":
     if IS_HEADLESS:
         run_headless_scan()
