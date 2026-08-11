@@ -596,6 +596,233 @@ def run_headless_scan():
 # ==============================================================================
 def run_streamlit_app():
   st.set_page_config(
-      page_title='Aashiyana Dashboard Pro Max 🚀', page_icon='📈Main files ko merge karne mein aapki zaroor madad kar sakta hoon, lekin aapne abhi tak koi file share nahi ki hai. 
+      page_title='Aashiyana Dashboard Pro Max 🚀', page_icon='📈', layout='wide'
+  )
 
-Aap kis format ki files ko merge karna chahte hain (jaise ki **Text**, **CSV**, **PDF**, ya **Excel**), aur kya aap unka content yahan paste kar sakte hain?
+  if 'live_results' not in st.session_state:
+    st.session_state['live_results'] = pd.DataFrame()
+  if 'sent_email_alerts' not in st.session_state:
+    st.session_state['sent_email_alerts'] = set()
+
+  @st.cache_data(ttl=1800, show_spinner=False)
+  def cached_nifty_status():
+    return fetch_nifty_market_status()
+
+  @st.cache_data(persist='disk', show_spinner=False)
+  def cached_universe():
+    return fetch_mega_nse_universe()
+
+  # STREAMLIT CACHED DOWNLOADER
+  @st.cache_data(ttl=900, show_spinner=False)
+  def download_all_market_data(tickers):
+    status_text = st.empty()
+    status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
+
+    cached_master = download_market_data_safe(
+        tickers, period='3mo', interval='1d'
+    )
+
+    status_text.empty()
+    return cached_master
+
+  st.markdown(
+      """
+        <style>
+        .main { background-color: #0d1117; color: #c9d1d9; }
+        .stButton>button { background-color: #238636; color: white; font-weight: bold; width: 100%; border-radius: 6px; }
+        .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
+        h1, h2, h3 { color: #58a6ff; }
+        </style>
+    """,
+      unsafe_allow_html=True,
+  )
+
+  st.title('Aashiyana Dashboard Pro Max 🚀')
+  st.caption(
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      ' ⚡)'
+  )
+
+  nifty_info = cached_nifty_status()
+  if nifty_info['is_bullish']:
+    st.success(
+        f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
+        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
+        f" ₹{nifty_info['nifty_ema20']} | **Strength:**"
+        f' +{nifty_info["pct_diff"]}% above EMA. **(Take Fresh Long Trades)**'
+    )
+  else:
+    st.error(
+        f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
+        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
+        f" ₹{nifty_info['nifty_ema20']} | **Weakness:**"
+        f' {nifty_info["pct_diff"]}% below EMA. **(Avoid New Long Positions)**'
+    )
+
+  st.sidebar.header('⚙️ Pro Scanner Controls')
+  formula_version = st.sidebar.selectbox(
+      '📊 Strategy Formula Version',
+      [
+          'Version 2 (Without 500-day High)',
+          'Version 1 (With 500-day High & Strict Filters)',
+      ],
+  )
+  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
+  volume_multiplier = st.sidebar.slider(
+      'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
+  )
+  min_turnover = st.sidebar.number_input(
+      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
+  )
+
+  st.sidebar.markdown('---')
+  st.sidebar.header('🔄 Controls')
+
+  if st.sidebar.button('🗑️ Clear Cache'):
+    download_all_market_data.clear()
+    cached_universe.clear()
+    cached_nifty_status.clear()
+    if 'master_market_data' in st.session_state:
+      del st.session_state['master_market_data']
+    st.session_state['sent_email_alerts'] = set()
+    st.toast('🧹 Cache cleared!', icon='🗑️')
+    st.rerun()
+
+  st.sidebar.markdown('---')
+  all_tickers = cached_universe()
+
+  st.sidebar.write(f'Total Active Stocks: **{len(all_tickers)}**')
+
+  if 'master_market_data' not in st.session_state:
+    st.sidebar.warning('⚠️ Data not loaded.')
+  else:
+    st.sidebar.success(
+        f"✅ Loaded ({len(st.session_state['master_market_data'])} stocks)"
+    )
+
+  if st.sidebar.button('📥 Fetch / Refresh Data'):
+    with st.spinner(f'Downloading data for {len(all_tickers)} stocks...'):
+      download_all_market_data.clear()
+      st.session_state['master_market_data'] = download_all_market_data(
+          all_tickers
+      )
+      st.session_state['live_results'] = pd.DataFrame()
+      st.sidebar.success('🏁 Fresh Data Loaded!')
+      st.rerun()
+
+  def compute_analytics():
+    results = []
+    pool = st.session_state.get('master_market_data', {})
+    if not pool:
+      return pd.DataFrame()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+      futures = {
+          executor.submit(
+              analyze_single_ticker,
+              ticker,
+              df,
+              volume_multiplier,
+              rsi_filter,
+              min_turnover,
+              formula_version,
+          ): ticker
+          for ticker, df in pool.items()
+      }
+      for future in as_completed(futures):
+        res = future.result()
+        if res:
+          results.extend(res)
+    return pd.DataFrame(results)
+
+  st.subheader('⚡ Live Data Collection & Priority Scan')
+
+  if 'master_market_data' not in st.session_state:
+    st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
+  else:
+    if st.button('🚀 Run Scanner', key='live_btn'):
+      with st.spinner('Searching for breakout setups...'):
+        st.session_state['live_results'] = compute_analytics()
+
+    res_df = st.session_state.get('live_results', pd.DataFrame())
+
+    if not res_df.empty:
+      res_df = res_df.sort_values(by='Score', ascending=False)
+
+      ideal_matches_df = filter_ideal_breakout_stock(res_df)
+
+      if not ideal_matches_df.empty:
+        for _, row in ideal_matches_df.iterrows():
+          stock_symbol = row['Symbol']
+          if stock_symbol not in st.session_state['sent_email_alerts']:
+            sent_status = send_email_alert(
+                symbol=stock_symbol,
+                entry=row['Entry Price (₹)'],
+                sl=row['Stop Loss (₹)'],
+                target=row['Target Price (₹)'],
+                score=row['Score'],
+                rank=row['Execution Rank'],
+                window=row['Entry Window'],
+                condition=row['Execution Condition'],
+            )
+            if sent_status:
+              st.session_state['sent_email_alerts'].add(stock_symbol)
+              st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
+
+        st.success(
+            f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
+            ' 100% criteria.'
+        )
+
+        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
+        
+        for idx, row in ideal_matches_df.iterrows():
+          rank = idx + 1
+          sym = row['Symbol']
+          ex_rank = row['Execution Rank']
+          win = row['Entry Window']
+          cond = row['Execution Condition']
+          sc = row['Score']
+          cs = row['Continuation Score (%)']
+          mbs = row['Massive Buying Surge (%)']
+          rsi_v = row['RSI']
+          p_entry = row['Entry Price (₹)']
+          p_sl = row['Stop Loss (₹)']
+          p_tgt = row['Target Price (₹)']
+
+          box_html += f"""<div style="background-color: #0d1117; border-left: 5px solid #28a745; padding: 12px; margin-bottom: 15px; border-radius: 8px;">
+                        <h3 style="margin-top: 0; color: #58a6ff;">#{rank}: {sym} - <span style="color: #ffd700;">{ex_rank}</span></h3>
+                        <p><b>⏰ Preferred Entry Window:</b> {win}</p>
+                        <p><b>⚡ Execution Trigger Rule:</b> <span style="color: #ff7b72;">{cond}</span></p>
+                        <hr style="border: 0.5px solid #30363d;">
+                        <p><b>Score:</b> {sc} | <b>Close Position:</b> {cs}% | <b>Vol Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
+                        <p><b>🎯 Entry:</b> ₹{p_entry} | <b>🛑 Stop Loss:</b> ₹{p_sl} | <b>🏁 Target:</b> ₹{p_tgt}</p>
+                        </div>"""
+        
+        box_html += '</div>'
+        st.markdown(box_html, unsafe_allow_html=True)
+      else:
+        st.warning('⚠️ No Ideal Match found yet. Keep running the scanner.')
+
+      st.markdown(f'### 📌 Scan Pool Overview ({len(res_df)} Candidates)')
+      st.dataframe(
+          res_df.style.background_gradient(cmap='Greens', subset=['Score']),
+          use_container_width=True,
+          hide_index=True,
+          height=600,
+      )
+    elif 'live_results' in st.session_state and not st.session_state[
+        'live_results'
+    ].empty:
+      pass
+    else:
+      st.warning('No signals matched your criteria in this run.')
+
+
+# ==============================================================================
+# MAIN EXECUTION ROUTER
+# ==============================================================================
+if __name__ == '__main__':
+  if IS_HEADLESS:
+    run_headless_scan()
+  else:
+    run_streamlit_app()
