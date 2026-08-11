@@ -1,0 +1,33 @@
+name: Automated Market Scanner & Alert Engine
+
+on:
+  schedule:
+    # सोमवार से शुक्रवार: भारतीय बाज़ार समय (9:15 AM - 3:30 PM IST = 3:45 AM - 10:00 AM UTC)
+    - cron: '*/5 3-10 * * 1-5'
+  workflow_dispatch: # मैनुअल ट्रिगर की सुविधा के लिए
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Headless Scanner
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: |
+          python app.py --headless
