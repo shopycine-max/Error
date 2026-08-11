@@ -2,8 +2,8 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # सोम-शुक्र: बाज़ार समय (IST 9:15 AM से 3:30 PM के बीच)
-    - cron: '*/5 3-10 * * 1-5'
+    # IST 9:09 AM पर रन करने के लिए (UTC 3:39 AM)
+    - cron: '39 3 * * 1-5'
   workflow_dispatch: # मैनुअल रन बटन के लिए
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; me pip install -r requirements.txt; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run Headless Scanner
         env:
