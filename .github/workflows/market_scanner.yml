@@ -1,0 +1,31 @@
+name: Automated Stock Breakout Scanner
+
+on:
+  schedule:
+    # Indian Market Hours (03:45 UTC to 10:00 UTC, Mon-Fri)
+    - cron: '*/15 3-10 * * 1-5'
+  workflow_dispatch: # Manual Run Button in GitHub Actions
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas yfinance streamlit plotly
+
+      - name: Run Background Scanner
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: python app.py --headless
