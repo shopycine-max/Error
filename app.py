@@ -1,4 +1,3 @@
-# app.py
 import sys
 import os
 import json
@@ -134,13 +133,13 @@ def flatten_yfinance_df(df):
             df.columns = df.columns.get_level_values(0)
     return df
 
-# --- NIFTY TREND FILTER ---
+# --- NIFTY TREND FILTER (UPDATED & FIXED) ---
 def fetch_nifty_market_status():
     try:
-        nifty = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
-        nifty = flatten_yfinance_df(nifty)
-        nifty = nifty.dropna(subset=['Close'])
-        if len(nifty) >= 20:
+        nifty_ticker = yf.Ticker("^NSEI")
+        nifty = nifty_ticker.history(period="6mo", interval="1d")
+        
+        if not nifty.empty and len(nifty) >= 20:
             nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
             last_close = float(nifty['Close'].iloc[-1])
             last_ema20 = float(nifty['EMA_20'].iloc[-1])
@@ -156,8 +155,8 @@ def fetch_nifty_market_status():
                 "nifty_ema20": round(last_ema20, 2),
                 "pct_diff": pct_diff
             }
-    except Exception:
-        pass
+    except Exception as e:
+        log_msg(f"Nifty Status Fetch Error: {e}", "warning")
     
     return {
         "status": "⚠️ UNKNOWN",
