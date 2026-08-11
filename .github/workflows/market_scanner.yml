@@ -2,9 +2,9 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # IST 9:09 AM पर रन करने के लिए (UTC 3:39 AM)
+    # IST 9:09 AM par run karne ke liye (UTC 3:39 AM)
     - cron: '39 3 * * 1-5'
-  workflow_dispatch: # मैनुअल रन बटन के लिए
+  workflow_dispatch: # Manual run button
 
 jobs:
   run-scanner:
