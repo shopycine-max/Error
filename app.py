@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import textwrap # Added for HTML string formatting
 
 import pandas as pd
 import requests
@@ -161,10 +162,9 @@ def fetch_nifty_market_status():
     for attempt in range(2):
       try:
         nifty_ticker = yf.Ticker(symbol, session=session)
-        # Fast 1mo period for Nifty status check
-        nifty = nifty_ticker.history(period='1mo', interval='1d')
+        nifty = nifty_ticker.history(period='6mo', interval='1d')
 
-        if not nifty.empty and len(nifty) >= 15:
+        if not nifty.empty and len(nifty) >= 20:
           nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
           last_close = float(nifty['Close'].iloc[-1])
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
@@ -199,56 +199,16 @@ def fetch_nifty_market_status():
 
 def fetch_mega_nse_universe():
   fallback = [
-      'ADANIENT.NS',
-      'ADANIPORTS.NS',
-      'APOLLOHOSP.NS',
-      'ASIANPAINT.NS',
-      'AXISBANK.NS',
-      'BAJAJ-AUTO.NS',
-      'BAJFINANCE.NS',
-      'BAJAJFINSV.NS',
-      'BPCL.NS',
-      'BHARTIARTL.NS',
-      'BRITANNIA.NS',
-      'CIPLA.NS',
-      'COALINDIA.NS',
-      'DIVISLAB.NS',
-      'DRREDDY.NS',
-      'EICHERMOT.NS',
-      'GRASIM.NS',
-      'HCLTECH.NS',
-      'HDFCBANK.NS',
-      'HDFCLIFE.NS',
-      'HEROMOTOCO.NS',
-      'HINDALCO.NS',
-      'HINDUNILVR.NS',
-      'ICICIBANK.NS',
-      'ITC.NS',
-      'INDUSINDBK.NS',
-      'INFY.NS',
-      'JSWSTEEL.NS',
-      'KOTAKBANK.NS',
-      'LTIM.NS',
-      'LT.NS',
-      'M&M.NS',
-      'MARUTI.NS',
-      'NTPC.NS',
-      'NESTLEIND.NS',
-      'ONGC.NS',
-      'POWERGRID.NS',
-      'RELIANCE.NS',
-      'SBILIFE.NS',
-      'SBIN.NS',
-      'SUNPHARMA.NS',
-      'TCS.NS',
-      'TATACONSUM.NS',
-      'TATAMOTORS.NS',
-      'TATASTEEL.NS',
-      'TECHM.NS',
-      'TITAN.NS',
-      'UPL.NS',
-      'ULTRACEMCO.NS',
-      'WIPRO.NS',
+      'ADANIENT.NS', 'ADANIPORTS.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS', 'AXISBANK.NS',
+      'BAJAJ-AUTO.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'BPCL.NS', 'BHARTIARTL.NS',
+      'BRITANNIA.NS', 'CIPLA.NS', 'COALINDIA.NS', 'DIVISLAB.NS', 'DRREDDY.NS',
+      'EICHERMOT.NS', 'GRASIM.NS', 'HCLTECH.NS', 'HDFCBANK.NS', 'HDFCLIFE.NS',
+      'HEROMOTOCO.NS', 'HINDALCO.NS', 'HINDUNILVR.NS', 'ICICIBANK.NS', 'ITC.NS',
+      'INDUSINDBK.NS', 'INFY.NS', 'JSWSTEEL.NS', 'KOTAKBANK.NS', 'LTIM.NS', 'LT.NS',
+      'M&M.NS', 'MARUTI.NS', 'NTPC.NS', 'NESTLEIND.NS', 'ONGC.NS', 'POWERGRID.NS',
+      'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SUNPHARMA.NS', 'TCS.NS',
+      'TATACONSUM.NS', 'TATAMOTORS.NS', 'TATASTEEL.NS', 'TECHM.NS', 'TITAN.NS',
+      'UPL.NS', 'ULTRACEMCO.NS', 'WIPRO.NS',
   ]
   try:
     if os.path.exists('EQUITY_L.csv'):
@@ -275,29 +235,29 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 5:
+    if len(df) < 50:
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    if len(df) < 5:
+    if len(df) < 50:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
-    df['Vol_SMA20'] = df['Volume'].rolling(min(20, len(df)), min_periods=1).mean()
-    df['Return_20d'] = df['Close'].pct_change(periods=min(20, len(df)-1)) * 100
+    df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
+    df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
     df['Turnover'] = df['Close'] * df['Volume']
 
     df['Is_Green'] = df['Close'] > df['Open']
     df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
     df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
 
-    up_vol_10 = df['Green_Vol'].rolling(min(10, len(df)), min_periods=1).sum()
-    down_vol_10 = df['Red_Vol'].rolling(min(10, len(df)), min_periods=1).sum()
+    up_vol_10 = df['Green_Vol'].rolling(10).sum()
+    down_vol_10 = df['Red_Vol'].rolling(10).sum()
     df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
-    df['High_20_Prev'] = df['High'].shift(1).rolling(min(20, len(df)-1), min_periods=1).max()
+    df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -310,11 +270,11 @@ def analyze_single_ticker(
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    window_size = max(5, min(500, len(df) - 1))
+    window_size = max(10, min(500, len(df) - 2))
     df['Max_500_High_1d_Ago'] = (
         df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
     )
-    df['Low_5d'] = df['Low'].rolling(window=min(5, len(df)), min_periods=1).min()
+    df['Low_5d'] = df['Low'].rolling(window=5).min()
 
     candle_range = df['High'] - df['Low']
     real_body_top = df[['Open', 'Close']].max(axis=1)
@@ -483,10 +443,12 @@ def filter_ideal_breakout_stock(df):
 # ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
+    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.5
 ):
   """
-  Optimized Downloader: Uses 10d period for ultra-fast light weight payload.
+  FIXED YF RATE LIMIT ERROR:
+  Reduced chunk_size to 20, threads=False, lowered Max Workers and added delay
+  to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
   """
   cached_master = {}
   ticker_chunks = [
@@ -495,16 +457,16 @@ def download_market_data_safe(
 
   def process_chunk(chunk):
     local_data = {}
-    for attempt in range(2):
+    for attempt in range(3): # Increased retries
       try:
         raw_data = yf.download(
             tickers=chunk,
-            period=period,  # Set to 10d for superfast downloading
+            period=period, 
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=True,
-            timeout=10,
+            threads=False,  # <-- IMPORTANT: Disabled internal yf threading to avoid rate limit
+            timeout=15,
             session=session,
         )
         if raw_data.empty:
@@ -530,20 +492,20 @@ def download_market_data_safe(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
             t_data = t_data[t_data['Volume'] > 0]
-            if not t_data.empty and len(t_data) >= 5:
+            if not t_data.empty and len(t_data) >= 30:
               local_data[ticker] = t_data
           except Exception:
             continue
         break
       except Exception as e:
         if 'Rate' in str(e) or '429' in str(e):
-          time.sleep(2 * (attempt + 1))
+          time.sleep(5 * (attempt + 1)) # Wait longer if Rate Limited
         else:
-          time.sleep(0.2)
+          time.sleep(1)
     return local_data
 
-  # Execute chunks concurrently with ThreadPoolExecutor
-  with ThreadPoolExecutor(max_workers=4) as executor:
+  # Reduced Max Workers to 2 to avoid hammering Yahoo Finance
+  with ThreadPoolExecutor(max_workers=2) as executor:
     futures = [executor.submit(process_chunk, chunk) for chunk in ticker_chunks]
     for future in as_completed(futures):
       res = future.result()
@@ -569,7 +531,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
+      tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
   )
 
   log_msg(
@@ -652,10 +614,10 @@ def run_streamlit_app():
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
     status_text = st.empty()
-    status_text.text(f'⏳ Downloading market data (10D) for {len(tickers)} stocks...')
+    status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
 
     cached_master = download_market_data_safe(
-        tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
+        tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
     )
 
     status_text.empty()
@@ -737,7 +699,7 @@ def run_streamlit_app():
     )
 
   if st.sidebar.button('📥 Fetch / Refresh Data'):
-    with st.spinner(f'Downloading 10-day data for {len(all_tickers)} stocks...'):
+    with st.spinner(f'Downloading data for {len(all_tickers)} stocks...'):
       download_all_market_data.clear()
       st.session_state['master_market_data'] = download_all_market_data(
           all_tickers
@@ -809,11 +771,8 @@ def run_streamlit_app():
             ' 100% criteria.'
         )
 
-        # FIXED HTML BOX CONSTRUCTION
-        box_html = f"""
-        <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-            <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>
-        """
+        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
+        
         for idx, row in ideal_matches_df.iterrows():
           rank = idx + 1
           sym = row['Symbol']
@@ -828,20 +787,15 @@ def run_streamlit_app():
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
-          box_html += f"""
-            <div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
-                <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
-                <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
-                <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;">
-                    <b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}
-                </p>
-                <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">
-                    🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}
-                </p>
-            </div>
-          """
-        box_html += '</div>'
-        
+          # FIXED HTML BUG: No leading spaces allowed here!
+          box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
+<p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
+<p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
+<p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
+</div>"""
+          
+        box_html += "</div>"
         st.markdown(box_html, unsafe_allow_html=True)
 
         top_stock_row = ideal_matches_df.iloc[0]
@@ -850,7 +804,7 @@ def run_streamlit_app():
         st.markdown(f'### 👑 Chart View: **{top_stock}**')
         chart_data = yf.download(
             f'{top_stock}.NS',
-            period='10d',
+            period='3mo',
             interval='1d',
             progress=False,
             session=session,
