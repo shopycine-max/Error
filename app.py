@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import textwrap # Added for HTML string formatting
+import textwrap
 
 import pandas as pd
 import requests
@@ -440,24 +440,29 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
+# ULTRA-SAFE DOWNLOADER FOR GITHUB ACTIONS (Sequential Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.5
+    tickers, period='3mo', interval='1d', chunk_size=None, sleep_sec=None
 ):
   """
   FIXED YF RATE LIMIT ERROR:
-  Reduced chunk_size to 20, threads=False, lowered Max Workers and added delay
-  to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
+  Completely removed ThreadPoolExecutor for downloading. 
+  Forced chunk size to 10 and sleep to 2.5 seconds to bypass strict IP Bans.
   """
   cached_master = {}
+  
+  # 🚀 Force strictly safe limits for GitHub Actions
+  safe_chunk = 10
+  safe_sleep = 2.5 
+  
   ticker_chunks = [
-      tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
+      tickers[i : i + safe_chunk] for i in range(0, len(tickers), safe_chunk)
   ]
 
-  def process_chunk(chunk):
-    local_data = {}
-    for attempt in range(3): # Increased retries
+  # Process chunks sequentially (One by one, NO parallel threads)
+  for chunk in ticker_chunks:
+    for attempt in range(3): # Max 3 retries per chunk
       try:
         raw_data = yf.download(
             tickers=chunk,
@@ -465,53 +470,50 @@ def download_market_data_safe(
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=False,  # <-- IMPORTANT: Disabled internal yf threading to avoid rate limit
-            timeout=15,
+            threads=False,  # <-- strictly False
+            timeout=20,
             session=session,
         )
+        
         if raw_data.empty:
-          break
+          time.sleep(5) # Wait longer if empty data returned
+          continue
+
+        # Check if output is MultiIndex (happens when downloading multiple tickers)
+        is_multi = isinstance(raw_data.columns, pd.MultiIndex)
 
         for ticker in chunk:
           try:
-            if isinstance(raw_data.columns, pd.MultiIndex):
+            if is_multi:
               if ticker in raw_data.columns.get_level_values(0):
-                t_data = raw_data.xs(
-                    ticker, axis=1, level=0, drop_level=True
-                ).copy()
+                t_data = raw_data.xs(ticker, axis=1, level=0, drop_level=True).copy()
               elif ticker in raw_data.columns.get_level_values(1):
-                t_data = raw_data.xs(
-                    ticker, axis=1, level=1, drop_level=True
-                ).copy()
+                t_data = raw_data.xs(ticker, axis=1, level=1, drop_level=True).copy()
               else:
                 continue
             else:
+              # If by chance only 1 ticker was in the chunk
               t_data = raw_data.copy()
 
-            t_data = t_data.dropna(
-                subset=['Open', 'High', 'Low', 'Close', 'Volume']
-            )
+            t_data = t_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
             t_data = t_data[t_data['Volume'] > 0]
+            
             if not t_data.empty and len(t_data) >= 30:
-              local_data[ticker] = t_data
+              cached_master[ticker] = t_data
           except Exception:
             continue
-        break
+            
+        break # Success, break out of the retry loop
+        
       except Exception as e:
         if 'Rate' in str(e) or '429' in str(e):
-          time.sleep(5 * (attempt + 1)) # Wait longer if Rate Limited
+          # Exponential backoff on hard limits
+          time.sleep(10 * (attempt + 1)) 
         else:
-          time.sleep(1)
-    return local_data
-
-  # Reduced Max Workers to 2 to avoid hammering Yahoo Finance
-  with ThreadPoolExecutor(max_workers=2) as executor:
-    futures = [executor.submit(process_chunk, chunk) for chunk in ticker_chunks]
-    for future in as_completed(futures):
-      res = future.result()
-      if res:
-        cached_master.update(res)
-      time.sleep(sleep_sec)
+          time.sleep(2)
+          
+    # ⏳ Mandatory sleep between every chunk to keep Yahoo happy
+    time.sleep(safe_sleep)
 
   return cached_master
 
@@ -531,7 +533,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
+      tickers, period='3mo', interval='1d'
   )
 
   log_msg(
@@ -594,313 +596,6 @@ def run_headless_scan():
 # ==============================================================================
 def run_streamlit_app():
   st.set_page_config(
-      page_title='Aashiyana Dashboard Pro Max 🚀', page_icon='📈', layout='wide'
-  )
+      page_title='Aashiyana Dashboard Pro Max 🚀', page_icon='📈Main files ko merge karne mein aapki zaroor madad kar sakta hoon, lekin aapne abhi tak koi file share nahi ki hai. 
 
-  if 'live_results' not in st.session_state:
-    st.session_state['live_results'] = pd.DataFrame()
-  if 'sent_email_alerts' not in st.session_state:
-    st.session_state['sent_email_alerts'] = set()
-
-  @st.cache_data(ttl=1800, show_spinner=False)
-  def cached_nifty_status():
-    return fetch_nifty_market_status()
-
-  @st.cache_data(persist='disk', show_spinner=False)
-  def cached_universe():
-    return fetch_mega_nse_universe()
-
-  # STREAMLIT CACHED DOWNLOADER
-  @st.cache_data(ttl=900, show_spinner=False)
-  def download_all_market_data(tickers):
-    status_text = st.empty()
-    status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
-
-    cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
-    )
-
-    status_text.empty()
-    return cached_master
-
-  st.markdown(
-      """
-        <style>
-        .main { background-color: #0d1117; color: #c9d1d9; }
-        .stButton>button { background-color: #238636; color: white; font-weight: bold; width: 100%; border-radius: 6px; }
-        .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-        h1, h2, h3 { color: #58a6ff; }
-        </style>
-    """,
-      unsafe_allow_html=True,
-  )
-
-  st.title('Aashiyana Dashboard Pro Max 🚀')
-  st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
-      ' ⚡)'
-  )
-
-  nifty_info = cached_nifty_status()
-  if nifty_info['is_bullish']:
-    st.success(
-        f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
-        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
-        f" ₹{nifty_info['nifty_ema20']} | **Strength:**"
-        f' +{nifty_info["pct_diff"]}% above EMA. **(Take Fresh Long Trades)**'
-    )
-  else:
-    st.error(
-        f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
-        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
-        f" ₹{nifty_info['nifty_ema20']} | **Weakness:**"
-        f' {nifty_info["pct_diff"]}% below EMA. **(Avoid New Long Positions)**'
-    )
-
-  st.sidebar.header('⚙️ Pro Scanner Controls')
-  formula_version = st.sidebar.selectbox(
-      '📊 Strategy Formula Version',
-      [
-          'Version 2 (Without 500-day High)',
-          'Version 1 (With 500-day High & Strict Filters)',
-      ],
-  )
-  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
-  volume_multiplier = st.sidebar.slider(
-      'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
-  )
-  min_turnover = st.sidebar.number_input(
-      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
-  )
-
-  st.sidebar.markdown('---')
-  st.sidebar.header('🔄 Controls')
-
-  if st.sidebar.button('🗑️ Clear Cache'):
-    download_all_market_data.clear()
-    cached_universe.clear()
-    cached_nifty_status.clear()
-    if 'master_market_data' in st.session_state:
-      del st.session_state['master_market_data']
-    st.session_state['sent_email_alerts'] = set()
-    st.toast('🧹 Cache cleared!', icon='🗑️')
-    st.rerun()
-
-  st.sidebar.markdown('---')
-  all_tickers = cached_universe()
-
-  st.sidebar.write(f'Total Active Stocks: **{len(all_tickers)}**')
-
-  if 'master_market_data' not in st.session_state:
-    st.sidebar.warning('⚠️ Data not loaded.')
-  else:
-    st.sidebar.success(
-        f"✅ Loaded ({len(st.session_state['master_market_data'])} stocks)"
-    )
-
-  if st.sidebar.button('📥 Fetch / Refresh Data'):
-    with st.spinner(f'Downloading data for {len(all_tickers)} stocks...'):
-      download_all_market_data.clear()
-      st.session_state['master_market_data'] = download_all_market_data(
-          all_tickers
-      )
-      st.session_state['live_results'] = pd.DataFrame()
-      st.sidebar.success('🏁 Fresh Data Loaded!')
-      st.rerun()
-
-  def compute_analytics():
-    results = []
-    pool = st.session_state.get('master_market_data', {})
-    if not pool:
-      return pd.DataFrame()
-    with ThreadPoolExecutor(max_workers=8) as executor:
-      futures = {
-          executor.submit(
-              analyze_single_ticker,
-              ticker,
-              df,
-              volume_multiplier,
-              rsi_filter,
-              min_turnover,
-              formula_version,
-          ): ticker
-          for ticker, df in pool.items()
-      }
-      for future in as_completed(futures):
-        res = future.result()
-        if res:
-          results.extend(res)
-    return pd.DataFrame(results)
-
-  st.subheader('⚡ Live Data Collection & Priority Scan')
-
-  if 'master_market_data' not in st.session_state:
-    st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
-  else:
-    if st.button('🚀 Run Scanner', key='live_btn'):
-      with st.spinner('Searching for breakout setups...'):
-        st.session_state['live_results'] = compute_analytics()
-
-    res_df = st.session_state.get('live_results', pd.DataFrame())
-
-    if not res_df.empty:
-      res_df = res_df.sort_values(by='Score', ascending=False)
-
-      ideal_matches_df = filter_ideal_breakout_stock(res_df)
-
-      if not ideal_matches_df.empty:
-        for _, row in ideal_matches_df.iterrows():
-          stock_symbol = row['Symbol']
-          if stock_symbol not in st.session_state['sent_email_alerts']:
-            sent_status = send_email_alert(
-                symbol=stock_symbol,
-                entry=row['Entry Price (₹)'],
-                sl=row['Stop Loss (₹)'],
-                target=row['Target Price (₹)'],
-                score=row['Score'],
-                rank=row['Execution Rank'],
-                window=row['Entry Window'],
-                condition=row['Execution Condition'],
-            )
-            if sent_status:
-              st.session_state['sent_email_alerts'].add(stock_symbol)
-              st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
-
-        st.success(
-            f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
-            ' 100% criteria.'
-        )
-
-        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
-        
-        for idx, row in ideal_matches_df.iterrows():
-          rank = idx + 1
-          sym = row['Symbol']
-          ex_rank = row['Execution Rank']
-          win = row['Entry Window']
-          cond = row['Execution Condition']
-          sc = row['Score']
-          cs = row['Continuation Score (%)']
-          mbs = row['Massive Buying Surge (%)']
-          rsi_v = row['RSI']
-          p_entry = row['Entry Price (₹)']
-          p_sl = row['Stop Loss (₹)']
-          p_tgt = row['Target Price (₹)']
-
-          # FIXED HTML BUG: No leading spaces allowed here!
-          box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
-<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
-<p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
-<p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
-<p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
-</div>"""
-          
-        box_html += "</div>"
-        st.markdown(box_html, unsafe_allow_html=True)
-
-        top_stock_row = ideal_matches_df.iloc[0]
-        top_stock = top_stock_row['Symbol']
-
-        st.markdown(f'### 👑 Chart View: **{top_stock}**')
-        chart_data = yf.download(
-            f'{top_stock}.NS',
-            period='3mo',
-            interval='1d',
-            progress=False,
-            session=session,
-        )
-        chart_data = flatten_yfinance_df(chart_data)
-
-        if not chart_data.empty:
-          chart_data = chart_data.dropna(
-              subset=['Open', 'High', 'Low', 'Close', 'Volume']
-          )
-          if not chart_data.empty:
-            fig = go.Figure(
-                data=[
-                    go.Candlestick(
-                        x=chart_data.index,
-                        open=chart_data['Open'],
-                        high=chart_data['High'],
-                        low=chart_data['Low'],
-                        close=chart_data['Close'],
-                        name='Candlestick',
-                    )
-                ]
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=chart_data.index,
-                    y=chart_data['Close'].ewm(span=20).mean(),
-                    line=dict(color='orange', width=1.5),
-                    name='EMA 20',
-                )
-            )
-
-            live_sl = top_stock_row['Stop Loss (₹)']
-            live_tgt = top_stock_row['Target Price (₹)']
-
-            fig.add_hline(
-                y=live_sl,
-                line_dash='dash',
-                line_color='red',
-                line_width=2,
-                annotation_text=f'SL: ₹{live_sl}',
-                annotation_position='bottom left',
-            )
-            fig.add_hline(
-                y=live_tgt,
-                line_dash='dash',
-                line_color='green',
-                line_width=2,
-                annotation_text=f'Target: ₹{live_tgt}',
-                annotation_position='top left',
-            )
-
-            fig.update_layout(
-                template='plotly_dark',
-                title=f'{top_stock} Setup Chart',
-                xaxis_rangeslider_visible=False,
-            )
-            st.plotly_chart(fig)
-      else:
-        st.markdown(
-            '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
-            ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
-            ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
-            ' Today</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
-            ' 8px; margin-bottom: 0px;">No stocks passed all strict'
-            ' confirmation filters.</p></div>',
-            unsafe_allow_html=True,
-        )
-
-      def highlight_buying(row):
-        alert = str(row.get('Alert', ''))
-        if '⭐' in alert or 'Ultimate' in alert:
-          return [
-              'background-color: #ffd700; color: #000000; font-weight: bold'
-          ] * len(row)
-        elif '🔥' in alert:
-          return [
-              'background-color: rgba(255, 69, 0, 0.35); color: #ffffff;'
-              ' font-weight: bold'
-          ] * len(row)
-        elif '🧱' in alert:
-          return [
-              'background-color: rgba(0, 150, 255, 0.25); color: #ffffff;'
-              ' font-weight: bold'
-          ] * len(row)
-        return [''] * len(row)
-
-      styled_df = res_df.style.apply(highlight_buying, axis=1)
-      st.subheader(f'📊 Active Signals Found: {len(res_df)}')
-      st.dataframe(styled_df, hide_index=True)
-    else:
-      st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
-
-
-if __name__ == '__main__':
-  if IS_HEADLESS:
-    run_headless_scan()
-  else:
-    run_streamlit_app()
+Aap kis format ki files ko merge karna chahte hain (jaise ki **Text**, **CSV**, **PDF**, ya **Excel**), aur kya aap unka content yahan paste kar sakte hain?
