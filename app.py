@@ -443,7 +443,7 @@ def filter_ideal_breakout_stock(df):
 # ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
+    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.5
 ):
   """
   FIXED YF RATE LIMIT ERROR:
