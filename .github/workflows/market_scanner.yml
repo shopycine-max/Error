@@ -2,9 +2,8 @@ name: Automated Stock Breakout Scanner
 
 on:
   schedule:
-    # Indian Market Hours (03:45 UTC to 10:00 UTC, Mon-Fri)
     - cron: '*/15 3-10 * * 1-5'
-  workflow_dispatch: # Manual Run Button in GitHub Actions
+  workflow_dispatch:
 
 jobs:
   run-scanner:
