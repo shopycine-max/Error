@@ -161,9 +161,10 @@ def fetch_nifty_market_status():
     for attempt in range(2):
       try:
         nifty_ticker = yf.Ticker(symbol, session=session)
-        nifty = nifty_ticker.history(period='6mo', interval='1d')
+        # Fast 1mo period for Nifty status check
+        nifty = nifty_ticker.history(period='1mo', interval='1d')
 
-        if not nifty.empty and len(nifty) >= 20:
+        if not nifty.empty and len(nifty) >= 15:
           nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
           last_close = float(nifty['Close'].iloc[-1])
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
@@ -274,29 +275,29 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 50:
+    if len(df) < 5:
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    if len(df) < 50:
+    if len(df) < 5:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
-    df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
-    df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
+    df['Vol_SMA20'] = df['Volume'].rolling(min(20, len(df)), min_periods=1).mean()
+    df['Return_20d'] = df['Close'].pct_change(periods=min(20, len(df)-1)) * 100
     df['Turnover'] = df['Close'] * df['Volume']
 
     df['Is_Green'] = df['Close'] > df['Open']
     df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
     df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
 
-    up_vol_10 = df['Green_Vol'].rolling(10).sum()
-    down_vol_10 = df['Red_Vol'].rolling(10).sum()
+    up_vol_10 = df['Green_Vol'].rolling(min(10, len(df)), min_periods=1).sum()
+    down_vol_10 = df['Red_Vol'].rolling(min(10, len(df)), min_periods=1).sum()
     df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
-    df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
+    df['High_20_Prev'] = df['High'].shift(1).rolling(min(20, len(df)-1), min_periods=1).max()
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -309,11 +310,11 @@ def analyze_single_ticker(
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    window_size = max(10, min(500, len(df) - 2))
+    window_size = max(5, min(500, len(df) - 1))
     df['Max_500_High_1d_Ago'] = (
         df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
     )
-    df['Low_5d'] = df['Low'].rolling(window=5).min()
+    df['Low_5d'] = df['Low'].rolling(window=min(5, len(df)), min_periods=1).min()
 
     candle_range = df['High'] - df['Low']
     real_body_top = df[['Open', 'Close']].max(axis=1)
@@ -482,11 +483,10 @@ def filter_ideal_breakout_stock(df):
 # ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.1
+    tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
 ):
   """
-  Optimized Downloader: Uses 3mo period for lightweight payload and multi-threading 
-  chunk processing to fetch data in under 15 seconds safely.
+  Optimized Downloader: Uses 10d period for ultra-fast light weight payload.
   """
   cached_master = {}
   ticker_chunks = [
@@ -499,11 +499,11 @@ def download_market_data_safe(
       try:
         raw_data = yf.download(
             tickers=chunk,
-            period=period,  # 3mo keeps data lightweight and ultra-fast
+            period=period,  # Set to 10d for superfast downloading
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=True,  # Parallel downloading active within chunk
+            threads=True,
             timeout=10,
             session=session,
         )
@@ -530,7 +530,7 @@ def download_market_data_safe(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
             t_data = t_data[t_data['Volume'] > 0]
-            if not t_data.empty and len(t_data) >= 30:
+            if not t_data.empty and len(t_data) >= 5:
               local_data[ticker] = t_data
           except Exception:
             continue
@@ -569,7 +569,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.1
+      tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
   )
 
   log_msg(
@@ -652,10 +652,10 @@ def run_streamlit_app():
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
     status_text = st.empty()
-    status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
+    status_text.text(f'⏳ Downloading market data (10D) for {len(tickers)} stocks...')
 
     cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.1
+        tickers, period='10d', interval='1d', chunk_size=40, sleep_sec=0.1
     )
 
     status_text.empty()
@@ -737,7 +737,7 @@ def run_streamlit_app():
     )
 
   if st.sidebar.button('📥 Fetch / Refresh Data'):
-    with st.spinner(f'Downloading data for {len(all_tickers)} stocks...'):
+    with st.spinner(f'Downloading 10-day data for {len(all_tickers)} stocks...'):
       download_all_market_data.clear()
       st.session_state['master_market_data'] = download_all_market_data(
           all_tickers
@@ -809,25 +809,8 @@ def run_streamlit_app():
             ' 100% criteria.'
         )
 
+        # FIXED HTML BOX CONSTRUCTION
         box_html = f"""
-        <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-            <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>
-        """
-        for idx, row in ideal_matches_df.iterrows():
-          rank = idx + 1
-          sym = row['Symbol']
-          ex_rank = row['Execution Rank']
-          win = row['Entry Window']
-          cond = row['Execution Condition']
-          sc = row['Score']
-          cs = row['Continuation Score (%)']
-          mbs = row['Massive Buying Surge (%)']
-          rsi_v = row['RSI']
-          p_entry = row['Entry Price (₹)']
-          p_sl = row['Stop Loss (₹)']
-          p_tgt = row['Target Price (₹)']
-
-          box_html = f"""
         <div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
             <h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>
         """
@@ -859,9 +842,7 @@ def run_streamlit_app():
           """
         box_html += '</div>'
         
-        # ⚠️ यह लाइन बहुत जरूरी है जो HTML को UI में डिजाइन के रूप में रेंडर करेगी
         st.markdown(box_html, unsafe_allow_html=True)
- 
 
         top_stock_row = ideal_matches_df.iloc[0]
         top_stock = top_stock_row['Symbol']
@@ -869,7 +850,7 @@ def run_streamlit_app():
         st.markdown(f'### 👑 Chart View: **{top_stock}**')
         chart_data = yf.download(
             f'{top_stock}.NS',
-            period='3mo',
+            period='10d',
             interval='1d',
             progress=False,
             session=session,
