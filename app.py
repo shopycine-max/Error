@@ -454,7 +454,7 @@ def download_market_data_safe(
   
   # 🚀 Force strictly safe limits for GitHub Actions
   safe_chunk = 60
-  safe_sleep = 12.5
+  safe_sleep = 3.0
   
   ticker_chunks = [
       tickers[i : i + safe_chunk] for i in range(0, len(tickers), safe_chunk)
