@@ -440,15 +440,14 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.5
+    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
 ):
   """
-  FIXED YF RATE LIMIT ERROR:
-  Reduced chunk_size to 20, threads=False, lowered Max Workers and added delay
-  to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
+  Optimized for speed while avoiding Yahoo Finance rate limit.
+  Increased chunk size to 40 and max_workers to 5.
   """
   cached_master = {}
   ticker_chunks = [
@@ -457,7 +456,7 @@ def download_market_data_safe(
 
   def process_chunk(chunk):
     local_data = {}
-    for attempt in range(3): # Increased retries
+    for attempt in range(3): 
       try:
         raw_data = yf.download(
             tickers=chunk,
@@ -465,7 +464,7 @@ def download_market_data_safe(
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=False,  # <-- IMPORTANT: Disabled internal yf threading to avoid rate limit
+            threads=True, 
             timeout=15,
             session=session,
         )
@@ -499,13 +498,13 @@ def download_market_data_safe(
         break
       except Exception as e:
         if 'Rate' in str(e) or '429' in str(e):
-          time.sleep(5 * (attempt + 1)) # Wait longer if Rate Limited
+          time.sleep(3 * (attempt + 1)) # Wait longer if Rate Limited
         else:
           time.sleep(1)
     return local_data
 
-  # Reduced Max Workers to 2 to avoid hammering Yahoo Finance
-  with ThreadPoolExecutor(max_workers=2) as executor:
+  # Increased Max Workers to 5 for faster parallel execution
+  with ThreadPoolExecutor(max_workers=5) as executor:
     futures = [executor.submit(process_chunk, chunk) for chunk in ticker_chunks]
     for future in as_completed(futures):
       res = future.result()
@@ -531,7 +530,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
+      tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
   )
 
   log_msg(
@@ -617,7 +616,7 @@ def run_streamlit_app():
     status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
 
     cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d', chunk_size=20, sleep_sec=1.0
+        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
     )
 
     status_text.empty()
