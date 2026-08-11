@@ -2,8 +2,8 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # Mon-Fri: Indian Market Hours (9:15 AM IST to 3:30 PM IST = 3:45 AM to 10:00 AM UTC)
-    - cron: '*/5 3-9 * * 1-5'
+    # Mon-Fri: 9:15 AM IST to 3:30 PM IST (3:45 AM UTC to 10:00 AM UTC)
+    - cron: '*/5 4-10 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
