@@ -443,11 +443,11 @@ def filter_ideal_breakout_stock(df):
 # ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (Multi-threaded Parallel Engine)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=5, sleep_sec=1.5
+    tickers, period='3mo', interval='1d', chunk_size=1, sleep_sec=1.5
 ):
   """
   FIXED YF RATE LIMIT ERROR:
-  Reduced chunk_size to 5, threads=False, lowered Max Workers and added delay
+  Reduced chunk_size to 1, threads=False, lowered Max Workers and added delay
   to ensure Yahoo Finance doesn't block GitHub Actions/Streamlit IP.
   """
   cached_master = {}
