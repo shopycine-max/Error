@@ -840,6 +840,8 @@ def run_streamlit_app():
             </div>
           """
         box_html += '</div>'
+        
+        # ⚠️ यह लाइन बहुत जरूरी है जो HTML को UI में डिजाइन के रूप में रेंडर करेगी
         st.markdown(box_html, unsafe_allow_html=True)
 
         top_stock_row = ideal_matches_df.iloc[0]
