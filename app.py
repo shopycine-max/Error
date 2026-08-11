@@ -186,7 +186,7 @@ def fetch_mega_nse_universe():
     return fallback
 
 # --- CORE ANALYTICS PROCESSOR ---
-def analyze_single_ticker(ticker, df, volume_multiplier=2.2, rsi_filter=58, turnover_limit=3, formula_version="Version 1"):
+def analyze_single_ticker(ticker, df, volume_multiplier=2.2, rsi_filter=58, turnover_limit=3, formula_version="Version 2"):
     try:
         if len(df) < 50: return None 
 
@@ -250,7 +250,7 @@ def analyze_single_ticker(ticker, df, volume_multiplier=2.2, rsi_filter=58, turn
             df['Signal'] = cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout
         
         is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
-        last_close_val = df['Close'].values[-1] if not df['Close'].empty else None
+        last_close_val = df['Close'].values[-1] if not df['Signal'].empty else None
 
         if is_signal and pd.notna(last_close_val):
             entry = float(last_close_val)
@@ -492,7 +492,7 @@ def run_streamlit_app():
     st.sidebar.header("⚙️ Pro Scanner Controls")
     formula_version = st.sidebar.selectbox(
         "📊 Strategy Formula Version",
-        ["Version 1 (With 500-day High & Strict Filters)", "Version 2 (Without 500-day High)"]
+        ["Version 2 (Without 500-day High)", "Version 1 (With 500-day High & Strict Filters)"]
     )
     rsi_filter = st.sidebar.slider("Minimum RSI", 45, 75, 58)
     volume_multiplier = st.sidebar.slider("Volume Shock Multiplier", 1.0, 4.0, 2.2, step=0.1)
