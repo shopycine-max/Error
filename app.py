@@ -589,12 +589,11 @@ def run_headless_scan():
     return
 
   already_sent = get_already_sent_stocks()
-  alert_candidates = res_df[
-      res_df['Execution Rank'].str.contains('Rank 1|Rank 2|Rank 3', na=False)
-  ]
+  # UPDATED: Filter ONLY stocks that match the Roadmap criteria
+  alert_candidates = filter_ideal_breakout_stock(res_df)
 
   log_msg(
-      f'Found {len(alert_candidates)} potential breakout candidates.', 'info'
+      f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info'
   )
 
   for _, row in alert_candidates.iterrows():
@@ -788,29 +787,28 @@ def run_streamlit_app():
     if not res_df.empty:
       res_df = res_df.sort_values(by='Score', ascending=False)
 
-      rank2_df = res_df[
-          res_df['Execution Rank'].str.contains('Rank 1|Rank 2', na=False)
-      ]
-      for _, row in rank2_df.iterrows():
-        stock_symbol = row['Symbol']
-        if stock_symbol not in st.session_state['sent_email_alerts']:
-          sent_status = send_email_alert(
-              symbol=stock_symbol,
-              entry=row['Entry Price (₹)'],
-              sl=row['Stop Loss (₹)'],
-              target=row['Target Price (₹)'],
-              score=row['Score'],
-              rank=row['Execution Rank'],
-              window=row['Entry Window'],
-              condition=row['Execution Condition'],
-          )
-          if sent_status:
-            st.session_state['sent_email_alerts'].add(stock_symbol)
-            st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
-
+      # Get Roadmap matches first
       ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
       if not ideal_matches_df.empty:
+        # UPDATED: Send email alerts ONLY for Roadmap stocks (ideal matches)
+        for _, row in ideal_matches_df.iterrows():
+          stock_symbol = row['Symbol']
+          if stock_symbol not in st.session_state['sent_email_alerts']:
+            sent_status = send_email_alert(
+                symbol=stock_symbol,
+                entry=row['Entry Price (₹)'],
+                sl=row['Stop Loss (₹)'],
+                target=row['Target Price (₹)'],
+                score=row['Score'],
+                rank=row['Execution Rank'],
+                window=row['Entry Window'],
+                condition=row['Execution Condition'],
+            )
+            if sent_status:
+              st.session_state['sent_email_alerts'].add(stock_symbol)
+              st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
+
         st.success(
             f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
             ' 100% criteria.'
