@@ -30,6 +30,35 @@ if not IS_HEADLESS:
   import streamlit as st
 
 
+# --- EXACT 9:09 AM IST WAIT LOGIC ---
+def wait_for_exact_time(target_hour=9, target_minute=9):
+  """GitHub Actions delay handle karne ke liye exact target time tak wait karta hai."""
+  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+  now = datetime.datetime.now(ist)
+
+  # Target Time (Daily 9:09 AM IST)
+  target_time = now.replace(
+      hour=target_hour, minute=target_minute, second=0, microsecond=0
+  )
+
+  if now < target_time:
+    wait_seconds = (target_time - now).total_seconds()
+    log_msg(f"Current IST Time: {now.strftime('%H:%M:%S')}", 'info')
+    log_msg(
+        f'Exact 09:09 AM IST hone me {int(wait_seconds)} seconds baki hain.'
+        ' Waiting...',
+        'info',
+    )
+    time.sleep(wait_seconds)
+    log_msg('⏰ Target Time Reached! Starting Market Analysis...', 'success')
+  else:
+    log_msg(
+        f"Current IST Time: {now.strftime('%H:%M:%S')}. Target time passed,"
+        ' starting immediately.',
+        'info',
+    )
+
+
 # --- LOGGING HELPER ---
 def log_msg(msg, level='info'):
   if IS_HEADLESS:
@@ -445,10 +474,6 @@ def filter_ideal_breakout_stock(df):
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
 ):
-  """
-  Optimized for speed while avoiding Yahoo Finance rate limit.
-  Increased chunk size to 40 and max_workers to 5.
-  """
   cached_master = {}
   ticker_chunks = [
       tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
@@ -456,15 +481,15 @@ def download_market_data_safe(
 
   def process_chunk(chunk):
     local_data = {}
-    for attempt in range(3): 
+    for attempt in range(3):
       try:
         raw_data = yf.download(
             tickers=chunk,
-            period=period, 
+            period=period,
             interval=interval,
             progress=False,
             group_by='ticker',
-            threads=True, 
+            threads=True,
             timeout=15,
             session=session,
         )
@@ -498,14 +523,15 @@ def download_market_data_safe(
         break
       except Exception as e:
         if 'Rate' in str(e) or '429' in str(e):
-          time.sleep(3 * (attempt + 1)) # Wait longer if Rate Limited
+          time.sleep(3 * (attempt + 1))
         else:
           time.sleep(1)
     return local_data
 
-  # Increased Max Workers to 5 for faster parallel execution
   with ThreadPoolExecutor(max_workers=5) as executor:
-    futures = [executor.submit(process_chunk, chunk) for chunk in ticker_chunks]
+    futures = [
+        executor.submit(process_chunk, chunk) for chunk in ticker_chunks
+    ]
     for future in as_completed(futures):
       res = future.result()
       if res:
@@ -520,6 +546,9 @@ def download_market_data_safe(
 # ==============================================================================
 def run_headless_scan():
   log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
+
+  # Wait until exact 09:09 AM IST
+  wait_for_exact_time(9, 9)
 
   nifty = fetch_nifty_market_status()
   if not nifty['is_bullish']:
@@ -609,11 +638,12 @@ def run_streamlit_app():
   def cached_universe():
     return fetch_mega_nse_universe()
 
-  # STREAMLIT CACHED DOWNLOADER
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
     status_text = st.empty()
-    status_text.text(f'⏳ Downloading market data for {len(tickers)} stocks...')
+    status_text.text(
+        f'⏳ Downloading market data for {len(tickers)} stocks...'
+    )
 
     cached_master = download_market_data_safe(
         tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
@@ -771,7 +801,7 @@ def run_streamlit_app():
         )
 
         box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
-        
+
         for idx, row in ideal_matches_df.iterrows():
           rank = idx + 1
           sym = row['Symbol']
@@ -786,15 +816,14 @@ def run_streamlit_app():
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
-          # FIXED HTML BUG: No leading spaces allowed here!
           box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
 </div>"""
-          
-        box_html += "</div>"
+
+        box_html += '</div>'
         st.markdown(box_html, unsafe_allow_html=True)
 
         top_stock_row = ideal_matches_df.iloc[0]
