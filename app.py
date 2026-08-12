@@ -481,7 +481,7 @@ def filter_ideal_breakout_stock(df):
         drop=True
     )
 
-  return df.sort_values(by='Score', ascending=False).head(3).reset_index(
+  return df.sort_values(by='Score', ascending=False).head(5).reset_index(
       drop=True
   )
 
@@ -567,11 +567,13 @@ def run_headless_scan():
     log_msg('📅 Weekend detected. Skipping scan.', 'info')
     return
 
-  # Market Trend Check
+  # Market Trend Check (Log warning only, DO NOT return)
   nifty = fetch_nifty_market_status()
   if not nifty['is_bullish']:
-    log_msg('🔴 Nifty is Bearish. Skipping alerts.', 'warning')
-    return
+    log_msg(
+        '⚠️ Nifty is Bearish, but proceeding with scan & alerts as requested...',
+        'warning',
+    )
 
   universe = fetch_mega_nse_universe()
   log_msg(f'🔄 Scanning {len(universe)} stocks live...', 'info')
@@ -597,11 +599,19 @@ def run_headless_scan():
   res_df = pd.DataFrame(results)
   if not res_df.empty:
     candidates = filter_ideal_breakout_stock(res_df)
+
+    # STRICT FILTER: Rank 1 & Rank 2 ONLY (Rank 3 excluded)
+    high_priority_candidates = candidates[
+        ~candidates['Execution Rank'].astype(str).str.contains('Rank 3')
+    ]
+
     log_msg(
-        f'Found {len(candidates)} high-probability breakout setup(s).', 'info'
+        f'Found {len(high_priority_candidates)} High-Priority (Rank 1/2)'
+        ' setup(s).',
+        'info',
     )
 
-    for _, row in candidates.iterrows():
+    for _, row in high_priority_candidates.iterrows():
       sym = row['Symbol']
       if sym not in already_sent:
         sent_ok = send_email_alert(
@@ -773,8 +783,13 @@ def run_streamlit_app():
       res_df = res_df.sort_values(by='Score', ascending=False)
       ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
-      if not ideal_matches_df.empty:
-        for _, row in ideal_matches_df.iterrows():
+      # FILTER ONLY RANK 1 & RANK 2 FOR ROADMAP BOX AND EMAILS
+      rank_1_2_matches = ideal_matches_df[
+          ~ideal_matches_df['Execution Rank'].astype(str).str.contains('Rank 3')
+      ].reset_index(drop=True)
+
+      if not rank_1_2_matches.empty:
+        for _, row in rank_1_2_matches.iterrows():
           stock_symbol = row['Symbol']
           if stock_symbol not in st.session_state['sent_email_alerts']:
             sent_status = send_email_alert(
@@ -792,14 +807,14 @@ def run_streamlit_app():
               st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
 
         st.success(
-            f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
-            ' 100% criteria.'
+            f'🎉 **HIGH PRIORITY MATCHES FOUND!** {len(rank_1_2_matches)} Rank'
+            ' 1/2 stock(s) met criteria.'
         )
 
-        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
+        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(rank_1_2_matches)} High Priority Found)</h2>"""
 
-        for idx, row in ideal_matches_df.iterrows():
-          rank = idx + 1
+        for idx, row in rank_1_2_matches.iterrows():
+          rank_num = idx + 1
           sym = row['Symbol']
           ex_rank = row['Execution Rank']
           win = row['Entry Window']
@@ -813,7 +828,7 @@ def run_streamlit_app():
           p_tgt = row['Target Price (₹)']
 
           box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
-<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
+<h3 style="color: #58a6ff; margin: 0;">#{rank_num} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
@@ -822,7 +837,7 @@ def run_streamlit_app():
         box_html += '</div>'
         st.markdown(box_html, unsafe_allow_html=True)
 
-        top_stock_row = ideal_matches_df.iloc[0]
+        top_stock_row = rank_1_2_matches.iloc[0]
         top_stock = top_stock_row['Symbol']
 
         st.markdown(f'### 👑 Chart View: **{top_stock}**')
@@ -891,10 +906,11 @@ def run_streamlit_app():
         st.markdown(
             '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
             ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
-            ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
-            ' Today</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
-            ' 8px; margin-bottom: 0px;">No stocks passed all strict'
-            ' confirmation filters.</p></div>',
+            ' style="color: #ff4d4d; margin: 0;">❌ No Rank 1 or Rank 2 Match'
+            ' Found Today</h2><p style="color: #c9d1d9; font-size: 15px;'
+            ' margin-top: 8px; margin-bottom: 0px;">Rank 3 stocks are excluded'
+            ' from Roadmap Box & Alerts. Check full table below for all'
+            ' signals.</p></div>',
             unsafe_allow_html=True,
         )
 
