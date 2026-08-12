@@ -2,8 +2,9 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # IST 9:09 AM par run karne ke liye (UTC 3:39 AM)
-    - cron: '39 3 * * 1-5'
+    # IST 8:45 AM par run hoga (UTC 3:15 AM)
+    # Isse GitHub delay hone par bhi 9:09 AM se pehle server ready ho jayega
+    - cron: '15 3 * * 1-5'
   workflow_dispatch: # Manual run button
 
 jobs:
