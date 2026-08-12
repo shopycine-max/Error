@@ -2,28 +2,37 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # IST 8:45 AM par run hoga (UTC 3:15 AM)
-    # Isse GitHub delay hone par bhi 9:09 AM se pehle server ready ho jayega
-    - cron: '15 3 * * 1-5'
-  workflow_dispatch: # Manual run button
+    # Cron timing in UTC (3:00 AM UTC to 10:00 AM UTC = 8:30 AM IST to 3:30 PM IST)
+    # Mon-Fri (1-5) har 5 minute me run hoga
+    - cron: '*/5 3-10 * * 1-5'
+  workflow_dispatch: # Manual run ka option
 
 jobs:
   run-scanner:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # sent_alerts.json commit & push karne ke liye write access
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip' # Fast execution ke liye pip dependencies cache karein
 
       - name: Install Dependencies
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+          else 
+            pip install pandas requests yfinance streamlit plotly
+          fi
 
       - name: Run Headless Scanner
         env:
@@ -32,3 +41,14 @@ jobs:
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
         run: |
           python app.py --headless
+
+      - name: Commit and Push sent_alerts.json (Duplicate Email Protection)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase || true
+          if [ -f sent_alerts.json ]; then
+            git add sent_alerts.json
+            git commit -m "Update sent alerts log [skip ci]" || echo "No changes to commit"
+            git push origin main || echo "Git push failed"
+          fi
