@@ -472,7 +472,7 @@ def filter_ideal_breakout_stock(df):
 # OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+    tickers, period='3mo', interval='1d', chunk_size=25, sleep_sec=0.6
 ):
   cached_master = {}
   ticker_chunks = [
@@ -646,7 +646,7 @@ def run_streamlit_app():
     )
 
     cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+        tickers, period='3mo', interval='1d', chunk_size=25, sleep_sec=0.6
     )
 
     status_text.empty()
