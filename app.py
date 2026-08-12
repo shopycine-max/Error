@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import textwrap # Added for HTML string formatting
+import textwrap
 
 import pandas as pd
 import requests
@@ -552,8 +552,9 @@ def run_headless_scan():
 
   nifty = fetch_nifty_market_status()
   if not nifty['is_bullish']:
-    log_msg('🔴 Nifty is Bearish. Skipping alert triggers.', 'warning')
-    return
+    log_msg(f"🔴 Nifty is Bearish status: {nifty['status']}. Running full scan anyway...", 'warning')
+  else:
+    log_msg(f"🟢 Nifty is Bullish status: {nifty['status']}.", 'info')
 
   tickers = fetch_mega_nse_universe()
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
