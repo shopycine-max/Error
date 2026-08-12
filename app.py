@@ -114,7 +114,7 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
                 <p><b>🛑 Stop Loss:</b> ₹{sl}</p>
                 <p><b>🏁 Target Price:</b> ₹{target}</p>
                 <hr style="border: 0.5px solid #30363d;">
-                <p style="font-size: 12px; color: #8b949e;">Ashiyana Pro Engine • Continuous Live Market Alert ({datetime.datetime.now().strftime("%I:%M %p")})</p>
+                <p style="font-size: 12px; color: #8b949e;">Ashiyana Pro Engine • Live Market Alert ({datetime.datetime.now().strftime("%I:%M %p")})</p>
             </div>
         </body>
         </html>
@@ -481,15 +481,14 @@ def filter_ideal_breakout_stock(df):
         drop=True
     )
 
-  # Fallback to top scored results if strict criteria yields empty
   return df.sort_values(by='Score', ascending=False).head(3).reset_index(
       drop=True
   )
 
 
-# --- BATCH MARKET DATA DOWNLOADER ---
+# --- BATCH MARKET DATA DOWNLOADER (HIGH-SPEED OPTIMIZED) ---
 def download_market_data_safe(
-    tickers, period='1mo', interval='1d', chunk_size=35, sleep_sec=0.3
+    tickers, period='1mo', interval='1d', chunk_size=250, sleep_sec=0.1
 ):
   cached_master = {}
   ticker_chunks = [
@@ -498,7 +497,7 @@ def download_market_data_safe(
 
   def process_chunk(chunk):
     local_data = {}
-    for attempt in range(3):
+    for attempt in range(2):
       try:
         raw_data = yf.download(
             tickers=chunk,
@@ -507,7 +506,7 @@ def download_market_data_safe(
             progress=False,
             group_by='ticker',
             threads=True,
-            timeout=12,
+            timeout=15,
             session=session,
         )
         if raw_data is None or raw_data.empty:
@@ -538,14 +537,11 @@ def download_market_data_safe(
           except Exception:
             continue
         break
-      except Exception as e:
-        if 'Rate' in str(e) or '429' in str(e):
-          time.sleep(2 * (attempt + 1))
-        else:
-          time.sleep(1)
+      except Exception:
+        time.sleep(1)
     return local_data
 
-  with ThreadPoolExecutor(max_workers=4) as executor:
+  with ThreadPoolExecutor(max_workers=8) as executor:
     futures = [
         executor.submit(process_chunk, chunk) for chunk in ticker_chunks
     ]
@@ -553,95 +549,75 @@ def download_market_data_safe(
       res = future.result()
       if res:
         cached_master.update(res)
-      time.sleep(sleep_sec)
 
   return cached_master
 
 
 # ==============================================================================
-# MODE 1: HEADLESS / CONTINUOUS LIVE MARKET SCANNER
+# MODE 1: HEADLESS / GITHUB ACTIONS SINGLE-PASS SCANNER
 # ==============================================================================
 def run_headless_scan():
   ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  log_msg('🚀 Continuous Live Market Engine Initialized', 'info')
+  log_msg('🚀 Fast Single-Pass Market Engine Started', 'info')
+
+  now = datetime.datetime.now(ist)
+
+  # Weekend Check
+  if now.weekday() >= 5:
+    log_msg('📅 Weekend detected. Skipping scan.', 'info')
+    return
+
+  # Market Trend Check
+  nifty = fetch_nifty_market_status()
+  if not nifty['is_bullish']:
+    log_msg('🔴 Nifty is Bearish. Skipping alerts.', 'warning')
+    return
 
   universe = fetch_mega_nse_universe()
+  log_msg(f'🔄 Scanning {len(universe)} stocks live...', 'info')
 
-  while True:
-    now = datetime.datetime.now(ist)
-    current_time = now.time()
+  already_sent = get_already_sent_stocks()
+  market_data = download_market_data_safe(
+      universe, chunk_size=250, sleep_sec=0.1
+  )
 
-    market_start = datetime.time(9, 9)
-    market_close = datetime.time(15, 30)
+  results = []
+  with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = {
+        executor.submit(
+            analyze_single_ticker, ticker, df, 2.2, 58, 2, 'Version 2'
+        ): ticker
+        for ticker, df in market_data.items()
+    }
+    for future in as_completed(futures):
+      res = future.result()
+      if res:
+        results.extend(res)
 
-    if now.weekday() >= 5:
-      log_msg('📅 Weekend detected. Live scanner standby mode.', 'info')
-      break
+  res_df = pd.DataFrame(results)
+  if not res_df.empty:
+    candidates = filter_ideal_breakout_stock(res_df)
+    log_msg(
+        f'Found {len(candidates)} high-probability breakout setup(s).', 'info'
+    )
 
-    if current_time < market_start:
-      wait_secs = (
-          datetime.datetime.combine(now.date(), market_start, ist) - now
-      ).total_seconds()
-      log_msg(
-          f'⏰ Waiting for market open (09:09 AM IST). Sleeping'
-          f' {int(wait_secs)}s...',
-          'info',
-      )
-      time.sleep(min(wait_secs, 300))
-      continue
+    for _, row in candidates.iterrows():
+      sym = row['Symbol']
+      if sym not in already_sent:
+        sent_ok = send_email_alert(
+            symbol=sym,
+            entry=row['Entry Price (₹)'],
+            sl=row['Stop Loss (₹)'],
+            target=row['Target Price (₹)'],
+            score=row['Score'],
+            rank=row['Execution Rank'],
+            window=row['Entry Window'],
+            condition=row['Execution Condition'],
+        )
+        if sent_ok:
+          mark_stock_as_sent(sym)
 
-    if current_time > market_close:
-      log_msg('🏁 Market session closed (03:30 PM IST). Stopping scan.', 'info')
-      break
-
-    nifty = fetch_nifty_market_status()
-    if not nifty['is_bullish']:
-      log_msg('🔴 Nifty is Bearish. Pausing breakout alerts.', 'warning')
-      time.sleep(300)
-      continue
-
-    log_msg(f'🔄 Scanning {len(universe)} stocks live...', 'info')
-    already_sent = get_already_sent_stocks()
-    market_data = download_market_data_safe(universe)
-
-    results = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-      futures = {
-          executor.submit(
-              analyze_single_ticker, ticker, df, 2.2, 58, 2, 'Version 2'
-          ): ticker
-          for ticker, df in market_data.items()
-      }
-      for future in as_completed(futures):
-        res = future.result()
-        if res:
-          results.extend(res)
-
-    res_df = pd.DataFrame(results)
-    if not res_df.empty:
-      candidates = filter_ideal_breakout_stock(res_df)
-      log_msg(
-          f'Found {len(candidates)} high-probability breakout setup(s).', 'info'
-      )
-
-      for _, row in candidates.iterrows():
-        sym = row['Symbol']
-        if sym not in already_sent:
-          sent_ok = send_email_alert(
-              symbol=sym,
-              entry=row['Entry Price (₹)'],
-              sl=row['Stop Loss (₹)'],
-              target=row['Target Price (₹)'],
-              score=row['Score'],
-              rank=row['Execution Rank'],
-              window=row['Entry Window'],
-              condition=row['Execution Condition'],
-          )
-          if sent_ok:
-            mark_stock_as_sent(sym)
-
-    log_msg('💤 Pass complete. Waiting 5 minutes for next scan...\n', 'info')
-    time.sleep(300)
+  log_msg('✅ Scan completed successfully.', 'success')
 
 
 # ==============================================================================
@@ -672,7 +648,7 @@ def run_streamlit_app():
         f'⏳ Downloading market data for {len(tickers)} stocks...'
     )
     cached_master = download_market_data_safe(
-        tickers, period='1mo', interval='1d', chunk_size=35, sleep_sec=0.3
+        tickers, period='1mo', interval='1d', chunk_size=250, sleep_sec=0.1
     )
     status_text.empty()
     return cached_master
@@ -690,7 +666,7 @@ def run_streamlit_app():
   )
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
-  st.caption('Unified Engine (NIFTY 50 Trend Filter & Continuous Execution ⚡)')
+  st.caption('Unified Engine (NIFTY 50 Trend Filter & High-Speed Scanner ⚡)')
 
   nifty_info = cached_nifty_status()
   if nifty_info['is_bullish']:
@@ -763,7 +739,7 @@ def run_streamlit_app():
     pool = st.session_state.get('master_market_data', {})
     if not pool:
       return pd.DataFrame()
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
       futures = {
           executor.submit(
               analyze_single_ticker,
