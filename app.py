@@ -30,35 +30,6 @@ if not IS_HEADLESS:
   import streamlit as st
 
 
-# --- EXACT 9:09 AM IST WAIT LOGIC ---
-def wait_for_exact_time(target_hour=9, target_minute=9):
-  """GitHub Actions delay handle karne ke liye exact target time tak wait karta hai."""
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  now = datetime.datetime.now(ist)
-
-  # Target Time (Daily 9:09 AM IST)
-  target_time = now.replace(
-      hour=target_hour, minute=target_minute, second=0, microsecond=0
-  )
-
-  if now < target_time:
-    wait_seconds = (target_time - now).total_seconds()
-    log_msg(f"Current IST Time: {now.strftime('%H:%M:%S')}", 'info')
-    log_msg(
-        f'Exact 09:09 AM IST hone me {int(wait_seconds)} seconds baki hain.'
-        ' Waiting...',
-        'info',
-    )
-    time.sleep(wait_seconds)
-    log_msg('⏰ Target Time Reached! Starting Market Analysis...', 'success')
-  else:
-    log_msg(
-        f"Current IST Time: {now.strftime('%H:%M:%S')}. Target time passed,"
-        ' starting immediately.',
-        'info',
-    )
-
-
 # --- LOGGING HELPER ---
 def log_msg(msg, level='info'):
   if IS_HEADLESS:
@@ -541,81 +512,98 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (9:09 AM to 3:30 PM IST) ---
+def is_market_hours():
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now = datetime.datetime.now(ist)
+    
+    # Mon (0) to Fri (4) check
+    if now.weekday() >= 5:
+        return False, "Weekend (Saturday/Sunday) - Market Closed"
+        
+    start_time = now.replace(hour=9, minute=9, second=0, microsecond=0)
+    end_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    
+    if start_time <= now <= end_time:
+        return True, "Market Hours Active"
+    elif now < start_time:
+        return False, f"Market Hours not started yet (Current IST: {now.strftime('%H:%M:%S')})"
+    else:
+        return False, f"Market Hours ended (Current IST: {now.strftime('%H:%M:%S')})"
+
+
 # ==============================================================================
 # MODE 1: HEADLESS / BACKGROUND SCANNER EXECUTION
 # ==============================================================================
 def run_headless_scan():
-  log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
+    log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-  # Wait until exact 09:09 AM IST
-  wait_for_exact_time(9, 9)
+    # Market Hours Verification (9:09 AM - 3:30 PM IST)
+    is_active, reason = is_market_hours()
+    if not is_active:
+        log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
+        return
 
-  nifty = fetch_nifty_market_status()
-  if not nifty['is_bullish']:
-    log_msg(f"🔴 Nifty is Bearish status: {nifty['status']}. Running full scan anyway...", 'warning')
-  else:
-    log_msg(f"🟢 Nifty is Bullish status: {nifty['status']}.", 'info')
+    nifty = fetch_nifty_market_status()
+    if not nifty['is_bullish']:
+        log_msg(f"🔴 Nifty Status: {nifty['status']}. Running full scan anyway...", 'warning')
+    else:
+        log_msg(f"🟢 Nifty Status: {nifty['status']}.", 'info')
 
-  tickers = fetch_mega_nse_universe()
-  log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
+    tickers = fetch_mega_nse_universe()
+    log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
-  cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
-  )
-
-  log_msg(
-      f'Successfully loaded {len(cached_master)} stocks. Running'
-      ' analysis...',
-      'info',
-  )
-
-  if not cached_master:
-    log_msg(
-        '❌ No stock data downloaded. Yahoo Finance may be rate-limiting.',
-        'error',
+    cached_master = download_market_data_safe(
+        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
     )
-    return
 
-  results = []
-  with ThreadPoolExecutor(max_workers=6) as executor:
-    futures = {
-        executor.submit(analyze_single_ticker, ticker, df): ticker
-        for ticker, df in cached_master.items()
-    }
-    for future in as_completed(futures):
-      res = future.result()
-      if res:
-        results.extend(res)
+    if not cached_master:
+        log_msg('❌ No stock data downloaded. Yahoo Finance may be rate-limiting.', 'error')
+        return
 
-  res_df = pd.DataFrame(results)
-  if res_df.empty:
-    log_msg('No breakout signals found in this pass.', 'info')
-    return
+    results = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(analyze_single_ticker, ticker, df): ticker
+            for ticker, df in cached_master.items()
+        }
+        for future in as_completed(futures):
+            res = future.result()
+            if res:
+                results.extend(res)
 
-  already_sent = get_already_sent_stocks()
-  alert_candidates = filter_ideal_breakout_stock(res_df)
+    res_df = pd.DataFrame(results)
+    if res_df.empty:
+        log_msg('No breakout signals found in this pass.', 'info')
+        return
 
-  log_msg(
-      f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info'
-  )
+    already_sent = get_already_sent_stocks()
+    alert_candidates = filter_ideal_breakout_stock(res_df)
 
-  for _, row in alert_candidates.iterrows():
-    symbol = row['Symbol']
-    if symbol not in already_sent:
-      ok = send_email_alert(
-          symbol=symbol,
-          entry=row['Entry Price (₹)'],
-          sl=row['Stop Loss (₹)'],
-          target=row['Target Price (₹)'],
-          score=row['Score'],
-          rank=row['Execution Rank'],
-          window=row['Entry Window'],
-          condition=row['Execution Condition'],
-      )
-      if ok:
-        mark_stock_as_sent(symbol)
+    log_msg(f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info')
 
-  log_msg('🏁 Headless Scan Completed Successfully.', 'success')
+    for _, row in alert_candidates.iterrows():
+        symbol = row['Symbol']
+        
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
+        if symbol not in already_sent:
+            ok = send_email_alert(
+                symbol=symbol,
+                entry=row['Entry Price (₹)'],
+                sl=row['Stop Loss (₹)'],
+                target=row['Target Price (₹)'],
+                score=row['Score'],
+                rank=row['Execution Rank'],
+                window=row['Entry Window'],
+                condition=row['Execution Condition'],
+            )
+            if ok:
+                mark_stock_as_sent(symbol)
+                log_msg(f'🎯 Instant Mail Sent for new breakout: {symbol}', 'success')
+        else:
+            log_msg(f'⏭️ Duplicate Alert Skipped (Already Sent Today): {symbol}', 'info')
+
+    log_msg('🏁 Headless Scan Completed Successfully.', 'success')
 
 
 # ==============================================================================
