@@ -42,13 +42,4 @@ jobs:
         run: |
           python app.py --headless
 
-      - name: Commit and Push sent_alerts.json (Duplicate Email Protection)
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase || true
-          if [ -f sent_alerts.json ]; then
-            git add sent_alerts.json
-            git commit -m "Update sent alerts log [skip ci]" || echo "No changes to commit"
-            git push origin main || echo "Git push failed"
-          fi
+      - 
