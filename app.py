@@ -206,8 +206,8 @@ def fetch_mega_nse_universe():
       'HEROMOTOCO.NS', 'HINDALCO.NS', 'HINDUNILVR.NS', 'ICICIBANK.NS', 'ITC.NS',
       'INDUSINDBK.NS', 'INFY.NS', 'JSWSTEEL.NS', 'KOTAKBANK.NS', 'LTIM.NS', 'LT.NS',
       'M&M.NS', 'MARUTI.NS', 'NTPC.NS', 'NESTLEIND.NS', 'ONGC.NS', 'POWERGRID.NS',
-      'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SUNPHARMA.NS', 'TCS.NS',
-      'TATACONSUM.NS', 'TATAMOTORS.NS', 'TATASTEEL.NS', 'TECHM.NS', 'TITAN.NS',
+      'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SUNPHARMA.NS', 'TATACONSUM.NS',
+      'TCS.NS', 'TATAMOTORS.NS', 'TATASTEEL.NS', 'TECHM.NS', 'TITAN.NS',
       'UPL.NS', 'ULTRACEMCO.NS', 'WIPRO.NS',
   ]
   try:
@@ -440,15 +440,20 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
 # ==============================================================================
 def download_market_data_safe(
-    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
   cached_master = {}
+  total_tickers = len(tickers)
+  if total_tickers == 0:
+    return cached_master
+
   ticker_chunks = [
       tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)
   ]
+  total_chunks = len(ticker_chunks)
 
   def process_chunk(chunk):
     local_data = {}
@@ -499,14 +504,32 @@ def download_market_data_safe(
           time.sleep(1)
     return local_data
 
+  completed_chunks = 0
+  completed_tickers = 0
+
   with ThreadPoolExecutor(max_workers=5) as executor:
-    futures = [
-        executor.submit(process_chunk, chunk) for chunk in ticker_chunks
-    ]
+    futures = {
+        executor.submit(process_chunk, chunk): chunk for chunk in ticker_chunks
+    }
     for future in as_completed(futures):
+      chunk_tickers = futures[future]
       res = future.result()
       if res:
         cached_master.update(res)
+
+      completed_chunks += 1
+      completed_tickers += len(chunk_tickers)
+      pct = min(100, int((completed_chunks / total_chunks) * 100))
+
+      msg = f"⏳ Downloading market data: {pct}% ({min(completed_tickers, total_tickers)}/{total_tickers} stocks)"
+      if IS_HEADLESS:
+        log_msg(msg, 'info')
+      else:
+        if status_text:
+          status_text.text(msg)
+        if progress_bar:
+          progress_bar.progress(pct / 100.0)
+
       time.sleep(sleep_sec)
 
   return cached_master
@@ -630,15 +653,20 @@ def run_streamlit_app():
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
     status_text = st.empty()
-    status_text.text(
-        f'⏳ Downloading market data for {len(tickers)} stocks...'
-    )
+    progress_bar = st.progress(0)
 
     cached_master = download_market_data_safe(
-        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+        tickers,
+        period='3mo',
+        interval='1d',
+        chunk_size=40,
+        sleep_sec=0.5,
+        progress_bar=progress_bar,
+        status_text=status_text,
     )
 
     status_text.empty()
+    progress_bar.empty()
     return cached_master
 
   st.markdown(
