@@ -535,7 +535,7 @@ def download_market_data_safe(
   return cached_master
 
 
-# --- MARKET HOURS CHECK LOGIC (9:09 AM to 3:30 PM IST) ---
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
@@ -544,8 +544,8 @@ def is_market_hours():
     if now.weekday() >= 5:
         return False, "Weekend (Saturday/Sunday) - Market Closed"
         
-    start_time = now.replace(hour=9, minute=9, second=0, microsecond=0)
-    end_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    start_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
     
     if start_time <= now <= end_time:
         return True, "Market Hours Active"
@@ -561,7 +561,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-    # Market Hours Verification (6:00 AM - 6:00 PM IST)
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
