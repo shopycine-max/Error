@@ -1,4 +1,4 @@
-name: Automated Market Scanner & Alert Engine
+name: Alert Engine
 
 on:
   schedule:
