@@ -2,9 +2,11 @@ name: Automated Market Scanner & Alert Engine
 
 on:
   schedule:
-    # Timing in UTC: 3:30 AM UTC se 10:00 AM UTC (IST: 6:00 AM se 6:00 PM)
-    # Mon-Fri (1-5) har 15 minute me automatic run hoga
-    - cron: '*/15 3-10 * * 1-5'
+    # IST: Subah 8:00 AM se Shaam 4:00 PM (Mon-Fri)
+    # UTC Timing: 2:30 AM UTC se 10:30 AM UTC
+    - cron: '30-59/5 2 * * 1-5'  # 8:00 AM IST se 8:25 AM IST
+    - cron: '*/5 3-9 * * 1-5'     # 8:30 AM IST se 3:25 PM IST
+    - cron: '0-30/5 10 * * 1-5'   # 3:30 PM IST se 4:00 PM IST
   workflow_dispatch: # Manual run ka option
 
 jobs:
