@@ -561,7 +561,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-    # Market Hours Verification (9:09 AM - 3:30 PM IST)
+    # Market Hours Verification (6:00 AM - 6:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
