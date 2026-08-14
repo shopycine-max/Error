@@ -170,6 +170,15 @@ def fetch_nifty_market_status():
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
           pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
 
+          # --- NIFTY SUPPORT & RESISTANCE CALCULATION ---
+          prev_day = nifty.iloc[-2] if len(nifty) >= 2 else nifty.iloc[-1]
+          pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3.0
+          s1 = round((2 * pivot) - prev_day['High'], 2)
+          r1 = round((2 * pivot) - prev_day['Low'], 2)
+
+          sup_20d = round(float(nifty['Low'].tail(20).min()), 2)
+          res_20d = round(float(nifty['High'].tail(20).max()), 2)
+
           is_bullish = last_close > last_ema20
           status_text = (
               '🟢 TRADE MODE ACTIVE (Bullish Trend)'
@@ -183,6 +192,10 @@ def fetch_nifty_market_status():
               'nifty_close': round(last_close, 2),
               'nifty_ema20': round(last_ema20, 2),
               'pct_diff': pct_diff,
+              's1': s1,
+              'r1': r1,
+              'sup_20d': sup_20d,
+              'res_20d': res_20d,
           }
       except Exception:
         time.sleep(1)
@@ -194,6 +207,10 @@ def fetch_nifty_market_status():
       'nifty_close': 0.0,
       'nifty_ema20': 0.0,
       'pct_diff': 0.0,
+      's1': 0.0,
+      'r1': 0.0,
+      'sup_20d': 0.0,
+      'res_20d': 0.0,
   }
 
 
@@ -569,9 +586,9 @@ def run_headless_scan():
 
     nifty = fetch_nifty_market_status()
     if not nifty['is_bullish']:
-        log_msg(f"🔴 Nifty Status: {nifty['status']}. Running full scan anyway...", 'warning')
+        log_msg(f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...", 'warning')
     else:
-        log_msg(f"🟢 Nifty Status: {nifty['status']}.", 'info')
+        log_msg(f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}.", 'info')
 
     tickers = fetch_mega_nse_universe()
     log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
@@ -690,17 +707,17 @@ def run_streamlit_app():
   nifty_info = cached_nifty_status()
   if nifty_info['is_bullish']:
     st.success(
-        f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
-        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
-        f" ₹{nifty_info['nifty_ema20']} | **Strength:**"
-        f' +{nifty_info["pct_diff"]}% above EMA. **(Take Fresh Long Trades)**'
+        f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n\n"
+        f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | **Strength:** +{nifty_info['pct_diff']}% above EMA. **(Take Fresh Long Trades)**\n\n"
+        f"🛡️ **Immediate Support (S1):** ₹{nifty_info['s1']} | **20-Day Support (Low):** ₹{nifty_info['sup_20d']}\n\n"
+        f"🎯 **Immediate Resistance (R1):** ₹{nifty_info['r1']} | **20-Day Resistance (High):** ₹{nifty_info['res_20d']}"
     )
   else:
     st.error(
-        f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n**Nifty 50"
-        f" Close:** ₹{nifty_info['nifty_close']} | **20 EMA:**"
-        f" ₹{nifty_info['nifty_ema20']} | **Weakness:**"
-        f' {nifty_info["pct_diff"]}% below EMA. **(Avoid New Long Positions)**'
+        f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n\n"
+        f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | **Weakness:** {nifty_info['pct_diff']}% below EMA. **(Avoid New Long Positions)**\n\n"
+        f"🛡️ **Immediate Support (S1):** ₹{nifty_info['s1']} | **20-Day Support (Low):** ₹{nifty_info['sup_20d']}\n\n"
+        f"🎯 **Immediate Resistance (R1):** ₹{nifty_info['r1']} | **20-Day Resistance (High):** ₹{nifty_info['res_20d']}"
     )
 
   st.sidebar.header('⚙️ Pro Scanner Controls')
