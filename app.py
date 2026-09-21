@@ -15,11 +15,11 @@ import yfinance as yf
 
 # ==============================================================================
 # CONFIGURATION: Set default strategy for Cron Job (Headless Mode)
-# Option 1: 'Version 3 (3h Breakout Intraday)'
+# Option 1: 'Version 3 (1h Breakout Intraday)'
 # Option 2: 'Version 2 (1 Day - Without 500-day High)'
 # Option 3: 'Version 1 (1 Day - With 500-day High & Strict Filters)'
 # ==============================================================================
-HEADLESS_STRATEGY = os.getenv('HEADLESS_STRATEGY', 'Version 3 (3h Breakout Intraday)')
+HEADLESS_STRATEGY = os.getenv('HEADLESS_STRATEGY', 'Version 3 (1h Breakout Intraday)')
 
 # --- YFINANCE IP BLOCKING BYPASS SESSION ---
 session = requests.Session()
@@ -165,8 +165,8 @@ def flatten_yfinance_df(df):
 
 def fetch_nifty_market_status(interval='1d'):
   symbols = ['^NSEI', 'NIFTY_50.NS']
-  is_3h = interval == '3h'
-  nifty_period = '60d' if is_3h else '6mo'
+  is_1h = interval == '1h'
+  nifty_period = '60d' if is_1h else '6mo'
   
   for symbol in symbols:
     for attempt in range(2):
@@ -191,7 +191,7 @@ def fetch_nifty_market_status(interval='1d'):
 
           is_bullish = last_close > last_ema20
           
-          trend_label = "3h Trend" if is_3h else "Trend"
+          trend_label = "1h Trend" if is_1h else "Trend"
           status_text = (
               f'🟢 TRADE MODE ACTIVE (Bullish {trend_label})'
               if is_bullish
@@ -267,7 +267,7 @@ def analyze_single_ticker(
     if len(df) < 50:
       return None
 
-    is_3h = 'Version 3' in formula_version
+    is_1h = 'Version 3' in formula_version
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
@@ -378,8 +378,8 @@ def analyze_single_ticker(
       )
 
       # Dynamic timings based on version
-      if is_3h:
-          r1_win, r2_win, r3_win = 'Next 3-Hour Candle', 'Next 3-Hour Candle', 'Next 3-Hour Candle'
+      if is_1h:
+          r1_win, r2_win, r3_win = 'Next 1-Hour Candle', 'Next 1-Hour Candle', 'Next 1-Hour Candle'
           vol_ultimate = 2.0
           vol_heavy = 1.8
       else:
@@ -449,10 +449,10 @@ def filter_ideal_breakout_stock(df, formula_version):
   if df.empty:
     return pd.DataFrame()
     
-  is_3h = 'Version 3' in formula_version
+  is_1h = 'Version 3' in formula_version
   
-  if is_3h:
-      # Relaxed filters for 3-Hour Intra-day
+  if is_1h:
+      # Relaxed filters for 1-Hour Intra-day
       cond_alert = df['Alert'].str.contains('⭐|Ultimate|🔥', na=False, regex=True)
       ideal_df = df[cond_alert].copy()
   else:
@@ -593,9 +593,9 @@ def is_market_hours():
 def run_headless_scan():
     log_msg(f'🚀 Starting Background Scanner using: {HEADLESS_STRATEGY}', 'info')
 
-    is_3h = 'Version 3' in HEADLESS_STRATEGY
-    data_interval = '3h' if is_3h else '1d'
-    data_period = '60d' if is_3h else '3mo'
+    is_1h = 'Version 3' in HEADLESS_STRATEGY
+    data_interval = '1h' if is_1h else '1d'
+    data_period = '60d' if is_1h else '3mo'
 
     is_active, reason = is_market_hours()
     if not is_active:
@@ -619,7 +619,7 @@ def run_headless_scan():
         log_msg('❌ No stock data downloaded. Yahoo Finance may be rate-limiting.', 'error')
         return
         
-    default_turnover = 1.0 if is_3h else 3.0
+    default_turnover = 1.0 if is_1h else 3.0
 
     results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
@@ -686,15 +686,15 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 3 (3h Breakout Intraday)',
+          'Version 3 (1h Breakout Intraday)',
           'Version 2 (1 Day - Without 500-day High)',
           'Version 1 (1 Day - With 500-day High & Strict Filters)',
       ],
   )
   
-  is_3h = 'Version 3' in formula_version
-  data_interval = '3h' if is_3h else '1d'
-  data_period = '60d' if is_3h else '3mo'
+  is_1h = 'Version 3' in formula_version
+  data_interval = '1h' if is_1h else '1d'
+  data_period = '60d' if is_1h else '3mo'
 
   @st.cache_data(ttl=1800, show_spinner=False)
   def cached_nifty_status(interval):
@@ -762,7 +762,7 @@ def run_streamlit_app():
       'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
   )
   
-  default_turn = 1.0 if is_3h else 3.0
+  default_turn = 1.0 if is_1h else 3.0
   min_turnover = st.sidebar.number_input(
       f'Minimum Turnover (₹ Crores) per Candle', min_value=0.1, max_value=50.0, value=default_turn
   )
