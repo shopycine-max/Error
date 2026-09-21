@@ -249,7 +249,7 @@ def analyze_single_ticker(
     df,
     volume_multiplier=2.2,
     rsi_filter=58,
-    turnover_limit=1,  # 15m me turnover limit kam rakhi gayi hai
+    turnover_limit=1,
     formula_version='Version 2',
 ):
   try:
@@ -382,7 +382,6 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # Updated entry window dynamically for intraday
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = 'Next 15-Min Candle'
@@ -442,18 +441,17 @@ def analyze_single_ticker(
 
 
 def filter_ideal_breakout_stock(df):
+  """
+  Sirf ek condition: Jo bhi stock '⭐' ya 'Ultimate' alert type wala hai (Yellow color),
+  woh direct roadmap me aa jayega. Baki filters bypass ho jayenge.
+  """
   if df.empty:
     return pd.DataFrame()
+    
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] > 80
-  cond_surge = df['Massive Buying Surge (%)'] > 120
-  cond_vol = df['Vol Spike (x)'] > 2.2
-  cond_accum = df['Accum Ratio (10d)'] > 1.6
-  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
 
-  ideal_df = df[
-      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
-  ].copy()
+  ideal_df = df[cond_alert].copy()
+  
   if not ideal_df.empty:
     return ideal_df.sort_values(by='Score', ascending=False).reset_index(
         drop=True
@@ -937,8 +935,7 @@ def run_streamlit_app():
             ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
             ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
             ' Right Now</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
-            ' 8px; margin-bottom: 0px;">No stocks passed all strict'
-            ' confirmation filters on the 15m timeframe.</p></div>',
+            ' 8px; margin-bottom: 0px;">No specific yellow/ultimate setup found on the 15m timeframe currently.</p></div>',
             unsafe_allow_html=True,
         )
 
