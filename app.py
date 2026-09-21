@@ -396,10 +396,11 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 85.0 and vol_spike >= 2.5:
+      # 👇 MODIFIED: 15-min ke hisaab se volume spike 2.5 se kam karke 2.0 kiya gaya hai
+      if close_pos >= 85.0 and vol_spike >= 2.0:
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 30
-      elif accum_ratio >= 2.0 and vol_spike >= 2.0:
+      elif accum_ratio >= 2.0 and vol_spike >= 1.8:
         alert_type = '🔥 Massive Heavy Buying'
       elif accum_ratio >= 1.8:
         alert_type = '🧱 Steady Accumulation'
@@ -442,13 +443,14 @@ def analyze_single_ticker(
 
 def filter_ideal_breakout_stock(df):
   """
-  Sirf ek condition: Jo bhi stock '⭐' ya 'Ultimate' alert type wala hai (Yellow color),
-  woh direct roadmap me aa jayega. Baki filters bypass ho jayenge.
+  Jo bhi stock '⭐', 'Ultimate' ya '🔥' (Heavy Buying) alert type wala hai,
+  woh direct roadmap/email me aa jayega. Baki filters bypass ho jayenge.
   """
   if df.empty:
     return pd.DataFrame()
     
-  cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
+  # 👇 MODIFIED: '🔥' ko bhi shamil kiya gaya hai
+  cond_alert = df['Alert'].str.contains('⭐|Ultimate|🔥', na=False, regex=True)
 
   ideal_df = df[cond_alert].copy()
   
