@@ -261,6 +261,7 @@ def analyze_single_ticker(
     if len(df) < 50:
       return None
 
+    # Base Technical Calculations
     df['Pct_Change'] = df['Close'].pct_change() * 100
     df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
     df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -299,9 +300,18 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     cond_no_wick = df['Wick_Ratio'] <= 0.25
+
+    # --- REAL BREAKOUT / TRIGGER CONFIRMATION FILTER ---
+    trigger_level = float(df['High'].iloc[-2]) if len(df) >= 2 else float(df['High_20_Prev'].iloc[-1])
+    current_close = float(df['Close'].iloc[-1])
+    current_high = float(df['High'].iloc[-1])
+
+    # Stock must actively cross or sustain above trigger level in active candle
+    cond_active_cross = (current_high >= trigger_level) and (current_close >= trigger_level * 0.998)
+
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
+    cond2 = (df['Pct_Change'] >= 0.5) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
@@ -327,6 +337,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_active_cross
       )
     else:
       df['Signal'] = (
@@ -340,17 +351,15 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_active_cross
       )
 
     is_signal = (
         bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
     )
-    last_close_val = (
-        df['Close'].values[-1] if not df['Signal'].empty else None
-    )
 
-    if is_signal and pd.notna(last_close_val):
-      entry = float(last_close_val)
+    if is_signal:
+      entry = max(current_close, round(trigger_level * 1.001, 2))
       sl = (
           float(df['Low_5d'].values[-1])
           if pd.notna(df['Low_5d'].values[-1])
@@ -375,21 +384,21 @@ def analyze_single_ticker(
       day_low = float(df['Low'].values[-1])
       day_range = day_high - day_low
       close_pos = (
-          ((entry - day_low) / day_range * 100) if day_range > 0 else 50
+          ((current_close - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
-        exec_rank = '🥇 Rank 1 (Top Winner)'
-        entry_window = '9:15 AM - 9:30 AM'
-        exec_condition = f'Hold above ₹{round(entry, 2)}'
+        exec_rank = '🥇 Rank 1 (Active Breakout)'
+        entry_window = 'Live Market Hours'
+        exec_condition = f'Crossed & Holding above ₹{round(trigger_level, 2)}'
       elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
-        entry_window = '9:20 AM - 9:35 AM'
-        exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
+        entry_window = 'Live Market Hours'
+        exec_condition = f'Sustaining above ₹{round(trigger_level, 2)}'
       else:
-        exec_rank = '🥉 Rank 3 (Wait & Watch)'
-        entry_window = '9:30 AM - 9:45 AM'
-        exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
+        exec_rank = '🥉 Rank 3 (Watch & Confirm)'
+        entry_window = 'Live Market Hours'
+        exec_condition = f'15-Min Candle Close above ₹{round(trigger_level, 2)}'
 
       bonus_score = 0
       if close_pos >= 85.0 and vol_spike >= 2.5:
@@ -625,7 +634,7 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
-        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
+        # DUPLICATE CHECK: Skip if already sent today
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
