@@ -170,6 +170,7 @@ def fetch_nifty_market_status():
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
           pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
 
+          # --- NIFTY SUPPORT & RESISTANCE CALCULATION ---
           prev_day = nifty.iloc[-2] if len(nifty) >= 2 else nifty.iloc[-1]
           pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3.0
           s1 = round((2 * pivot) - prev_day['High'], 2)
@@ -273,10 +274,7 @@ def analyze_single_ticker(
     down_vol_10 = df['Red_Vol'].rolling(10).sum()
     df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
-    # --- UPGRADED: 50-Day High Breakout & 52-Week High Check ---
-    df['High_50_Prev'] = df['High'].shift(1).rolling(50, min_periods=20).max()
-    df['High_252_Prev'] = df['High'].shift(1).rolling(252, min_periods=50).max()
-
+    df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -301,11 +299,7 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     cond_no_wick = df['Wick_Ratio'] <= 0.25
-    
-    # --- UPGRADED BREAKOUT FILTERS ---
-    cond_breakout = df['Close'] > df['High_50_Prev']  # 50-Day High Breakout
-    cond_52w_proximity = df['Close'] >= (df['High_252_Prev'] * 0.85)  # Within 15% of 52W High
-
+    cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
     cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
@@ -333,7 +327,6 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
-          & cond_52w_proximity
       )
     else:
       df['Signal'] = (
@@ -347,7 +340,6 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
-          & cond_52w_proximity
       )
 
     is_signal = (
@@ -359,7 +351,6 @@ def analyze_single_ticker(
 
     if is_signal and pd.notna(last_close_val):
       entry = float(last_close_val)
-      day_high = float(df['High'].values[-1])
       sl = (
           float(df['Low_5d'].values[-1])
           if pd.notna(df['Low_5d'].values[-1])
@@ -380,26 +371,25 @@ def analyze_single_ticker(
           else 1.0
       )
 
+      day_high = float(df['High'].values[-1])
       day_low = float(df['Low'].values[-1])
       day_range = day_high - day_low
       close_pos = (
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- UPGRADED EXECUTION RULE: Confirmation above Yesterday's High ---
-      trigger_level = round(day_high * 1.002, 2)  # 0.2% buffer above Yesterday High
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
-        exec_condition = f'Break & Hold above ₹{trigger_level} (Prev High)'
+        exec_condition = f'Hold above ₹{round(entry, 2)}'
       elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
         entry_window = '9:20 AM - 9:35 AM'
-        exec_condition = f'Cross & Hold above ₹{trigger_level}'
+        exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
       else:
         exec_rank = '🥉 Rank 3 (Wait & Watch)'
         entry_window = '9:30 AM - 9:45 AM'
-        exec_condition = f'15-Min Candle Close above ₹{trigger_level}'
+        exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
       if close_pos >= 85.0 and vol_spike >= 2.5:
@@ -431,7 +421,6 @@ def analyze_single_ticker(
           'Execution Condition': exec_condition,
           'Alert': alert_type,
           'Entry Price (₹)': round(entry, 2),
-          'Trigger High (₹)': trigger_level,
           'Stop Loss (₹)': round(sl, 2),
           'Target Price (₹)': round(target, 2),
           'Day Change (%)': round(float(df['Pct_Change'].values[-1]), 2),
@@ -468,7 +457,7 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
 # ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
@@ -568,6 +557,7 @@ def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
     
+    # Mon (0) to Fri (4) check
     if now.weekday() >= 5:
         return False, "Weekend (Saturday/Sunday) - Market Closed"
         
@@ -588,6 +578,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
@@ -634,10 +625,11 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
-                entry=row['Trigger High (₹)'],
+                entry=row['Entry Price (₹)'],
                 sl=row['Stop Loss (₹)'],
                 target=row['Target Price (₹)'],
                 score=row['Score'],
@@ -708,8 +700,8 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (50-Day High Breakout & 52-Week Resistance Filter'
-      ' Integrated ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      ' ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -825,7 +817,7 @@ def run_streamlit_app():
           if stock_symbol not in st.session_state['sent_email_alerts']:
             sent_status = send_email_alert(
                 symbol=stock_symbol,
-                entry=row['Trigger High (₹)'],
+                entry=row['Entry Price (₹)'],
                 sl=row['Stop Loss (₹)'],
                 target=row['Target Price (₹)'],
                 score=row['Score'],
@@ -854,7 +846,7 @@ def run_streamlit_app():
           cs = row['Continuation Score (%)']
           mbs = row['Massive Buying Surge (%)']
           rsi_v = row['RSI']
-          p_entry = row['Trigger High (₹)']
+          p_entry = row['Entry Price (₹)']
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
@@ -862,7 +854,7 @@ def run_streamlit_app():
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
-<p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger (Prev High): ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
+<p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
 </div>"""
 
         box_html += '</div>'
