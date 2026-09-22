@@ -288,7 +288,7 @@ def analyze_single_ticker(
     df['RSI'] = 100 - (100 / (1 + rs))
  
     window_size_252 = max(10, min(252, len(df) - 2))
-df['Max_252_High_1d_Ago'] = (
+    df['Max_252_High_1d_Ago'] = (
     df['High'].shift(1).rolling(window=window_size_252, min_periods=1).max()
 )
   
