@@ -330,8 +330,8 @@ def analyze_single_ticker(
           & cond_breakout
       ) 
     else:
-  cond7_252 = df['Close'] >= df['Max_252_High_1d_Ago']
-  df['Signal'] = (
+     cond7_252 = df['Close'] >= df['Max_252_High_1d_Ago']
+     df['Signal'] = (
       cond1
       & cond2
       & cond3
