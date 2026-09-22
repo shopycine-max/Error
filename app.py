@@ -287,10 +287,16 @@ def analyze_single_ticker(
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    window_size = max(10, min(500, len(df) - 2))
+    window_size_500 = max(10, min(500, len(df) - 2))
     df['Max_500_High_1d_Ago'] = (
-        df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+        df['High'].shift(1).rolling(window=window_size_500, min_periods=1).max()
     )
+
+    window_size_252 = max(10, min(252, len(df) - 2))
+    df['Max_252_High_1d_Ago'] = (
+        df['High'].shift(1).rolling(window=window_size_252, min_periods=1).max()
+    )
+
     df['Low_5d'] = df['Low'].rolling(window=5).min()
 
     candle_range = df['High'] - df['Low']
@@ -329,12 +335,14 @@ def analyze_single_ticker(
           & cond_breakout
       )
     else:
+      cond7_252 = df['Close'] >= df['Max_252_High_1d_Ago']
       df['Signal'] = (
           cond1
           & cond2
           & cond3
           & cond4
           & cond5
+          & cond7_252
           & cond8
           & cond9
           & cond_accum
@@ -724,7 +732,7 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 2 (Without 500-day High)',
+          'Version 2 (With 252-day High)',
           'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
