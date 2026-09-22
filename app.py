@@ -328,8 +328,8 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
-      )
-else:
+
+ else:
   cond7_252 = df['Close'] >= df['Max_252_High_1d_Ago']
   df['Signal'] = (
       cond1
@@ -344,7 +344,7 @@ else:
       & cond_no_wick
       & cond_breakout
   )
- 
+
 
     is_signal = (
         bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
