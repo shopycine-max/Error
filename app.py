@@ -286,11 +286,12 @@ def analyze_single_ticker(
     avg_loss = loss.ewm(com=13, adjust=False).mean()
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
-
-    window_size = max(10, min(500, len(df) - 2))
-    df['Max_500_High_1d_Ago'] = (
-        df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-    )
+ 
+    window_size_252 = max(10, min(252, len(df) - 2))
+df['Max_252_High_1d_Ago'] = (
+    df['High'].shift(1).rolling(window=window_size_252, min_periods=1).max()
+)
+  
     df['Low_5d'] = df['Low'].rolling(window=5).min()
 
     candle_range = df['High'] - df['Low']
@@ -328,19 +329,22 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
       )
-    else:
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond8
-          & cond9
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-      )
+      else:
+  cond7_252 = df['Close'] >= df['Max_252_High_1d_Ago']
+  df['Signal'] = (
+      cond1
+      & cond2
+      & cond3
+      & cond4
+      & cond5
+      & cond7_252  # <--- Version 2 me 252-day high breakout filter add hua
+      & cond8
+      & cond9
+      & cond_accum
+      & cond_no_wick
+      & cond_breakout
+  )
+ 
 
     is_signal = (
         bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
@@ -724,7 +728,7 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 2 (Without 500-day High)',
+          'Version 2 (With 252-day High)',
           'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
