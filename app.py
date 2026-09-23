@@ -1,16 +1,16 @@
 import datetime
-import json
+import io
 import os
-import requests
 import pandas as pd
+import streamlit as st
 import yfinance as yf
 
-# --- YFINANCE SESSION ---
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-})
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Breakout & Gap-Up Tracker", layout="wide")
+st.title("🚀 3-Month Breakout & Gap-Up Tracker")
+st.caption("Includes Next Day High, Gap-Up % & Intraday Move Tracking")
 
+@st.cache_data(ttl=3600)
 def fetch_nse_universe():
     fallback = [
         'ADANIENT.NS', 'ADANIPORTS.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS', 'AXISBANK.NS',
@@ -37,7 +37,7 @@ def fetch_nse_universe():
 
 def process_historical_breakouts(ticker, full_df):
     results = []
-    if len(full_df) < 60:
+    if full_df is None or len(full_df) < 60:
         return results
 
     full_df = full_df.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
@@ -133,24 +133,28 @@ def process_historical_breakouts(ticker, full_df):
 
     return results
 
-def main():
-    print("🚀 Starting 3-Month Backtest Report Generator (With Next Day High)...")
+# --- MAIN STREAMLIT APP ---
+if st.button("▶ Run Backtest & Generate Report", type="primary"):
     tickers = fetch_nse_universe()
-    print(f"📦 Fetching 6 months data for {len(tickers)} stocks...")
-
-    raw_data = yf.download(
-        tickers=tickers,
-        period='6mo',
-        interval='1d',
-        progress=True,
-        group_by='ticker',
-        threads=True,
-        session=session
-    )
+    
+    with st.spinner(f"Fetching historical market data for {len(tickers)} stocks..."):
+        try:
+            raw_data = yf.download(
+                tickers=tickers,
+                period='6mo',
+                interval='1d',
+                progress=False,
+                group_by='ticker',
+                threads=True
+            )
+        except Exception as e:
+            st.error(f"Error fetching data: {e}")
+            st.stop()
 
     all_breakouts = []
-
-    for ticker in tickers:
+    progress_bar = st.progress(0)
+    
+    for idx, ticker in enumerate(tickers):
         try:
             if isinstance(raw_data.columns, pd.MultiIndex):
                 if ticker in raw_data.columns.get_level_values(0):
@@ -165,20 +169,32 @@ def main():
                 all_breakouts.extend(res)
         except Exception:
             continue
+        
+        progress_bar.progress((idx + 1) / len(tickers))
+
+    progress_bar.empty()
 
     df_report = pd.DataFrame(all_breakouts)
 
     if not df_report.empty:
         df_report = df_report.sort_values(by='Signal Date (3:30 PM)', ascending=False)
-        output_file = 'Roadmap_Breakout_GapUp_3Months.xlsx'
         
-        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        st.success(f"✅ Found {len(df_report)} Breakout Signals across past 3 months!")
+        
+        # Display Interactive Table
+        st.dataframe(df_report, use_container_width=True)
+
+        # Excel Download Button in Streamlit UI
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
             df_report.to_excel(writer, index=False, sheet_name='GapUp_High_Analysis')
+        excel_data = excel_buffer.getvalue()
 
-        print(f"\n✅ SUCCESS: Excel Sheet generated -> '{output_file}'")
-        print(f"📊 Total Breakout Signals Tracked: {len(df_report)}")
+        st.download_button(
+            label="📥 Download Report as Excel Sheet",
+            data=excel_data,
+            file_name="Roadmap_Breakout_GapUp_3Months.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     else:
-        print("\n⚠️ No breakouts found.")
-
-if __name__ == '__main__':
-    main()
+        st.warning("⚠️ No breakouts found matching all criteria in the past 3 months.")
