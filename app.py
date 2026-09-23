@@ -279,6 +279,12 @@ def analyze_single_ticker(
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
+    # --- ROADMAP FORMULA INTEGRATION ---
+    df['Roadmap_EMA'] = df['EMA_50']
+    crossed_roadmap = (df['Close'].shift(1) < df['Roadmap_EMA'].shift(1)) & (df['Close'] >= df['Roadmap_EMA'])
+    touching_roadmap = (df['Low'] <= df['Roadmap_EMA']) & (df['Close'] >= df['Roadmap_EMA'])
+    cond_roadmap = crossed_roadmap | touching_roadmap
+
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -327,6 +333,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_roadmap
       )
     else:
       df['Signal'] = (
@@ -340,6 +347,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_roadmap
       )
 
     is_signal = (
