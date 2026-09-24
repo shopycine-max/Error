@@ -249,7 +249,7 @@ def analyze_single_ticker(
     volume_multiplier=2.2,
     rsi_filter=58,
     turnover_limit=3,
-    formula_version='Version 3',
+    formula_version='Version 2',
 ):
   try:
     if len(df) < 50:
@@ -278,16 +278,6 @@ def analyze_single_ticker(
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
-
-    # --- VERSION 3 ANTI-FALSE BREAKOUT INDICATORS ---
-    df['High_3d_prev'] = df['High'].shift(1).rolling(3).max()
-    df['Low_3d_prev'] = df['Low'].shift(1).rolling(3).min()
-    df['Consolidation_Range_Pct'] = ((df['High_3d_prev'] - df['Low_3d_prev']) / (df['Low_3d_prev'] + 1e-10)) * 100
-    cond_consolidation = df['Consolidation_Range_Pct'] <= 8.0
-    cond_not_exhausted = df['Close'] <= (df['EMA_20'] * 1.12)
-    df['Consecutive_Green'] = df['Is_Green'].rolling(3).sum()
-    cond_not_late_entry = df['Consecutive_Green'].shift(1) < 3
-    cond_above_200 = df['Close'] > df['EMA_200']
 
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
@@ -319,24 +309,7 @@ def analyze_single_ticker(
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
-    if 'Version 3' in formula_version or formula_version == 'v3':
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond8
-          & cond9
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-          & cond_consolidation
-          & cond_not_exhausted
-          & cond_not_late_entry
-          & cond_above_200
-      )
-    elif 'Version 1' in formula_version or formula_version == 'v1':
+    if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
       cond10 = df['EMA_50'] > df['EMA_200']
       cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
@@ -631,7 +604,7 @@ def run_headless_scan():
     results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, 2.2, 58, 3, 'Version 3'): ticker
+            executor.submit(analyze_single_ticker, ticker, df): ticker
             for ticker, df in cached_master.items()
         }
         for future in as_completed(futures):
@@ -751,7 +724,6 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 3 (Anti-False Breakout Integrated)',
           'Version 2 (Without 500-day High)',
           'Version 1 (With 500-day High & Strict Filters)',
       ],
