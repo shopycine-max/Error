@@ -243,24 +243,8 @@ def fetch_mega_nse_universe():
   return fallback
 
 
-def analyze_single_ticker(
-    ticker,
-    df,
-    volume_multiplier=2.2,
-    rsi_filter=58,
-    turnover_limit=3,
-    formula_version='Version 3',
-):
-  try:
-    if len(df) < 50:
-      return None
-
-    df = df.copy()
-    df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-    df = df[df['Volume'] > 0]
-    if len(df) < 50:
-      return None
-
+def calculate_indicators(df, volume_multiplier, rsi_filter, turnover_limit, formula_version):
+    """Helper function to calculate indicators for both Live Scan and Backtest"""
     df['Pct_Change'] = df['Close'].pct_change() * 100
     df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
     df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -298,9 +282,7 @@ def analyze_single_ticker(
     df['RSI'] = 100 - (100 / (1 + rs))
 
     window_size = max(10, min(500, len(df) - 2))
-    df['Max_500_High_1d_Ago'] = (
-        df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-    )
+    df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
     df['Low_5d'] = df['Low'].rolling(window=5).min()
 
     candle_range = df['High'] - df['Low']
@@ -320,61 +302,40 @@ def analyze_single_ticker(
     cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
     if 'Version 3' in formula_version or formula_version == 'v3':
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond8
-          & cond9
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-          & cond_consolidation
-          & cond_not_exhausted
-          & cond_not_late_entry
-          & cond_above_200
-      )
+        df['Signal'] = (cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout & cond_consolidation & cond_not_exhausted & cond_not_late_entry & cond_above_200)
     elif 'Version 1' in formula_version or formula_version == 'v1':
-      cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
-      cond10 = df['EMA_50'] > df['EMA_200']
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond7
-          & cond8
-          & cond9
-          & cond10
-          & cond12
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-      )
+        cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
+        cond10 = df['EMA_50'] > df['EMA_200']
+        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
+        df['Signal'] = (cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout)
     else:
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond8
-          & cond9
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-      )
+        df['Signal'] = (cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout)
 
-    is_signal = (
-        bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
-    )
-    last_close_val = (
-        df['Close'].values[-1] if not df['Signal'].empty else None
-    )
+    return df
+
+
+def analyze_single_ticker(
+    ticker,
+    df,
+    volume_multiplier=2.2,
+    rsi_filter=58,
+    turnover_limit=3,
+    formula_version='Version 3',
+):
+  try:
+    if len(df) < 50:
+      return None
+
+    df = df.copy()
+    df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+    df = df[df['Volume'] > 0]
+    if len(df) < 50:
+      return None
+
+    df = calculate_indicators(df, volume_multiplier, rsi_filter, turnover_limit, formula_version)
+
+    is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
+    last_close_val = df['Close'].values[-1] if not df['Signal'].empty else None
 
     if is_signal and pd.notna(last_close_val):
       entry = float(last_close_val)
@@ -429,9 +390,7 @@ def analyze_single_ticker(
       else:
         alert_type = '✅ Normal Signal'
 
-      rsi_val = (
-          float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
-      )
+      rsi_val = float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
       total_score = round(
           rsi_val
           + (vol_spike * 5)
@@ -463,6 +422,93 @@ def analyze_single_ticker(
   return None
 
 
+# ==============================================================================
+# 1-MONTH BACKTESTING ENGINE
+# ==============================================================================
+def backtest_single_ticker(
+    ticker, df, volume_multiplier, rsi_filter, turnover_limit, formula_version
+):
+    try:
+        if len(df) < 50:
+            return []
+        
+        df = df.copy()
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+        df = df[df['Volume'] > 0]
+        if len(df) < 50:
+            return []
+
+        df = calculate_indicators(df, volume_multiplier, rsi_filter, turnover_limit, formula_version)
+        
+        # Look back 22 trading days (~1 month)
+        lookback_days = 22
+        max_holding_days = 15
+        
+        if len(df) <= lookback_days:
+            return []
+            
+        recent_df = df.iloc[-lookback_days:]
+        results = []
+
+        for i in range(len(recent_df)):
+            if recent_df['Signal'].iloc[i]:
+                entry_date = recent_df.index[i]
+                entry_price = float(recent_df['Close'].iloc[i])
+                
+                sl = float(recent_df['Low_5d'].iloc[i]) if pd.notna(recent_df['Low_5d'].iloc[i]) else entry_price * 0.95
+                if sl >= entry_price or (entry_price - sl) / entry_price < 0.005:
+                    sl = entry_price * 0.965
+                
+                risk = entry_price - sl
+                target = entry_price + (2 * risk)
+
+                orig_idx = df.index.get_loc(entry_date)
+                future_df = df.iloc[orig_idx + 1 : orig_idx + 1 + max_holding_days]
+
+                outcome = "Open ⏳"
+                exit_price = entry_price
+                exit_date = "N/A"
+                days_held = 0
+
+                for f_idx, f_row in future_df.iterrows():
+                    days_held += 1
+                    # Check if target hit first
+                    if f_row['High'] >= target:
+                        outcome = "Target Hit 🟢"
+                        exit_price = target
+                        exit_date = f_idx.strftime('%Y-%m-%d')
+                        break
+                    # Check if SL hit
+                    elif f_row['Low'] <= sl:
+                        outcome = "SL Hit 🔴"
+                        exit_price = sl
+                        exit_date = f_idx.strftime('%Y-%m-%d')
+                        break
+                
+                if outcome == "Open ⏳" and len(future_df) > 0:
+                    exit_price = future_df['Close'].iloc[-1]
+                    if exit_price > entry_price:
+                        outcome = "Open (Profit) 🟡"
+                    else:
+                        outcome = "Open (Loss) 🟠"
+                
+                pnl_pct = ((exit_price - entry_price) / entry_price) * 100
+
+                results.append({
+                    "Symbol": ticker.replace('.NS', ''),
+                    "Entry Date": entry_date.strftime('%Y-%m-%d'),
+                    "Entry Price": round(entry_price, 2),
+                    "Stop Loss": round(sl, 2),
+                    "Target": round(target, 2),
+                    "Outcome": outcome,
+                    "Exit Date": exit_date,
+                    "PnL %": round(pnl_pct, 2)
+                })
+        return results
+    except Exception:
+        return []
+
+
 def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
@@ -483,9 +529,6 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
-# ==============================================================================
-# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
-# ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
@@ -579,12 +622,10 @@ def download_market_data_safe(
   return cached_master
 
 
-# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
     
-    # Mon (0) to Fri (4) check
     if now.weekday() >= 5:
         return False, "Weekend (Saturday/Sunday) - Market Closed"
         
@@ -605,7 +646,6 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
@@ -651,8 +691,6 @@ def run_headless_scan():
 
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
-        
-        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
@@ -683,6 +721,8 @@ def run_streamlit_app():
 
   if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
+  if 'backtest_results' not in st.session_state:
+    st.session_state['backtest_results'] = pd.DataFrame()
   if 'sent_email_alerts' not in st.session_state:
     st.session_state['sent_email_alerts'] = set()
 
@@ -727,8 +767,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
-      ' ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & 1-Month Backtest Integrated ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -796,6 +835,7 @@ def run_streamlit_app():
           all_tickers
       )
       st.session_state['live_results'] = pd.DataFrame()
+      st.session_state['backtest_results'] = pd.DataFrame()
       st.sidebar.success('🏁 Fresh Data Loaded!')
       st.rerun()
 
@@ -823,170 +863,205 @@ def run_streamlit_app():
           results.extend(res)
     return pd.DataFrame(results)
 
-  st.subheader('⚡ Live Data Collection & Priority Scan')
+  def run_historical_backtest():
+      results = []
+      pool = st.session_state.get('master_market_data', {})
+      if not pool:
+          return pd.DataFrame()
+      with ThreadPoolExecutor(max_workers=8) as executor:
+          futures = {
+              executor.submit(
+                  backtest_single_ticker,
+                  ticker,
+                  df,
+                  volume_multiplier,
+                  rsi_filter,
+                  min_turnover,
+                  formula_version,
+              ): ticker
+              for ticker, df in pool.items()
+          }
+          for future in as_completed(futures):
+              res = future.result()
+              if res:
+                  results.extend(res)
+      return pd.DataFrame(results).sort_values(by='Entry Date', ascending=False)
 
-  if 'master_market_data' not in st.session_state:
-    st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
-  else:
-    if st.button('🚀 Run Scanner', key='live_btn'):
-      with st.spinner('Searching for breakout setups...'):
-        st.session_state['live_results'] = compute_analytics()
 
-    res_df = st.session_state.get('live_results', pd.DataFrame())
+  # --- TABS FOR UI ---
+  tab1, tab2 = st.tabs(["🚀 Live Scanner", "🔙 1-Month Backtester"])
 
-    if not res_df.empty:
-      res_df = res_df.sort_values(by='Score', ascending=False)
+  with tab1:
+      st.subheader('⚡ Live Data Collection & Priority Scan')
 
-      ideal_matches_df = filter_ideal_breakout_stock(res_df)
+      if 'master_market_data' not in st.session_state:
+        st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
+      else:
+        if st.button('🚀 Run Scanner', key='live_btn'):
+          with st.spinner('Searching for breakout setups...'):
+            st.session_state['live_results'] = compute_analytics()
 
-      if not ideal_matches_df.empty:
-        for _, row in ideal_matches_df.iterrows():
-          stock_symbol = row['Symbol']
-          if stock_symbol not in st.session_state['sent_email_alerts']:
-            sent_status = send_email_alert(
-                symbol=stock_symbol,
-                entry=row['Entry Price (₹)'],
-                sl=row['Stop Loss (₹)'],
-                target=row['Target Price (₹)'],
-                score=row['Score'],
-                rank=row['Execution Rank'],
-                window=row['Entry Window'],
-                condition=row['Execution Condition'],
-            )
-            if sent_status:
-              st.session_state['sent_email_alerts'].add(stock_symbol)
-              st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
+        res_df = st.session_state.get('live_results', pd.DataFrame())
 
-        st.success(
-            f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
-            ' 100% criteria.'
-        )
+        if not res_df.empty:
+          res_df = res_df.sort_values(by='Score', ascending=False)
 
-        box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
+          ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
-        for idx, row in ideal_matches_df.iterrows():
-          rank = idx + 1
-          sym = row['Symbol']
-          ex_rank = row['Execution Rank']
-          win = row['Entry Window']
-          cond = row['Execution Condition']
-          sc = row['Score']
-          cs = row['Continuation Score (%)']
-          mbs = row['Massive Buying Surge (%)']
-          rsi_v = row['RSI']
-          p_entry = row['Entry Price (₹)']
-          p_sl = row['Stop Loss (₹)']
-          p_tgt = row['Target Price (₹)']
+          if not ideal_matches_df.empty:
+            for _, row in ideal_matches_df.iterrows():
+              stock_symbol = row['Symbol']
+              if stock_symbol not in st.session_state['sent_email_alerts']:
+                sent_status = send_email_alert(
+                    symbol=stock_symbol,
+                    entry=row['Entry Price (₹)'],
+                    sl=row['Stop Loss (₹)'],
+                    target=row['Target Price (₹)'],
+                    score=row['Score'],
+                    rank=row['Execution Rank'],
+                    window=row['Entry Window'],
+                    condition=row['Execution Condition'],
+                )
+                if sent_status:
+                  st.session_state['sent_email_alerts'].add(stock_symbol)
+                  st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
 
-          box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+            st.success(f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met 100% criteria.')
+
+            box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
+
+            for idx, row in ideal_matches_df.iterrows():
+              rank = idx + 1
+              sym = row['Symbol']
+              ex_rank = row['Execution Rank']
+              win = row['Entry Window']
+              cond = row['Execution Condition']
+              sc = row['Score']
+              cs = row['Continuation Score (%)']
+              mbs = row['Massive Buying Surge (%)']
+              rsi_v = row['RSI']
+              p_entry = row['Entry Price (₹)']
+              p_sl = row['Stop Loss (₹)']
+              p_tgt = row['Target Price (₹)']
+
+              box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
 </div>"""
 
-        box_html += '</div>'
-        st.markdown(box_html, unsafe_allow_html=True)
+            box_html += '</div>'
+            st.markdown(box_html, unsafe_allow_html=True)
 
-        top_stock_row = ideal_matches_df.iloc[0]
-        top_stock = top_stock_row['Symbol']
+            top_stock_row = ideal_matches_df.iloc[0]
+            top_stock = top_stock_row['Symbol']
 
-        st.markdown(f'### 👑 Chart View: **{top_stock}**')
-        chart_data = yf.download(
-            f'{top_stock}.NS',
-            period='3mo',
-            interval='1d',
-            progress=False,
-            session=session,
-        )
-        chart_data = flatten_yfinance_df(chart_data)
+            st.markdown(f'### 👑 Chart View: **{top_stock}**')
+            chart_data = yf.download(f'{top_stock}.NS', period='3mo', interval='1d', progress=False, session=session)
+            chart_data = flatten_yfinance_df(chart_data)
 
-        if not chart_data.empty:
-          chart_data = chart_data.dropna(
-              subset=['Open', 'High', 'Low', 'Close', 'Volume']
-          )
-          if not chart_data.empty:
-            fig = go.Figure(
-                data=[
-                    go.Candlestick(
-                        x=chart_data.index,
-                        open=chart_data['Open'],
-                        high=chart_data['High'],
-                        low=chart_data['Low'],
-                        close=chart_data['Close'],
-                        name='Candlestick',
-                    )
-                ]
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=chart_data.index,
-                    y=chart_data['Close'].ewm(span=20).mean(),
-                    line=dict(color='orange', width=1.5),
-                    name='EMA 20',
+            if not chart_data.empty:
+              chart_data = chart_data.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+              if not chart_data.empty:
+                fig = go.Figure(
+                    data=[
+                        go.Candlestick(
+                            x=chart_data.index,
+                            open=chart_data['Open'],
+                            high=chart_data['High'],
+                            low=chart_data['Low'],
+                            close=chart_data['Close'],
+                            name='Candlestick',
+                        )
+                    ]
                 )
+                fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['Close'].ewm(span=20).mean(), line=dict(color='orange', width=1.5), name='EMA 20'))
+
+                live_sl = top_stock_row['Stop Loss (₹)']
+                live_tgt = top_stock_row['Target Price (₹)']
+
+                fig.add_hline(y=live_sl, line_dash='dash', line_color='red', line_width=2, annotation_text=f'SL: ₹{live_sl}', annotation_position='bottom left')
+                fig.add_hline(y=live_tgt, line_dash='dash', line_color='green', line_width=2, annotation_text=f'Target: ₹{live_tgt}', annotation_position='top left')
+
+                fig.update_layout(template='plotly_dark', title=f'{top_stock} Setup Chart', xaxis_rangeslider_visible=False)
+                st.plotly_chart(fig)
+          else:
+            st.markdown(
+                '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
+                ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
+                ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
+                ' Today</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
+                ' 8px; margin-bottom: 0px;">No stocks passed all strict'
+                ' confirmation filters.</p></div>',
+                unsafe_allow_html=True,
             )
 
-            live_sl = top_stock_row['Stop Loss (₹)']
-            live_tgt = top_stock_row['Target Price (₹)']
+          def highlight_buying(row):
+            alert = str(row.get('Alert', ''))
+            if '⭐' in alert or 'Ultimate' in alert:
+              return ['background-color: #ffd700; color: #000000; font-weight: bold'] * len(row)
+            elif '🔥' in alert:
+              return ['background-color: rgba(255, 69, 0, 0.35); color: #ffffff; font-weight: bold'] * len(row)
+            elif '🧱' in alert:
+              return ['background-color: rgba(0, 150, 255, 0.25); color: #ffffff; font-weight: bold'] * len(row)
+            return [''] * len(row)
 
-            fig.add_hline(
-                y=live_sl,
-                line_dash='dash',
-                line_color='red',
-                line_width=2,
-                annotation_text=f'SL: ₹{live_sl}',
-                annotation_position='bottom left',
-            )
-            fig.add_hline(
-                y=live_tgt,
-                line_dash='dash',
-                line_color='green',
-                line_width=2,
-                annotation_text=f'Target: ₹{live_tgt}',
-                annotation_position='top left',
-            )
+          styled_df = res_df.style.apply(highlight_buying, axis=1)
+          st.subheader(f'📊 Active Signals Found: {len(res_df)}')
+          st.dataframe(styled_df, hide_index=True)
+        else:
+          st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
 
-            fig.update_layout(
-                template='plotly_dark',
-                title=f'{top_stock} Setup Chart',
-                xaxis_rangeslider_visible=False,
-            )
-            st.plotly_chart(fig)
+  # --- BACKTESTER TAB ---
+  with tab2:
+      st.subheader('🔙 1-Month Backtest Performance (Last 22 Trading Days)')
+      st.markdown("Yeh feature check karta hai ki pichle 1 mahine mein kahan signals aaye aur unhone kaisa perform kiya (Max holding: 15 days).")
+      
+      if 'master_market_data' not in st.session_state:
+          st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
       else:
-        st.markdown(
-            '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
-            ' border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2'
-            ' style="color: #ff4d4d; margin: 0;">❌ No Ideal Match Found'
-            ' Today</h2><p style="color: #c9d1d9; font-size: 15px; margin-top:'
-            ' 8px; margin-bottom: 0px;">No stocks passed all strict'
-            ' confirmation filters.</p></div>',
-            unsafe_allow_html=True,
-        )
+          # Button styling hack via markdown
+          st.markdown("""<style> div[data-testid="stButton"] > button[kind="secondary"] { background-color: #1f6feb; border-color: #1f6feb; color: white;} </style>""", unsafe_allow_html=True)
+          
+          if st.button('📊 Run 1-Month Backtest', key='bt_btn', type="secondary"):
+              with st.spinner('Calculating historical accuracy...'):
+                  st.session_state['backtest_results'] = run_historical_backtest()
+          
+          b_df = st.session_state.get('backtest_results', pd.DataFrame())
+          
+          if not b_df.empty:
+              total_trades = len(b_df)
+              wins = len(b_df[b_df['Outcome'] == 'Target Hit 🟢'])
+              losses = len(b_df[b_df['Outcome'] == 'SL Hit 🔴'])
+              open_trades = len(b_df[b_df['Outcome'].str.contains('Open')])
+              closed_trades = wins + losses
+              win_rate = round((wins / closed_trades) * 100, 2) if closed_trades > 0 else 0
+              avg_pnl = round(b_df['PnL %'].mean(), 2)
 
-      def highlight_buying(row):
-        alert = str(row.get('Alert', ''))
-        if '⭐' in alert or 'Ultimate' in alert:
-          return [
-              'background-color: #ffd700; color: #000000; font-weight: bold'
-          ] * len(row)
-        elif '🔥' in alert:
-          return [
-              'background-color: rgba(255, 69, 0, 0.35); color: #ffffff;'
-              ' font-weight: bold'
-          ] * len(row)
-        elif '🧱' in alert:
-          return [
-              'background-color: rgba(0, 150, 255, 0.25); color: #ffffff;'
-              ' font-weight: bold'
-          ] * len(row)
-        return [''] * len(row)
+              # Display Metrics
+              c1, c2, c3, c4 = st.columns(4)
+              c1.metric(label="Total Signals (Last 1 Month)", value=total_trades)
+              c2.metric(label="Wins 🟢 | Losses 🔴", value=f"{wins} | {losses}")
+              c3.metric(label="Accuracy (Win Rate)", value=f"{win_rate}%")
+              c4.metric(label="Avg PnL per Trade", value=f"{avg_pnl}%", delta=avg_pnl)
 
-      styled_df = res_df.style.apply(highlight_buying, axis=1)
-      st.subheader(f'📊 Active Signals Found: {len(res_df)}')
-      st.dataframe(styled_df, hide_index=True)
-    else:
-      st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
+              # Style DataFrame
+              def highlight_outcomes(val):
+                  if 'Target Hit' in str(val):
+                      return 'background-color: rgba(0, 255, 127, 0.2); color: #00ff7f; font-weight: bold'
+                  elif 'SL Hit' in str(val):
+                      return 'background-color: rgba(255, 77, 77, 0.2); color: #ff4d4d; font-weight: bold'
+                  elif 'Profit' in str(val):
+                      return 'color: #ffd700;'
+                  elif 'Loss' in str(val):
+                      return 'color: #ffaa00;'
+                  return ''
+              
+              st.markdown("### 📜 Trade Log")
+              st.dataframe(b_df.style.map(highlight_outcomes, subset=['Outcome']), use_container_width=True, hide_index=True)
+          else:
+              st.caption("Click the blue button above to generate the backtest report.")
 
 
 if __name__ == '__main__':
