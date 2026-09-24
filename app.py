@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-# --- YFINANCE & HTTP SESSION ---
+# --- YFINANCE IP BLOCKING BYPASS SESSION ---
 session = requests.Session()
 session.headers.update({
     'User-Agent': (
@@ -32,10 +32,11 @@ if not IS_HEADLESS:
 
 # --- LOGGING HELPER ---
 def log_msg(msg, level='info'):
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  time_str = datetime.datetime.now(ist).strftime('%H:%M:%S')
   if IS_HEADLESS:
-    print(f"[{time_str}] [{level.upper()}] {msg}")
+    print(
+        f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [{level.upper()}]"
+        f' {msg}'
+    )
   else:
     if level == 'error':
       st.error(msg)
@@ -65,25 +66,6 @@ RECEIVER_EMAIL = safe_get_secret('RECEIVER_EMAIL', '')
 SENT_LOG_FILE = 'sent_alerts.json'
 
 
-# --- ZERODHA LIVE MARGIN & LEVERAGE FETCHER ---
-def fetch_zerodha_leverage_map():
-  """Zerodha public API se live equity leverage map {'SYMBOL': leverage_val} fetch karta hai."""
-  url = 'https://api.kite.trade/margins/equity'
-  leverage_map = {}
-  try:
-    resp = requests.get(url, timeout=10)
-    if resp.status_code == 200:
-      data = resp.json()
-      for item in data:
-        sym = item.get('tradingsymbol', '').upper().strip()
-        mult = float(item.get('mis_multiplier', 5.0))
-        if sym:
-          leverage_map[sym] = round(mult, 2)
-  except Exception as e:
-    log_msg(f'⚠️ Zerodha Margin API fetch failed: {e}', 'warning')
-  return leverage_map
-
-
 def get_already_sent_stocks():
   today_str = datetime.date.today().strftime('%Y-%m-%d')
   if os.path.exists(SENT_LOG_FILE):
@@ -108,7 +90,7 @@ def mark_stock_as_sent(symbol):
     log_msg(f'Could not save sent log: {e}', 'warning')
 
 
-def send_email_alert(symbol, entry, sl, target, score, rank, window, condition, leverage=5.0):
+def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
   if not SENDER_PASSWORD or not SENDER_EMAIL:
     log_msg(
         '⚠️ Email Credentials Missing (SENDER_EMAIL / SENDER_PASSWORD). Check'
@@ -118,10 +100,6 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition, 
     return False
 
   try:
-    lev_warning = ""
-    if leverage <= 2.0:
-      lev_warning = f'<p style="color: #ff4d4d; font-weight: bold; background: #3d0000; padding: 6px; border-radius: 4px;">⚠️ LOW LEVERAGE WARNING: Zerodha Leverage reduced to {leverage}x (High Volatility/Surveillance Risk)</p>'
-
     subject = f'🚀 [{rank}] High Priority Breakout: {symbol}'
 
     body = f"""
@@ -130,11 +108,9 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition, 
             <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
                 <h2 style="color: #28a745; margin-top: 0;">🚀 Breakout Alert Triggered!</h2>
                 <p>Stock <b>{symbol}</b> has met breakout conditions.</p>
-                {lev_warning}
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
                 <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
-                <p><b>⚡ Zerodha Leverage:</b> <span style="color: #00ff7f;">{leverage}x</span></p>
                 <p><b>⏰ Entry Window:</b> {window}</p>
                 <p><b>⚡ Execution Rule:</b> {condition}</p>
                 <p><b>⭐ Probability Score:</b> {score}</p>
@@ -194,6 +170,7 @@ def fetch_nifty_market_status():
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
           pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
 
+          # --- NIFTY SUPPORT & RESISTANCE CALCULATION ---
           prev_day = nifty.iloc[-2] if len(nifty) >= 2 else nifty.iloc[-1]
           pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3.0
           s1 = round((2 * pivot) - prev_day['High'], 2)
@@ -273,7 +250,6 @@ def analyze_single_ticker(
     rsi_filter=58,
     turnover_limit=3,
     formula_version='Version 3',
-    zerodha_leverage_map=None,
 ):
   try:
     if len(df) < 50:
@@ -465,15 +441,9 @@ def analyze_single_ticker(
           2,
       )
 
-      raw_symbol = ticker.replace('.NS', '')
-      leverage = 5.0
-      if zerodha_leverage_map and raw_symbol in zerodha_leverage_map:
-        leverage = zerodha_leverage_map[raw_symbol]
-
       return [{
-          'Symbol': raw_symbol,
+          'Symbol': ticker.replace('.NS', ''),
           'Execution Rank': exec_rank,
-          'Leverage (x)': leverage,
           'Entry Window': entry_window,
           'Execution Condition': exec_condition,
           'Alert': alert_type,
@@ -513,6 +483,9 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
+# ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
@@ -606,132 +579,98 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  now = datetime.datetime.now(ist)
-
-  if now.weekday() >= 5:
-    return False, 'Weekend (Saturday/Sunday) - Market Closed'
-
-  start_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
-  end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-  if start_time <= now <= end_time:
-    return True, 'Market Hours Active'
-  elif now < start_time:
-    return (
-        False,
-        f"Market Hours not started yet (Current IST: {now.strftime('%H:%M:%S')})",
-    )
-  else:
-    return (
-        False,
-        f"Market Hours ended (Current IST: {now.strftime('%H:%M:%S')})",
-    )
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now = datetime.datetime.now(ist)
+    
+    # Mon (0) to Fri (4) check
+    if now.weekday() >= 5:
+        return False, "Weekend (Saturday/Sunday) - Market Closed"
+        
+    start_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    if start_time <= now <= end_time:
+        return True, "Market Hours Active"
+    elif now < start_time:
+        return False, f"Market Hours not started yet (Current IST: {now.strftime('%H:%M:%S')})"
+    else:
+        return False, f"Market Hours ended (Current IST: {now.strftime('%H:%M:%S')})"
 
 
 # ==============================================================================
 # MODE 1: HEADLESS / BACKGROUND SCANNER EXECUTION
 # ==============================================================================
 def run_headless_scan():
-  log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
+    log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-  is_active, reason = is_market_hours()
-  if not is_active:
-    log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
-    return
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
+    is_active, reason = is_market_hours()
+    if not is_active:
+        log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
+        return
 
-  nifty = fetch_nifty_market_status()
-  if not nifty['is_bullish']:
-    log_msg(
-        f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} |"
-        f" Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...",
-        'warning',
-    )
-  else:
-    log_msg(
-        f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} |"
-        f" Resistance (R1): ₹{nifty['r1']}.",
-        'info',
-    )
-
-  zerodha_leverage_map = fetch_zerodha_leverage_map()
-  log_msg(f'Fetched Zerodha margins for {len(zerodha_leverage_map)} symbols.', 'info')
-
-  tickers = fetch_mega_nse_universe()
-  log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
-
-  cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
-  )
-
-  if not cached_master:
-    log_msg(
-        '❌ No stock data downloaded. Yahoo Finance may be rate-limiting.',
-        'error',
-    )
-    return
-
-  results = []
-  with ThreadPoolExecutor(max_workers=6) as executor:
-    futures = {
-        executor.submit(
-            analyze_single_ticker,
-            ticker,
-            df,
-            2.2,
-            58,
-            3,
-            'Version 3',
-            zerodha_leverage_map,
-        ): ticker
-        for ticker, df in cached_master.items()
-    }
-    for future in as_completed(futures):
-      res = future.result()
-      if res:
-        results.extend(res)
-
-  res_df = pd.DataFrame(results)
-  if res_df.empty:
-    log_msg('No breakout signals found in this pass.', 'info')
-    return
-
-  already_sent = get_already_sent_stocks()
-  alert_candidates = filter_ideal_breakout_stock(res_df)
-
-  log_msg(
-      f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info'
-  )
-
-  for _, row in alert_candidates.iterrows():
-    symbol = row['Symbol']
-    lev = row.get('Leverage (x)', 5.0)
-
-    if symbol not in already_sent:
-      ok = send_email_alert(
-          symbol=symbol,
-          entry=row['Entry Price (₹)'],
-          sl=row['Stop Loss (₹)'],
-          target=row['Target Price (₹)'],
-          score=row['Score'],
-          rank=row['Execution Rank'],
-          window=row['Entry Window'],
-          condition=row['Execution Condition'],
-          leverage=lev,
-      )
-      if ok:
-        mark_stock_as_sent(symbol)
-        log_msg(
-            f'🎯 Instant Mail Sent for new breakout: {symbol} (Leverage: {lev}x)',
-            'success',
-        )
+    nifty = fetch_nifty_market_status()
+    if not nifty['is_bullish']:
+        log_msg(f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...", 'warning')
     else:
-      log_msg(
-          f'⏭️ Duplicate Alert Skipped (Already Sent Today): {symbol}', 'info'
-      )
+        log_msg(f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}.", 'info')
 
-  log_msg('🏁 Headless Scan Completed Successfully.', 'success')
+    tickers = fetch_mega_nse_universe()
+    log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
+
+    cached_master = download_market_data_safe(
+        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+    )
+
+    if not cached_master:
+        log_msg('❌ No stock data downloaded. Yahoo Finance may be rate-limiting.', 'error')
+        return
+
+    results = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(analyze_single_ticker, ticker, df, 2.2, 58, 3, 'Version 3'): ticker
+            for ticker, df in cached_master.items()
+        }
+        for future in as_completed(futures):
+            res = future.result()
+            if res:
+                results.extend(res)
+
+    res_df = pd.DataFrame(results)
+    if res_df.empty:
+        log_msg('No breakout signals found in this pass.', 'info')
+        return
+
+    already_sent = get_already_sent_stocks()
+    alert_candidates = filter_ideal_breakout_stock(res_df)
+
+    log_msg(f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info')
+
+    for _, row in alert_candidates.iterrows():
+        symbol = row['Symbol']
+        
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
+        if symbol not in already_sent:
+            ok = send_email_alert(
+                symbol=symbol,
+                entry=row['Entry Price (₹)'],
+                sl=row['Stop Loss (₹)'],
+                target=row['Target Price (₹)'],
+                score=row['Score'],
+                rank=row['Execution Rank'],
+                window=row['Entry Window'],
+                condition=row['Execution Condition'],
+            )
+            if ok:
+                mark_stock_as_sent(symbol)
+                log_msg(f'🎯 Instant Mail Sent for new breakout: {symbol}', 'success')
+        else:
+            log_msg(f'⏭️ Duplicate Alert Skipped (Already Sent Today): {symbol}', 'info')
+
+    log_msg('🏁 Headless Scan Completed Successfully.', 'success')
 
 
 # ==============================================================================
@@ -754,10 +693,6 @@ def run_streamlit_app():
   @st.cache_data(persist='disk', show_spinner=False)
   def cached_universe():
     return fetch_mega_nse_universe()
-
-  @st.cache_data(ttl=1800, show_spinner=False)
-  def cached_zerodha_margins():
-    return fetch_zerodha_leverage_map()
 
   @st.cache_data(ttl=900, show_spinner=False)
   def download_all_market_data(tickers):
@@ -792,8 +727,8 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Zerodha Live Leverage'
-      ' Monitor & Execution Rank Integrated ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      ' ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -836,7 +771,6 @@ def run_streamlit_app():
     download_all_market_data.clear()
     cached_universe.clear()
     cached_nifty_status.clear()
-    cached_zerodha_margins.clear()
     if 'master_market_data' in st.session_state:
       del st.session_state['master_market_data']
     st.session_state['sent_email_alerts'] = set()
@@ -845,6 +779,7 @@ def run_streamlit_app():
 
   st.sidebar.markdown('---')
   all_tickers = cached_universe()
+
   st.sidebar.write(f'Total Active Stocks: **{len(all_tickers)}**')
 
   if 'master_market_data' not in st.session_state:
@@ -869,9 +804,6 @@ def run_streamlit_app():
     pool = st.session_state.get('master_market_data', {})
     if not pool:
       return pd.DataFrame()
-
-    z_margins = cached_zerodha_margins()
-
     with ThreadPoolExecutor(max_workers=8) as executor:
       futures = {
           executor.submit(
@@ -882,7 +814,6 @@ def run_streamlit_app():
               rsi_filter,
               min_turnover,
               formula_version,
-              z_margins,
           ): ticker
           for ticker, df in pool.items()
       }
@@ -898,20 +829,19 @@ def run_streamlit_app():
     st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
   else:
     if st.button('🚀 Run Scanner', key='live_btn'):
-      with st.spinner('Searching for breakout setups & checking Zerodha margins...'):
+      with st.spinner('Searching for breakout setups...'):
         st.session_state['live_results'] = compute_analytics()
 
     res_df = st.session_state.get('live_results', pd.DataFrame())
 
     if not res_df.empty:
       res_df = res_df.sort_values(by='Score', ascending=False)
+
       ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
       if not ideal_matches_df.empty:
         for _, row in ideal_matches_df.iterrows():
           stock_symbol = row['Symbol']
-          lev = row.get('Leverage (x)', 5.0)
-
           if stock_symbol not in st.session_state['sent_email_alerts']:
             sent_status = send_email_alert(
                 symbol=stock_symbol,
@@ -922,7 +852,6 @@ def run_streamlit_app():
                 rank=row['Execution Rank'],
                 window=row['Entry Window'],
                 condition=row['Execution Condition'],
-                leverage=lev,
             )
             if sent_status:
               st.session_state['sent_email_alerts'].add(stock_symbol)
@@ -939,7 +868,6 @@ def run_streamlit_app():
           rank = idx + 1
           sym = row['Symbol']
           ex_rank = row['Execution Rank']
-          lev = row.get('Leverage (x)', 5.0)
           win = row['Entry Window']
           cond = row['Execution Condition']
           sc = row['Score']
@@ -950,17 +878,8 @@ def run_streamlit_app():
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
 
-          # --- ROADMARK DARK RED MARKING FOR LEVERAGE <= 2X ---
-          if lev <= 2.0:
-            card_style = "background-color: #5c0606; border: 2px solid #ff3333; border-radius: 8px; padding: 12px; margin-bottom: 12px;"
-            lev_badge = f"""<p style="color: #ffffff; background-color: #ff0000; font-weight: bold; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; margin-bottom: 4px;">⚠️ LOW LEVERAGE DETECTED: Zerodha Leverage reduced to {lev}x (High Volatility/Surveillance Risk)</p>"""
-          else:
-            card_style = "border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;"
-            lev_badge = f"""<span style="color: #00ff7f; font-weight: bold;">⚡ Zerodha Leverage: {lev}x</span>"""
-
-          box_html += f"""<div style="{card_style}">
+          box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
-{lev_badge}
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
@@ -1045,16 +964,7 @@ def run_streamlit_app():
             unsafe_allow_html=True,
         )
 
-      # --- TABLEVIEW STYLING (DARK RED HIGHLIGHT FOR LEVERAGE <= 2X) ---
       def highlight_buying(row):
-        leverage = row.get('Leverage (x)', 5.0)
-
-        # Priority 1: Dark Red color if leverage reduced to <= 2x
-        if leverage <= 2.0:
-          return [
-              'background-color: #8B0000; color: #ffffff; font-weight: bold'
-          ] * len(row)
-
         alert = str(row.get('Alert', ''))
         if '⭐' in alert or 'Ultimate' in alert:
           return [
