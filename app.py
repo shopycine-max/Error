@@ -170,6 +170,7 @@ def fetch_nifty_market_status():
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
           pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
 
+          # --- NIFTY SUPPORT & RESISTANCE CALCULATION ---
           prev_day = nifty.iloc[-2] if len(nifty) >= 2 else nifty.iloc[-1]
           pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3.0
           s1 = round((2 * pivot) - prev_day['High'], 2)
@@ -248,7 +249,7 @@ def analyze_single_ticker(
     volume_multiplier=2.2,
     rsi_filter=58,
     turnover_limit=3,
-    formula_version='Version 2',
+    formula_version='Version 3',
 ):
   try:
     if len(df) < 50:
@@ -274,10 +275,19 @@ def analyze_single_ticker(
     df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
     df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
-    df['High_50_Prev'] = df['High'].shift(1).rolling(50).max()
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
+
+    # --- VERSION 3 ANTI-FALSE BREAKOUT INDICATORS ---
+    df['High_3d_prev'] = df['High'].shift(1).rolling(3).max()
+    df['Low_3d_prev'] = df['Low'].shift(1).rolling(3).min()
+    df['Consolidation_Range_Pct'] = ((df['High_3d_prev'] - df['Low_3d_prev']) / (df['Low_3d_prev'] + 1e-10)) * 100
+    cond_consolidation = df['Consolidation_Range_Pct'] <= 8.0
+    cond_not_exhausted = df['Close'] <= (df['EMA_20'] * 1.12)
+    df['Consecutive_Green'] = df['Is_Green'].rolling(3).sum()
+    cond_not_late_entry = df['Consecutive_Green'].shift(1) < 3
+    cond_above_200 = df['Close'] > df['EMA_200']
 
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
@@ -298,10 +308,6 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    df['Close_Pos'] = (
-        ((df['Close'] - df['Low']) / (candle_range + 1e-10)) * 100
-    )
-
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
@@ -313,34 +319,22 @@ def analyze_single_ticker(
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
-    # =========================================================================
-    # VERSION 0: ANTI-FALSE BREAKOUT STRICT ENGINE
-    # =========================================================================
-    if 'Version 0' in formula_version or formula_version == 'v0':
-      cond_v0_vol = df['Volume'] >= (df['Vol_SMA20'] * max(2.5, volume_multiplier))
-      cond_v0_close_top = df['Close_Pos'] >= 85.0
-      cond_v0_wick = df['Wick_Ratio'] <= 0.15
-      cond_v0_trend = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50']) & (df['EMA_50'] > df['EMA_200'])
-      cond_v0_clean_break = df['Close'] >= (df['High_50_Prev'] * 0.995)
-      
-      # On Balance Volume (OBV) Trend Filter
-      obv = (df['Close'].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0)) * df['Volume']).cumsum()
-      df['OBV_SMA20'] = obv.rolling(20).mean()
-      cond_v0_obv = obv > df['OBV_SMA20']
-
+    if 'Version 3' in formula_version or formula_version == 'v3':
       df['Signal'] = (
           cond1
           & cond2
-          & cond_v0_vol
+          & cond3
           & cond4
           & cond5
           & cond8
-          & cond_v0_trend
+          & cond9
           & cond_accum
-          & cond_v0_wick
-          & cond_v0_close_top
-          & cond_v0_clean_break
-          & cond_v0_obv
+          & cond_no_wick
+          & cond_breakout
+          & cond_consolidation
+          & cond_not_exhausted
+          & cond_not_late_entry
+          & cond_above_200
       )
     elif 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -361,7 +355,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
       )
-    else:  # Version 2
+    else:
       df['Signal'] = (
           cond1
           & cond2
@@ -404,7 +398,12 @@ def analyze_single_ticker(
           else 1.0
       )
 
-      close_pos = float(df['Close_Pos'].values[-1])
+      day_high = float(df['High'].values[-1])
+      day_low = float(df['Low'].values[-1])
+      day_range = day_high - day_low
+      close_pos = (
+          ((entry - day_low) / day_range * 100) if day_range > 0 else 50
+      )
 
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
@@ -484,6 +483,9 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
+# ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
@@ -577,10 +579,12 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
     
+    # Mon (0) to Fri (4) check
     if now.weekday() >= 5:
         return False, "Weekend (Saturday/Sunday) - Market Closed"
         
@@ -601,6 +605,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
@@ -626,7 +631,7 @@ def run_headless_scan():
     results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {
-            executor.submit(analyze_single_ticker, ticker, df, formula_version='Version 0'): ticker
+            executor.submit(analyze_single_ticker, ticker, df, 2.2, 58, 3, 'Version 3'): ticker
             for ticker, df in cached_master.items()
         }
         for future in as_completed(futures):
@@ -647,6 +652,7 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
@@ -745,7 +751,7 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 0 (Anti-False Breakout Engine 🛡️)',
+          'Version 3 (Anti-False Breakout Integrated)',
           'Version 2 (Without 500-day High)',
           'Version 1 (With 500-day High & Strict Filters)',
       ],
