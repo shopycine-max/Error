@@ -66,7 +66,7 @@ SENDER_PASSWORD = safe_get_secret('SENDER_PASSWORD', '')
 RECEIVER_EMAIL = safe_get_secret('RECEIVER_EMAIL', '')
 SENT_LOG_FILE = 'sent_alerts.json'
 
-# IST Timezone added to avoid UTC date change issues on cloud servers
+# --- DUPLICATE ALERT AVOIDANCE LOGIC (IST SYNCHRONIZED) ---
 def get_already_sent_stocks():
   ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
   today_str = datetime.datetime.now(ist).strftime('%Y-%m-%d')
@@ -370,7 +370,7 @@ def analyze_single_ticker(
       day_range = day_high - day_low
       close_pos = (((entry - day_low) / day_range * 100) if day_range > 0 else 50)
 
-      # 🛡️ Anti Gap-up trap execution rules added to UI/Email
+      # 🛡️ Anti Gap-up trap execution rules
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
@@ -440,10 +440,13 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
+# ==============================================================================
 def download_market_data_safe(
     tickers, period='1y', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
-  # NOTE: period changed from '3mo' to '1y' so EMA_200 can calculate correctly
+  # NOTE: period is set to '1y' so EMA_200 can calculate correctly
   cached_master = {}
   total_tickers = len(tickers)
   if total_tickers == 0:
@@ -534,6 +537,7 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
@@ -652,7 +656,7 @@ def run_streamlit_app():
 
     cached_master = download_market_data_safe(
         tickers,
-        period='1y',  # IMPORTANT: Increased to 1y so 200 EMA calculates correctly
+        period='1y',  # Required for accurate EMA 200 checks
         interval='1d',
         chunk_size=40,
         sleep_sec=0.5,
@@ -843,7 +847,7 @@ def run_streamlit_app():
         st.markdown(f'### 👑 Chart View: **{top_stock}**')
         chart_data = yf.download(
             f'{top_stock}.NS',
-            period='3mo',
+            period='3mo', # Only 3 months needed to plot the visual recent chart
             interval='1d',
             progress=False,
             session=session,
