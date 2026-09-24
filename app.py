@@ -33,9 +33,8 @@ if not IS_HEADLESS:
 # --- LOGGING HELPER ---
 def log_msg(msg, level='info'):
   if IS_HEADLESS:
-    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     print(
-        f"[{datetime.datetime.now(ist).strftime('%H:%M:%S')}] [{level.upper()}]"
+        f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [{level.upper()}]"
         f' {msg}'
     )
   else:
@@ -66,10 +65,9 @@ SENDER_PASSWORD = safe_get_secret('SENDER_PASSWORD', '')
 RECEIVER_EMAIL = safe_get_secret('RECEIVER_EMAIL', '')
 SENT_LOG_FILE = 'sent_alerts.json'
 
-# IST Timezone added to avoid UTC date change issues on cloud servers
+
 def get_already_sent_stocks():
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  today_str = datetime.datetime.now(ist).strftime('%Y-%m-%d')
+  today_str = datetime.date.today().strftime('%Y-%m-%d')
   if os.path.exists(SENT_LOG_FILE):
     try:
       with open(SENT_LOG_FILE, 'r') as f:
@@ -82,8 +80,7 @@ def get_already_sent_stocks():
 
 
 def mark_stock_as_sent(symbol):
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  today_str = datetime.datetime.now(ist).strftime('%Y-%m-%d')
+  today_str = datetime.date.today().strftime('%Y-%m-%d')
   sent_set = get_already_sent_stocks()
   sent_set.add(symbol)
   try:
@@ -246,9 +243,6 @@ def fetch_mega_nse_universe():
   return fallback
 
 
-# ==============================================================================
-# UPDATED ANALYZER: WITH ANTI-FALSE BREAKOUT ENGINE
-# ==============================================================================
 def analyze_single_ticker(
     ticker,
     df,
@@ -258,14 +252,13 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200: # Increased for EMA 200 accuracy
+    if len(df) < 50:
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    
-    if len(df) < 200:
+    if len(df) < 50:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -304,26 +297,9 @@ def analyze_single_ticker(
     real_body_top = df[['Open', 'Close']].max(axis=1)
     upper_wick = df['High'] - real_body_top
 
-    # 🛡️ 1. Volatility Contraction / Consolidation Check (Avoid V-Shape Breakouts)
-    df['High_3d_prev'] = df['High'].shift(1).rolling(3).max()
-    df['Low_3d_prev'] = df['Low'].shift(1).rolling(3).min()
-    df['Consolidation_Range_Pct'] = ((df['High_3d_prev'] - df['Low_3d_prev']) / df['Low_3d_prev']) * 100
-    cond_consolidation = df['Consolidation_Range_Pct'] <= 8.0 
-
-    # 🛡️ 2. Over-Exhaustion / Rubber Band Check
-    cond_not_exhausted = df['Close'] <= (df['EMA_20'] * 1.12) 
-
-    # 🛡️ 3. Continuous Rally Check (Avoid buying late)
-    df['Consecutive_Green'] = df['Is_Green'].rolling(3).sum()
-    cond_not_late_entry = df['Consecutive_Green'].shift(1) < 3 
-
-    # 🛡️ 4. Long-Term Trend / Overhead Resistance Check
-    cond_above_200 = df['Close'] > df['EMA_200']
-
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
-    
     cond1 = df['Close'] >= 20
     cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
@@ -336,24 +312,50 @@ def analyze_single_ticker(
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
       cond10 = df['EMA_50'] > df['EMA_200']
+      cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
       df['Signal'] = (
-          cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & 
-          cond10 & cond_accum & cond_no_wick & cond_breakout & 
-          cond_consolidation & cond_not_exhausted & cond_not_late_entry
+          cond1
+          & cond2
+          & cond3
+          & cond4
+          & cond5
+          & cond7
+          & cond8
+          & cond9
+          & cond10
+          & cond12
+          & cond_accum
+          & cond_no_wick
+          & cond_breakout
       )
     else:
       df['Signal'] = (
-          cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & 
-          cond_accum & cond_no_wick & cond_breakout & cond_above_200 &
-          cond_consolidation & cond_not_exhausted & cond_not_late_entry
+          cond1
+          & cond2
+          & cond3
+          & cond4
+          & cond5
+          & cond8
+          & cond9
+          & cond_accum
+          & cond_no_wick
+          & cond_breakout
       )
 
-    is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
-    last_close_val = df['Close'].values[-1] if not df['Signal'].empty else None
+    is_signal = (
+        bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
+    )
+    last_close_val = (
+        df['Close'].values[-1] if not df['Signal'].empty else None
+    )
 
     if is_signal and pd.notna(last_close_val):
       entry = float(last_close_val)
-      sl = float(df['Low_5d'].values[-1]) if pd.notna(df['Low_5d'].values[-1]) else entry * 0.95
+      sl = (
+          float(df['Low_5d'].values[-1])
+          if pd.notna(df['Low_5d'].values[-1])
+          else entry * 0.95
+      )
       if sl >= entry or (entry - sl) / entry < 0.005:
         sl = entry * 0.965
       risk = entry - sl
@@ -363,22 +365,27 @@ def analyze_single_ticker(
       avg_vol = float(df['Vol_SMA20'].values[-1])
       vol_spike = curr_vol / avg_vol if avg_vol > 0 else 0
       buying_surge_pct = ((curr_vol - avg_vol) / (avg_vol + 1e-10)) * 100
-      accum_ratio = float(df['Accum_Ratio_10d'].values[-1]) if pd.notna(df['Accum_Ratio_10d'].values[-1]) else 1.0
+      accum_ratio = (
+          float(df['Accum_Ratio_10d'].values[-1])
+          if pd.notna(df['Accum_Ratio_10d'].values[-1])
+          else 1.0
+      )
 
       day_high = float(df['High'].values[-1])
       day_low = float(df['Low'].values[-1])
       day_range = day_high - day_low
-      close_pos = (((entry - day_low) / day_range * 100) if day_range > 0 else 50)
+      close_pos = (
+          ((entry - day_low) / day_range * 100) if day_range > 0 else 50
+      )
 
-      # 🛡️ Anti Gap-up trap execution rules added to UI/Email
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
-        exec_condition = f'Gap-Up < 1.5% AND Hold above ₹{round(entry, 2)}'
+        exec_condition = f'Hold above ₹{round(entry, 2)}'
       elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
         entry_window = '9:20 AM - 9:35 AM'
-        exec_condition = f'Gap-Up < 1.5% AND Break above ₹{round(entry, 2)}'
+        exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
       else:
         exec_rank = '🥉 Rank 3 (Wait & Watch)'
         entry_window = '9:30 AM - 9:45 AM'
@@ -395,8 +402,17 @@ def analyze_single_ticker(
       else:
         alert_type = '✅ Normal Signal'
 
-      rsi_val = float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
-      total_score = round(rsi_val + (vol_spike * 5) + (accum_ratio * 10) + (close_pos / 2) + bonus_score, 2)
+      rsi_val = (
+          float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
+      )
+      total_score = round(
+          rsi_val
+          + (vol_spike * 5)
+          + (accum_ratio * 10)
+          + (close_pos / 2)
+          + bonus_score,
+          2,
+      )
 
       return [{
           'Symbol': ticker.replace('.NS', ''),
@@ -440,10 +456,12 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
+# ==============================================================================
 def download_market_data_safe(
-    tickers, period='1y', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
+    tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
-  # NOTE: period changed from '3mo' to '1y' so EMA_200 can calculate correctly
   cached_master = {}
   total_tickers = len(tickers)
   if total_tickers == 0:
@@ -534,10 +552,12 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
     
+    # Mon (0) to Fri (4) check
     if now.weekday() >= 5:
         return False, "Weekend (Saturday/Sunday) - Market Closed"
         
@@ -558,6 +578,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
@@ -573,7 +594,7 @@ def run_headless_scan():
     log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
     cached_master = download_market_data_safe(
-        tickers, period='1y', interval='1d', chunk_size=40, sleep_sec=0.5
+        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
     )
 
     if not cached_master:
@@ -604,6 +625,7 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
@@ -652,7 +674,7 @@ def run_streamlit_app():
 
     cached_master = download_market_data_safe(
         tickers,
-        period='1y',  # IMPORTANT: Increased to 1y so 200 EMA calculates correctly
+        period='3mo',
         interval='1d',
         chunk_size=40,
         sleep_sec=0.5,
@@ -678,7 +700,8 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & Anti-False Breakout Integrated ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      ' ⚡)'
   )
 
   nifty_info = cached_nifty_status()
