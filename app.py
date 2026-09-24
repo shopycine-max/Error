@@ -66,7 +66,7 @@ SENDER_PASSWORD = safe_get_secret('SENDER_PASSWORD', '')
 RECEIVER_EMAIL = safe_get_secret('RECEIVER_EMAIL', '')
 SENT_LOG_FILE = 'sent_alerts.json'
 
-# --- DUPLICATE ALERT AVOIDANCE LOGIC (IST SYNCHRONIZED) ---
+# IST Timezone added to avoid UTC date change issues on cloud servers
 def get_already_sent_stocks():
   ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
   today_str = datetime.datetime.now(ist).strftime('%Y-%m-%d')
@@ -304,20 +304,20 @@ def analyze_single_ticker(
     real_body_top = df[['Open', 'Close']].max(axis=1)
     upper_wick = df['High'] - real_body_top
 
-    # 🛡️ 1. Volatility Contraction / Consolidation Check (Avoid V-Shape Breakouts)
+    # 🛡️ 1. Volatility Contraction / Consolidation Check
     df['High_3d_prev'] = df['High'].shift(1).rolling(3).max()
     df['Low_3d_prev'] = df['Low'].shift(1).rolling(3).min()
     df['Consolidation_Range_Pct'] = ((df['High_3d_prev'] - df['Low_3d_prev']) / df['Low_3d_prev']) * 100
     cond_consolidation = df['Consolidation_Range_Pct'] <= 8.0 
 
-    # 🛡️ 2. Over-Exhaustion / Rubber Band Check
+    # 🛡️ 2. Over-Exhaustion Check
     cond_not_exhausted = df['Close'] <= (df['EMA_20'] * 1.12) 
 
-    # 🛡️ 3. Continuous Rally Check (Avoid buying late)
+    # 🛡️ 3. Continuous Rally Check
     df['Consecutive_Green'] = df['Is_Green'].rolling(3).sum()
     cond_not_late_entry = df['Consecutive_Green'].shift(1) < 3 
 
-    # 🛡️ 4. Long-Term Trend / Overhead Resistance Check
+    # 🛡️ 4. Long-Term Trend Check
     cond_above_200 = df['Close'] > df['EMA_200']
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
@@ -333,22 +333,28 @@ def analyze_single_ticker(
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
+    cond7_v1 = df['Close'] >= df['Max_500_High_1d_Ago']
+    cond10_v1 = df['EMA_50'] > df['EMA_200']
+
+    df['Signal_V1'] = (
+        cond1 & cond2 & cond3 & cond4 & cond5 & cond7_v1 & cond8 & cond9 & 
+        cond10_v1 & cond_accum & cond_no_wick & cond_breakout & 
+        cond_consolidation & cond_not_exhausted & cond_not_late_entry
+    )
+
+    df['Signal_V2'] = (
+        cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & 
+        cond_accum & cond_no_wick & cond_breakout & cond_above_200 &
+        cond_consolidation & cond_not_exhausted & cond_not_late_entry
+    )
+
     if 'Version 1' in formula_version or formula_version == 'v1':
-      cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
-      cond10 = df['EMA_50'] > df['EMA_200']
-      df['Signal'] = (
-          cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & 
-          cond10 & cond_accum & cond_no_wick & cond_breakout & 
-          cond_consolidation & cond_not_exhausted & cond_not_late_entry
-      )
+      df['Signal'] = df['Signal_V1']
     else:
-      df['Signal'] = (
-          cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & 
-          cond_accum & cond_no_wick & cond_breakout & cond_above_200 &
-          cond_consolidation & cond_not_exhausted & cond_not_late_entry
-      )
+      df['Signal'] = df['Signal_V2']
 
     is_signal = bool(df['Signal'].values[-1]) if not df['Signal'].empty else False
+    is_v1_signal = bool(df['Signal_V1'].values[-1]) if not df['Signal_V1'].empty else False
     last_close_val = df['Close'].values[-1] if not df['Signal'].empty else None
 
     if is_signal and pd.notna(last_close_val):
@@ -370,7 +376,6 @@ def analyze_single_ticker(
       day_range = day_high - day_low
       close_pos = (((entry - day_low) / day_range * 100) if day_range > 0 else 50)
 
-      # 🛡️ Anti Gap-up trap execution rules
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
@@ -414,6 +419,7 @@ def analyze_single_ticker(
           'Continuation Score (%)': round(close_pos, 1),
           'Massive Buying Surge (%)': round(buying_surge_pct, 1),
           'Score': total_score,
+          'Is_V1_Match': is_v1_signal
       }]
   except Exception:
     return None
@@ -440,13 +446,9 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
-# ==============================================================================
-# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
-# ==============================================================================
 def download_market_data_safe(
     tickers, period='1y', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
-  # NOTE: period is set to '1y' so EMA_200 can calculate correctly
   cached_master = {}
   total_tickers = len(tickers)
   if total_tickers == 0:
@@ -537,7 +539,6 @@ def download_market_data_safe(
   return cached_master
 
 
-# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     now = datetime.datetime.now(ist)
@@ -656,7 +657,7 @@ def run_streamlit_app():
 
     cached_master = download_market_data_safe(
         tickers,
-        period='1y',  # Required for accurate EMA 200 checks
+        period='1y',
         interval='1d',
         chunk_size=40,
         sleep_sec=0.5,
@@ -830,9 +831,13 @@ def run_streamlit_app():
           p_entry = row['Entry Price (₹)']
           p_sl = row['Stop Loss (₹)']
           p_tgt = row['Target Price (₹)']
+          
+          # 💙 Blue Star check for Version 1 Formula match
+          is_v1 = row.get('Is_V1_Match', False)
+          star_badge = ' <span style="color: #1e90ff; font-size: 20px;">⭐</span>' if is_v1 else ''
 
           box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
-<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
+<h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u>{star_badge} ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
@@ -847,7 +852,7 @@ def run_streamlit_app():
         st.markdown(f'### 👑 Chart View: **{top_stock}**')
         chart_data = yf.download(
             f'{top_stock}.NS',
-            period='3mo', # Only 3 months needed to plot the visual recent chart
+            period='3mo',
             interval='1d',
             progress=False,
             session=session,
