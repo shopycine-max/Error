@@ -641,6 +641,7 @@ def run_3month_backtest(master_data, backtest_days=60):
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
+            'Continuation Score (%)': round(close_pos, 1),
             'Massive Buying Surge (%)': round(buying_surge_pct, 1),
             'Max Gain (Next 5 Days)': f'+{max_gain_pct}%',
             'Outcome': outcome,
