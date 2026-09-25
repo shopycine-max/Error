@@ -460,7 +460,6 @@ def filter_ideal_breakout_stock(df):
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   """Evaluates data day-by-day for the last ~3 months (60 trading days) to find
-
   the Serial #1 Roadmap Stock on each market close date and tracks outcome.
   """
   if not master_data:
@@ -618,6 +617,17 @@ def run_3month_backtest(master_data, backtest_days=60):
         elif hit_target and hit_sl:
           outcome = '🎯 Target First / Volatile' if max_gain_pct >= 4 else '🛑 Hit SL First'
 
+        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING ---
+        if idx + 1 < len(df_calc):
+          next_day = df_calc.iloc[idx + 1]
+          next_high = round(float(next_day['High']), 2)
+          next_low = round(float(next_day['Low']), 2)
+          next_pnl_pct = round(((float(next_day['Close']) - entry) / entry) * 100, 2)
+        else:
+          next_high = round(entry, 2)
+          next_low = round(entry, 2)
+          next_pnl_pct = 0.0
+
         daily_candidates[dt].append({
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
@@ -625,6 +635,9 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
+            'Next High (₹)': next_high,
+            'Next Low (₹)': next_low,
+            'Next Day PnL (%)': f"{next_pnl_pct:+}%",
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Max Gain (Next 5 Days)': f'+{max_gain_pct}%',
