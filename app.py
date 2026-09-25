@@ -724,8 +724,8 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 2 (Without 500-day High)',
-          'Version 1 (With 500-day High & Strict Filters)',
+          'Version 1 (Without 500-day High)',
+          'Version 2 (With 500-day High & Strict Filters)',
       ],
   )
   rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
