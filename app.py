@@ -457,7 +457,112 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
+# NEW MODULE: POST-MARKET HISTORICAL BACKTEST ENGINE (3 MONTHS)
+# ==============================================================================
+def generate_backtest_report(ticker, df, volume_multiplier, rsi_filter, turnover_limit, formula_version):
+    if df.empty or len(df) < 50:
+        return pd.DataFrame()
+    
+    df = df.copy()
+    df['Pct_Change'] = df['Close'].pct_change() * 100
+    df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
+    df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
+    df['Turnover'] = df['Close'] * df['Volume']
+
+    df['Is_Green'] = df['Close'] > df['Open']
+    df['Green_Vol'] = df['Volume'].where(df['Is_Green'], 0)
+    df['Red_Vol'] = df['Volume'].where(~df['Is_Green'], 0)
+
+    up_vol_10 = df['Green_Vol'].rolling(10).sum()
+    down_vol_10 = df['Red_Vol'].rolling(10).sum()
+    df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
+
+    df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
+    df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
+
+    delta = df['Close'].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(com=13, adjust=False).mean()
+    avg_loss = loss.ewm(com=13, adjust=False).mean()
+    rs = avg_gain / (avg_loss + 1e-10)
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    window_size = max(10, min(500, len(df) - 2))
+    df['Max_500_High_1d_Ago'] = df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+    df['Low_5d'] = df['Low'].rolling(window=5).min()
+
+    candle_range = df['High'] - df['Low']
+    real_body_top = df[['Open', 'Close']].max(axis=1)
+    upper_wick = df['High'] - real_body_top
+
+    df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
+    cond_no_wick = df['Wick_Ratio'] <= 0.25
+    cond_breakout = df['Close'] > df['High_20_Prev']
+    cond1 = df['Close'] >= 20
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
+    cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
+    cond4 = df['Return_20d'] >= 2.0
+    cond5 = df['Turnover'] > (turnover_limit * 10000000)
+    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
+    cond9 = df['Close'] > df['EMA_20']
+    cond_accum = df['Accum_Ratio_10d'] >= 1.5
+
+    if 'Version 1' in formula_version or formula_version == 'v1':
+        cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
+        cond10 = df['EMA_50'] > df['EMA_200']
+        cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
+        df['Signal'] = (cond1 & cond2 & cond3 & cond4 & cond5 & cond7 & cond8 & cond9 & cond10 & cond12 & cond_accum & cond_no_wick & cond_breakout)
+    else:
+        df['Signal'] = (cond1 & cond2 & cond3 & cond4 & cond5 & cond8 & cond9 & cond_accum & cond_no_wick & cond_breakout)
+
+    # Filter only signals generated in the last 90 days (3 Months)
+    cutoff_date = datetime.datetime.now() - datetime.timedelta(days=90)
+    if df.index.tz is not None:
+        cutoff_date = cutoff_date.replace(tzinfo=df.index.tz)
+
+    signal_indices = df[df['Signal'] & (df.index >= cutoff_date)].index
+    results = []
+
+    for idx in signal_indices:
+        row = df.loc[idx]
+        entry = float(row['Close'])
+        sl = float(row['Low_5d']) if pd.notna(row['Low_5d']) else entry * 0.95
+        if sl >= entry or (entry - sl) / entry < 0.005:
+            sl = entry * 0.965
+        risk = entry - sl
+        target = entry + (2 * risk)
+
+        # Look into the future from the day after signal
+        future_data = df.loc[idx:].iloc[1:]
+        outcome = '🟡 Active (Pending)'
+        days = 0
+
+        for f_idx, f_row in future_data.iterrows():
+            days += 1
+            if f_row['Low'] <= sl:
+                outcome = '🔴 SL Hit'
+                break
+            if f_row['High'] >= target:
+                outcome = '🟢 Target Hit'
+                break
+
+        results.append({
+            'Date': idx.strftime('%d %b %Y') if hasattr(idx, 'strftime') else idx,
+            'Entry Price': round(entry, 2),
+            'Stop Loss': round(sl, 2),
+            'Target': round(target, 2),
+            'Outcome': outcome,
+            'Holding Days': days
+        })
+
+    return pd.DataFrame(results)
+
+
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER
 # ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
@@ -578,7 +683,7 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-    # Market Hours Verification (8:00 AM - 4:00 PM IST)
+    # Market Hours Verification
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
@@ -625,7 +730,6 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
-        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
@@ -700,8 +804,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
-      ' ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Post-Market Backtest Integrated ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -925,6 +1028,56 @@ def run_streamlit_app():
                 xaxis_rangeslider_visible=False,
             )
             st.plotly_chart(fig)
+            
+        # =========================================================================
+        # NEW FEATURE: 3-MONTH BACKTEST FOR TOP STOCK (RUNS AFTER MARKET CLOSE)
+        # =========================================================================
+        is_mkt_active, _ = is_market_hours()
+        if not is_mkt_active:
+            st.markdown(f"---")
+            st.markdown(f"### 📜 Post-Market Analysis: 3-Month Backtest History for **{top_stock}**")
+            
+            with st.spinner(f"Running historical backtest simulation for {top_stock}..."):
+                # Fetch slightly older data to ensure indicator accuracy for the last 3 months (90 days)
+                bt_data_raw = yf.download(f'{top_stock}.NS', period='6mo', interval='1d', progress=False, session=session)
+                bt_data_raw = flatten_yfinance_df(bt_data_raw)
+                
+                bt_report_df = generate_backtest_report(
+                    top_stock, bt_data_raw, volume_multiplier, rsi_filter, min_turnover, formula_version
+                )
+                
+                if bt_report_df.empty:
+                    st.info(f"ℹ️ No historical breakout setups were triggered for {top_stock} in the last 3 months.")
+                else:
+                    total_signals = len(bt_report_df)
+                    wins = len(bt_report_df[bt_report_df['Outcome'].str.contains('Target Hit')])
+                    losses = len(bt_report_df[bt_report_df['Outcome'].str.contains('SL Hit')])
+                    pending = len(bt_report_df[bt_report_df['Outcome'].str.contains('Pending')])
+                    win_rate = (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0
+                    
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Total Signals (Last 90D)", total_signals)
+                    c2.metric("Target Hit 🟢", wins)
+                    c3.metric("Stop Loss Hit 🔴", losses)
+                    c4.metric("Strategy Win Rate 🏆", f"{win_rate:.1f}%")
+
+                    def highlight_outcomes(val):
+                        if isinstance(val, str):
+                            if 'Target' in val:
+                                return 'color: #00ff7f; font-weight: bold'
+                            elif 'SL' in val:
+                                return 'color: #ff4d4d; font-weight: bold'
+                            elif 'Pending' in val:
+                                return 'color: #ffd700; font-weight: bold'
+                        return ''
+                    
+                    try:
+                        styled_bt = bt_report_df.style.map(highlight_outcomes, subset=['Outcome'])
+                    except AttributeError:
+                        styled_bt = bt_report_df.style.applymap(highlight_outcomes, subset=['Outcome'])
+                    
+                    st.dataframe(styled_bt, hide_index=True, use_container_width=True)
+
       else:
         st.markdown(
             '<div style="background-color: #161b22; border: 2px solid #ff4d4d;'
