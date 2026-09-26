@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import textwrap
 
 import pandas as pd
 import requests
@@ -244,9 +245,9 @@ def fetch_mega_nse_universe():
 def analyze_single_ticker(
     ticker,
     df,
-    volume_multiplier=2.5,
+    volume_multiplier=2.2,
     rsi_filter=58,
-    turnover_limit=5,
+    turnover_limit=3,
     formula_version='Version 2',
 ):
   try:
@@ -296,23 +297,21 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-
-    # STRICT QUALIFYING FILTERS TO ELIMINATE NEXT-DAY LOSSES
-    cond_no_wick = df['Wick_Ratio'] <= 0.15  # Max 15% upper wick
+    cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 30.0  # Liquidity safety threshold
-    cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 8.0)  # Avoid over-extended climax candles
+    cond1 = df['Close'] >= 20
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
-    cond5 = df['Turnover'] > (turnover_limit * 10000000)  # Institutional volume floor
-    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 70)  # Safe RSI corridor
-    cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])  # Trend alignment
-    cond_accum = df['Accum_Ratio_10d'] >= 1.8  # Strong institutional backing
+    cond5 = df['Turnover'] > (turnover_limit * 10000000)
+    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
+    cond9 = df['Close'] > df['EMA_20']
+    cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
       cond10 = df['EMA_50'] > df['EMA_200']
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.12)
+      cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
       df['Signal'] = (
           cond1
           & cond2
@@ -354,10 +353,10 @@ def analyze_single_ticker(
       sl = (
           float(df['Low_5d'].values[-1])
           if pd.notna(df['Low_5d'].values[-1])
-          else entry * 0.96
+          else entry * 0.95
       )
-      if sl >= entry or (entry - sl) / entry < 0.01:
-        sl = entry * 0.975  # Max risk capped at ~2.5%
+      if sl >= entry or (entry - sl) / entry < 0.005:
+        sl = entry * 0.965
       risk = entry - sl
       target = entry + (2 * risk)
 
@@ -392,9 +391,9 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 88.0 and vol_spike >= 2.5:
+      if close_pos >= 85.0 and vol_spike >= 2.5:
         alert_type = '⭐ Ultimate Explosive Setup'
-        bonus_score = 35
+        bonus_score = 30
       elif accum_ratio >= 2.0 and vol_spike >= 2.0:
         alert_type = '🔥 Massive Heavy Buying'
       elif accum_ratio >= 1.8:
@@ -407,9 +406,9 @@ def analyze_single_ticker(
       )
       total_score = round(
           rsi_val
-          + (vol_spike * 6)
-          + (accum_ratio * 12)
-          + (close_pos / 1.8)
+          + (vol_spike * 5)
+          + (accum_ratio * 10)
+          + (close_pos / 2)
           + bonus_score,
           2,
       )
@@ -440,11 +439,11 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 88.0
-  cond_surge = df['Massive Buying Surge (%)'] >= 140.0
-  cond_vol = df['Vol Spike (x)'] >= 2.5
-  cond_accum = df['Accum Ratio (10d)'] >= 1.8
-  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 70)
+  cond_cont = df['Continuation Score (%)'] > 80
+  cond_surge = df['Massive Buying Surge (%)'] > 120
+  cond_vol = df['Vol Spike (x)'] > 2.2
+  cond_accum = df['Accum Ratio (10d)'] > 1.6
+  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
 
   ideal_df = df[
       cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
@@ -502,7 +501,6 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['High_20_Prev'] = df_calc['High'].shift(1).rolling(20).max()
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
-    df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
 
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
@@ -520,16 +518,16 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    cond_no_wick = df_calc['Wick_Ratio'] <= 0.15
+    cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
-    cond1 = df_calc['Close'] >= 30.0
-    cond2 = (df_calc['Pct_Change'] >= 1.5) & (df_calc['Pct_Change'] <= 8.0)
-    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.5)
+    cond1 = df_calc['Close'] >= 20
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 12.0)
+    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
-    cond5 = df_calc['Turnover'] > (5 * 10000000)
-    cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 70)
-    cond9 = (df_calc['Close'] > df_calc['EMA_20']) & (df_calc['EMA_20'] > df_calc['EMA_50'])
-    cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
+    cond5 = df_calc['Turnover'] > (3 * 10000000)
+    cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
+    cond9 = df_calc['Close'] > df_calc['EMA_20']
+    cond_accum = df_calc['Accum_Ratio_10d'] >= 1.6
 
     df_calc['Signal'] = (
         cond1
@@ -557,10 +555,10 @@ def run_3month_backtest(master_data, backtest_days=60):
       sl = (
           float(row['Low_5d'])
           if pd.notna(row['Low_5d'])
-          else entry * 0.96
+          else entry * 0.95
       )
-      if sl >= entry or (entry - sl) / entry < 0.01:
-        sl = entry * 0.975
+      if sl >= entry or (entry - sl) / entry < 0.005:
+        sl = entry * 0.965
       risk = entry - sl
       target = entry + (2 * risk)
 
@@ -582,18 +580,18 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos >= 88.0
-          and buying_surge_pct >= 140.0
-          and vol_spike >= 2.5
-          and accum_ratio >= 1.8
+          close_pos > 80
+          and buying_surge_pct > 120
+          and vol_spike > 2.2
+          and accum_ratio > 1.6
       ):
-        bonus_score = 35 if (close_pos >= 88.0 and vol_spike >= 2.5) else 0
+        bonus_score = 30 if (close_pos >= 85.0 and vol_spike >= 2.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
-            + (vol_spike * 6)
-            + (accum_ratio * 12)
-            + (close_pos / 1.8)
+            + (vol_spike * 5)
+            + (accum_ratio * 10)
+            + (close_pos / 2)
             + bonus_score,
             2,
         )
@@ -617,22 +615,14 @@ def run_3month_backtest(master_data, backtest_days=60):
         elif hit_sl and not hit_target:
           outcome = '🛑 Hit Stop Loss'
         elif hit_target and hit_sl:
-          outcome = '🎯 Target First / Volatile' if max_gain_pct >= 3.5 else '🛑 Hit SL First'
+          outcome = '🎯 Target First / Volatile' if max_gain_pct >= 4 else '🛑 Hit SL First'
 
-        # --- REALISTIC NEXT DAY PNL LOGIC WITH STOP LOSS PROTECTION ---
+        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING ---
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
           next_high = round(float(next_day['High']), 2)
           next_low = round(float(next_day['Low']), 2)
-          next_close = float(next_day['Close'])
-
-          # If next low breaks stop loss, exit at SL to prevent excessive losses
-          if next_low <= sl:
-            effective_next_close = sl
-          else:
-            effective_next_close = next_close
-
-          next_pnl_pct = round(((effective_next_close - entry) / entry) * 100, 2)
+          next_pnl_pct = round(((float(next_day['Close']) - entry) / entry) * 100, 2)
         else:
           next_high = round(entry, 2)
           next_low = round(entry, 2)
@@ -936,7 +926,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (Low Drawdown Engine, High Continuation Score & 3-Month'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & 3-Month'
       ' Backtest History Integrated ⚡)'
   )
 
@@ -974,10 +964,10 @@ def run_streamlit_app():
   )
   rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
   volume_multiplier = st.sidebar.slider(
-      'Volume Shock Multiplier', 1.0, 4.0, 2.5, step=0.1
+      'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
   )
   min_turnover = st.sidebar.number_input(
-      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5
+      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
   )
 
   st.sidebar.markdown('---')
