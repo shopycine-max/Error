@@ -299,6 +299,23 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
+
+    # --- 30-DAY PATTERN QUALITY FILTERS ---
+    # 1. Anti-Parabolic: Pichle 30 dino ka run-up 22% se kam hona chahiye
+    df['Return_30d_Prev'] = df['Close'].shift(1).pct_change(30) * 100
+    cond_not_parabolic = df['Return_30d_Prev'] <= 22.0
+
+    # 2. Rubber-Band Check: Breakout se 1 din pehle 20 EMA se distance <= 6.5%
+    df['EMA20_Dist_Prev'] = ((df['Close'].shift(1) - df['EMA_20'].shift(1)) / (df['EMA_20'].shift(1) + 1e-10)) * 100
+    cond_near_ema = df['EMA20_Dist_Prev'] <= 6.5
+
+    # 3. Overhead Rejection Check: Pichle 30 dino me high upper wick wale candles ≤ 6
+    df['High_Wick_Flag'] = (df['Wick_Ratio'] > 0.35).astype(int)
+    df['Wick_Count_30d'] = df['High_Wick_Flag'].shift(1).rolling(30).sum()
+    cond_low_wick_rejection = df['Wick_Count_30d'] <= 6
+
+    cond_30d_pattern_ok = cond_not_parabolic & cond_near_ema & cond_low_wick_rejection
+
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
@@ -328,6 +345,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_30d_pattern_ok
       )
     else:
       df['Signal'] = (
@@ -341,6 +359,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_30d_pattern_ok
       )
 
     is_signal = (
@@ -520,6 +539,19 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
+    # --- 30-DAY PATTERN QUALITY FILTERS ---
+    df_calc['Return_30d_Prev'] = df_calc['Close'].shift(1).pct_change(30) * 100
+    cond_not_parabolic = df_calc['Return_30d_Prev'] <= 22.0
+
+    df_calc['EMA20_Dist_Prev'] = ((df_calc['Close'].shift(1) - df_calc['EMA_20'].shift(1)) / (df_calc['EMA_20'].shift(1) + 1e-10)) * 100
+    cond_near_ema = df_calc['EMA20_Dist_Prev'] <= 6.5
+
+    df_calc['High_Wick_Flag'] = (df_calc['Wick_Ratio'] > 0.35).astype(int)
+    df_calc['Wick_Count_30d'] = df_calc['High_Wick_Flag'].shift(1).rolling(30).sum()
+    cond_low_wick_rejection = df_calc['Wick_Count_30d'] <= 6
+
+    cond_30d_pattern_ok = cond_not_parabolic & cond_near_ema & cond_low_wick_rejection
+
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
@@ -542,6 +574,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_accum
         & cond_no_wick
         & cond_breakout
+        & cond_30d_pattern_ok
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -885,7 +918,6 @@ def run_streamlit_app():
   if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
 
-  # Persistent log file se already sent stocks read karein taaki refresh hone par duplicate na bheje
   if 'sent_email_alerts' not in st.session_state:
     st.session_state['sent_email_alerts'] = get_already_sent_stocks()
 
@@ -933,7 +965,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & Anti-Duplicate System Active ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, 30-Day Pattern Quality Filter & Anti-Duplicate System Active ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -976,7 +1008,6 @@ def run_streamlit_app():
       'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5 
   )
 
-  # Checkbox option to filter out already alerted stocks from UI view
   hide_sent_stocks = st.sidebar.checkbox(
       '🚫 Hide Already Alerted Stocks Today', value=True
   )
@@ -1068,7 +1099,6 @@ def run_streamlit_app():
           for _, row in ideal_matches_df.iterrows():
             stock_symbol = row['Symbol']
             
-            # Persistent & Session Check both applied
             if stock_symbol not in already_sent_set and stock_symbol not in st.session_state['sent_email_alerts']:
               sent_status = send_email_alert(
                   symbol=stock_symbol,
@@ -1085,7 +1115,6 @@ def run_streamlit_app():
                 st.session_state['sent_email_alerts'].add(stock_symbol)
                 st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
 
-          # Screen par pehle se bheje gaye stocks chhupane ka logic
           if hide_sent_stocks:
             ideal_display_df = ideal_matches_df[~ideal_matches_df['Symbol'].isin(already_sent_set)].copy()
             res_df_display = res_df[~res_df['Symbol'].isin(already_sent_set)].copy()
