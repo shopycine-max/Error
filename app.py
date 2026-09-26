@@ -262,6 +262,7 @@ def analyze_single_ticker(
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
     df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
+    df['Return_5d'] = df['Close'].pct_change(periods=5) * 100  # ADDED: 5-Day Return
     df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
     df['Turnover'] = df['Close'] * df['Volume']
 
@@ -298,7 +299,7 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     
-    # --- ADDED FORMULA: (Close - Low) / (High - Low) > 0.70 ---
+    # --- FORMULA: (Close - Low) / (High - Low) > 0.70 ---
     df['Close_Pos_Ratio'] = (df['Close'] - df['Low']) / (candle_range + 1e-10)
     cond_close_pos = df['Close_Pos_Ratio'] > 0.70
 
@@ -420,6 +421,12 @@ def analyze_single_ticker(
           2,
       )
 
+      prev_5d_gain = (
+          round(float(df['Return_5d'].values[-1]), 2)
+          if pd.notna(df['Return_5d'].values[-1])
+          else 0.0
+      )
+
       return [{
           'Symbol': ticker.replace('.NS', ''),
           'Execution Rank': exec_rank,
@@ -430,6 +437,7 @@ def analyze_single_ticker(
           'Stop Loss (₹)': round(sl, 2),
           'Target Price (₹)': round(target, 2),
           'Day Change (%)': round(float(df['Pct_Change'].values[-1]), 2),
+          'Prev 5-Day Gain (%)': prev_5d_gain,  # ADDED TO RESULT
           'RSI': round(rsi_val, 2),
           'Vol Spike (x)': round(vol_spike, 1),
           'Accum Ratio (10d)': round(accum_ratio, 2),
@@ -495,6 +503,7 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Pct_Change'] = df_calc['Close'].pct_change() * 100
     df_calc['Vol_SMA20'] = df_calc['Volume'].rolling(20).mean()
+    df_calc['Return_5d'] = df_calc['Close'].pct_change(periods=5) * 100  # ADDED: 5-Day Return
     df_calc['Return_20d'] = df_calc['Close'].pct_change(periods=20) * 100
     df_calc['Turnover'] = df_calc['Close'] * df_calc['Volume']
 
@@ -525,7 +534,6 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- ADDED FORMULA IN BACKTEST ENGINE ---
     df_calc['Close_Pos_Ratio'] = (df_calc['Close'] - df_calc['Low']) / (candle_range + 1e-10)
     cond_close_pos = df_calc['Close_Pos_Ratio'] > 0.70
 
@@ -639,6 +647,8 @@ def run_3month_backtest(master_data, backtest_days=60):
           next_low = round(entry, 2)
           next_pnl_pct = 0.0
 
+        prev_5d_gain = round(float(row['Return_5d']), 2) if pd.notna(row['Return_5d']) else 0.0
+
         daily_candidates[dt].append({
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
@@ -649,6 +659,7 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
             'Next Day PnL (%)': f"{next_pnl_pct:+}%",
+            'Prev 5-Day Gain (%)': f"{prev_5d_gain:+}%",  # ADDED TO BACKTEST RESULT
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
