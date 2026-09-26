@@ -246,8 +246,8 @@ def analyze_single_ticker(
     ticker,
     df,
     volume_multiplier=2.2,
-    rsi_filter=63,         # Updated default to 63
-    turnover_limit=5,      # Updated default to 5 Cr
+    rsi_filter=63,         
+    turnover_limit=5,      
     formula_version='Version 2',
 ):
   try:
@@ -300,11 +300,12 @@ def analyze_single_ticker(
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
+    # UPDATED: Pct_Change upper limit set to 7.0%
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 7.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
-    cond5 = df['Turnover'] > (turnover_limit * 10000000) # Turnover > 5Cr
-    cond8 = (df['RSI'] > rsi_filter) & (df['RSI'] <= 75)   # RSI > 63
+    cond5 = df['Turnover'] > (turnover_limit * 10000000) 
+    cond8 = (df['RSI'] > rsi_filter) & (df['RSI'] <= 75)   
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
@@ -370,7 +371,7 @@ def analyze_single_ticker(
           else 1.0
       )
 
-      # Filtering out bounds as requested
+      # Filtering out bounds
       if vol_spike >= 9.5 or buying_surge_pct >= 900.0 or accum_ratio >= 15.0:
         return None
 
@@ -444,10 +445,10 @@ def filter_ideal_breakout_stock(df):
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
   cond_cont = df['Continuation Score (%)'] > 80
-  cond_surge = (df['Massive Buying Surge (%)'] > 120) & (df['Massive Buying Surge (%)'] < 900) # Surge < 900%
-  cond_vol = (df['Vol Spike (x)'] > 2.2) & (df['Vol Spike (x)'] < 9.5)                         # Vol Spike < 9.5
-  cond_accum = (df['Accum Ratio (10d)'] > 1.6) & (df['Accum Ratio (10d)'] < 15)                # Accum Ratio < 15
-  cond_rsi = (df['RSI'] > 63) & (df['RSI'] <= 72)                                             # RSI > 63
+  cond_surge = (df['Massive Buying Surge (%)'] > 120) & (df['Massive Buying Surge (%)'] < 900)
+  cond_vol = (df['Vol Spike (x)'] > 2.2) & (df['Vol Spike (x)'] < 9.5)                         
+  cond_accum = (df['Accum Ratio (10d)'] > 1.6) & (df['Accum Ratio (10d)'] < 15)                
+  cond_rsi = (df['RSI'] > 63) & (df['RSI'] <= 72)                                             
 
   ideal_df = df[
       cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
@@ -525,11 +526,12 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 12.0)
+    # UPDATED: Pct_Change upper limit set to 7.0%
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 7.0)
     cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
-    cond5 = df_calc['Turnover'] > (5 * 10000000)                        # Turnover > 5Cr
-    cond8 = (df_calc['RSI'] > 63) & (df_calc['RSI'] <= 72)              # RSI > 63
+    cond5 = df_calc['Turnover'] > (5 * 10000000)                        
+    cond8 = (df_calc['RSI'] > 63) & (df_calc['RSI'] <= 72)              
     cond9 = df_calc['Close'] > df_calc['EMA_20']
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.6
 
@@ -586,11 +588,11 @@ def run_3month_backtest(master_data, backtest_days=60):
       if (
           close_pos > 80
           and buying_surge_pct > 120
-          and buying_surge_pct < 900   # Surge < 900%
+          and buying_surge_pct < 900   
           and vol_spike > 2.2
-          and vol_spike < 9.5          # Vol Spike < 9.5
+          and vol_spike < 9.5          
           and accum_ratio > 1.6
-          and accum_ratio < 15         # Accum Ratio < 15
+          and accum_ratio < 15         
       ):
         bonus_score = 30 if (close_pos >= 85.0 and vol_spike >= 2.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
@@ -968,12 +970,12 @@ def run_streamlit_app():
           'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
-  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 63) # Default set to 63
+  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 63) 
   volume_multiplier = st.sidebar.slider(
       'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
   )
   min_turnover = st.sidebar.number_input(
-      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5 # Default set to 5 Cr
+      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5 
   )
 
   st.sidebar.markdown('---')
