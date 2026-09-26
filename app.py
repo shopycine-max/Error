@@ -64,11 +64,12 @@ SENT_LOG_FILE = 'sent_alerts.json'
 
 
 # =====================================================================
-# ULTRA-STRICT TRAP FILTER ENGINE (MERGED SCRIPT 1 + SCRIPT 2)
+# MERGED & VECTORIZED TRAP / SAFE BREAKOUT ENGINE
 # =====================================================================
 def apply_strict_trap_filters(df):
     """
-    DataFrame level function to evaluate ultra-strict trap filters.
+    Vectorized DataFrame level function combining Inverted Safe Breakout Filters 
+    and Ultra-Strict Trap Rules for high-speed execution.
     """
     if df.empty:
         return df
@@ -97,52 +98,42 @@ def apply_strict_trap_filters(df):
                 df[col] = df[col].astype(str).str.replace('%', '', regex=False).str.replace('x', '', regex=False).astype(float)
             else:
                 df[col] = df[col].astype(float)
-
-    def evaluate_row(row):
-        prev_5d = row.get('Prev 5-Day Gain (%)', 0.0)
-        dist_ema = row.get('Dist EMA20 (%)', 0.0)
-        rsi = row.get('RSI', 50.0)
-        vol_spike = row.get('Vol Spike', 1.0)
-        buying_surge = row.get('Massive Buying Surge (%)', 0.0)
-
-        # STRICT LAYER 1: Prior Momentum Exhaustion Rule
-        rule_1_exhaustion = prev_5d >= 8.0
-
-        # STRICT LAYER 2: EMA 20 Stretching Rule
-        rule_2_stretched = dist_ema >= 7.0
-
-        # STRICT LAYER 3: Overbought Momentum Trap
-        rule_3_overbought_surge = (rsi >= 64.0) and (vol_spike >= 2.5) and (buying_surge >= 150.0)
-
-        # STRICT LAYER 4: Compound Over-Extension
-        rule_4_compound = (dist_ema >= 5.5) and (prev_5d >= 5.0) and (rsi >= 62.0)
-
-        if rule_1_exhaustion or rule_2_stretched or (rule_3_overbought_surge and dist_ema >= 5.0) or rule_4_compound:
-            return "⚠️ TRAP / HIGH RISK (Filtered Out)"
         else:
-            return "✅ PASSED (Safe Breakout)"
+            df[col] = 0.0
 
-    df['Strict Trap Status'] = df.apply(evaluate_row, axis=1)
+    # Vectorized Rule Evaluations
+    cond_exhaustion   = df['Prev 5-Day Gain (%)'] >= 8.0
+    cond_stretched    = df['Dist EMA20 (%)'] >= 7.0
+    cond_overbought   = (df['RSI'] >= 64.0) & (df['Vol Spike'] >= 2.5) & (df['Massive Buying Surge (%)'] >= 150.0) & (df['Dist EMA20 (%)'] >= 5.0)
+    cond_compound     = (df['Dist EMA20 (%)'] >= 5.5) & (df['Prev 5-Day Gain (%)'] >= 5.0) & (df['RSI'] >= 62.0)
+
+    trap_mask = cond_exhaustion | cond_stretched | cond_overbought | cond_compound
+
+    df['Strict Trap Status'] = np.where(
+        trap_mask, 
+        "⚠️ TRAP / HIGH RISK (Filtered Out)", 
+        "✅ PASSED (Safe Breakout)"
+    )
     return df
 
 
 def evaluate_trap_risk(vol_spike, dist_ema20, rsi, close_pos, day_gain, prev_5d_gain=0.0, buying_surge=0.0):
     """
-    Combined Trap Risk Evaluator for Realtime & Backtest Engines
+    Scalar Trap Risk Evaluator for Realtime & Backtest Engine Rows
     """
-    # ULTRA-STRICT RULES (Script 1)
-    rule_1_exhaustion = prev_5d_gain >= 8.0
-    rule_2_stretched = dist_ema20 >= 7.0
+    # INVERTED / STRICT RULES
+    rule_1_exhaustion       = prev_5d_gain >= 8.0
+    rule_2_stretched        = dist_ema20 >= 7.0
     rule_3_overbought_surge = (rsi >= 64.0) and (vol_spike >= 2.5) and (buying_surge >= 150.0) and (dist_ema20 >= 5.0)
-    rule_4_compound = (dist_ema20 >= 5.5) and (prev_5d_gain >= 5.0) and (rsi >= 62.0)
+    rule_4_compound         = (dist_ema20 >= 5.5) and (prev_5d_gain >= 5.0) and (rsi >= 62.0)
 
-    # REJECTION & WEAK CLOSING RULES (Script 2)
-    is_high_volume_spike = vol_spike >= 5.0
-    is_weak_closing = close_pos < 75.0
+    # REJECTION & WEAK CLOSING RULES
+    is_high_volume_spike    = vol_spike >= 5.0
+    is_weak_closing         = close_pos < 75.0
 
     if rule_1_exhaustion or rule_2_stretched or rule_3_overbought_surge or rule_4_compound or (is_high_volume_spike and is_weak_closing):
         return "⚠️ TRAP / HIGH RISK"
-    elif (vol_spike >= 2.0) and (not is_weak_closing) and (dist_ema20 < 7.0):
+    elif (vol_spike >= 2.0) and (not is_weak_closing) and (dist_ema20 < 7.0) and (prev_5d_gain < 8.0) and (rsi < 64.0):
         return "✅ STRONG BREAKOUT"
     else:
         return "ℹ️ NEUTRAL"
@@ -469,7 +460,7 @@ def analyze_single_ticker(
             day_gain = round(float(df['Signal_Day_Gain_Pct'].values[-1]), 2)
             prev_5d_gain = round(float(df['Return_5d'].values[-1]), 2) if pd.notna(df['Return_5d'].values[-1]) else 0.0
 
-            # COMBINED ULTRA-STRICT TRAP RISK EVALUATION
+            # MERGED SCALAR TRAP RISK EVALUATION
             trap_status = evaluate_trap_risk(
                 vol_spike=vol_spike,
                 dist_ema20=dist_ema20,
@@ -550,7 +541,7 @@ def filter_ideal_breakout_stock(df):
     cond_surge = df['Massive Buying Surge (%)'] > 120
     cond_vol = df['Vol Spike (x)'] > 2.2
     cond_accum = df['Accum Ratio (10d)'] > 1.6
-    cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
+    cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 64)  # Enforcing non-overbought RSI range
 
     ideal_df = df[
         cond_no_trap & cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
@@ -632,7 +623,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
         cond4 = df_calc['Return_20d'] >= 2.0
         cond5 = df_calc['Turnover'] > (3 * 10000000)
-        cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
+        cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 64)
         cond9 = df_calc['Close'] > df_calc['EMA_20']
         cond_accum = df_calc['Accum_Ratio_10d'] >= 1.6
 
@@ -924,6 +915,9 @@ def run_headless_scan():
         log_msg('No breakout signals found in this pass.', 'info')
         return
 
+    # Apply Vectorized Strict Filter Batch Process
+    res_df = apply_strict_trap_filters(res_df)
+
     already_sent = get_already_sent_stocks()
     alert_candidates = filter_ideal_breakout_stock(res_df)
 
@@ -1007,7 +1001,7 @@ def run_streamlit_app():
     )
 
     st.title('Ashiyana Dashboard Pro Max 🚀')
-    st.caption('Engine Upgraded ⚙️ (Ultra-Strict Trap Filter Rules Integrated ⚡)')
+    st.caption('Engine Upgraded ⚙️ (Vectorized Safe Breakout & Inverted Trap Logic Merged ⚡)')
 
     nifty_info = cached_nifty_status()
     if nifty_info['is_bullish']:
@@ -1093,7 +1087,11 @@ def run_streamlit_app():
                 res = future.result()
                 if res:
                     results.extend(res)
-        return pd.DataFrame(results)
+        
+        res_df = pd.DataFrame(results)
+        if not res_df.empty:
+            res_df = apply_strict_trap_filters(res_df)
+        return res_df
 
     with tab1:
         st.subheader('⚡ Live Data Collection & Priority Scan')
@@ -1258,7 +1256,7 @@ def run_streamlit_app():
 
     with tab2:
         st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
-        st.caption('Har trading day market close par Roadmap me Serial No. 1 par rehne wale stock aur next 5-day performance ki report (Ultra-Strict Trap Filter Updated).')
+        st.caption('Har trading day market close par Roadmap me Serial No. 1 par rehne wale stock aur next 5-day performance ki report (Merged Safe Breakout Engine).')
 
         if 'master_market_data' not in st.session_state:
             st.info('👈 Side bar se "Fetch / Refresh Data" par click kijiye pehle.')
