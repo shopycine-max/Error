@@ -67,6 +67,7 @@ SENT_LOG_FILE = 'sent_alerts.json'
 
 
 def get_already_sent_stocks():
+  """Aaj ke sent stocks ko persistent JSON file se load karta hai."""
   today_str = datetime.date.today().strftime('%Y-%m-%d')
   if os.path.exists(SENT_LOG_FILE):
     try:
@@ -80,6 +81,7 @@ def get_already_sent_stocks():
 
 
 def mark_stock_as_sent(symbol):
+  """Stock ko aaj ke sent list me add karke persistent JSON file me save karta hai."""
   today_str = datetime.date.today().strftime('%Y-%m-%d')
   sent_set = get_already_sent_stocks()
   sent_set.add(symbol)
@@ -300,7 +302,6 @@ def analyze_single_ticker(
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    # UPDATED: Pct_Change upper limit set to 7.0%
     cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 7.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
@@ -371,7 +372,6 @@ def analyze_single_ticker(
           else 1.0
       )
 
-      # Filtering out bounds
       if vol_spike >= 9.5 or buying_surge_pct >= 900.0 or accum_ratio >= 15.0:
         return None
 
@@ -464,9 +464,6 @@ def filter_ideal_breakout_stock(df):
 # BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (LAST 3 MONTHS)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
-  """Evaluates data day-by-day for the last ~3 months (60 trading days) to find
-  the Serial #1 Roadmap Stock on each market close date and tracks outcome.
-  """
   if not master_data:
     return pd.DataFrame()
 
@@ -526,7 +523,6 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    # UPDATED: Pct_Change upper limit set to 7.0%
     cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 7.0)
     cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
@@ -888,8 +884,11 @@ def run_streamlit_app():
 
   if 'live_results' not in st.session_state:
     st.session_state['live_results'] = pd.DataFrame()
+
+  # Persistent log file se already sent stocks read karein taaki refresh hone par duplicate na bheje
   if 'sent_email_alerts' not in st.session_state:
-    st.session_state['sent_email_alerts'] = set()
+    st.session_state['sent_email_alerts'] = get_already_sent_stocks()
+
   if 'backtest_history' not in st.session_state:
     st.session_state['backtest_history'] = pd.DataFrame()
 
@@ -934,8 +933,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & 3-Month'
-      ' Backtest History Integrated ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & Anti-Duplicate System Active ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -976,6 +974,11 @@ def run_streamlit_app():
   )
   min_turnover = st.sidebar.number_input(
       'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5 
+  )
+
+  # Checkbox option to filter out already alerted stocks from UI view
+  hide_sent_stocks = st.sidebar.checkbox(
+      '🚫 Hide Already Alerted Stocks Today', value=True
   )
 
   st.sidebar.markdown('---')
@@ -1057,13 +1060,16 @@ def run_streamlit_app():
 
       if not res_df.empty:
         res_df = res_df.sort_values(by='Score', ascending=False)
+        already_sent_set = get_already_sent_stocks()
 
         ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
         if not ideal_matches_df.empty:
           for _, row in ideal_matches_df.iterrows():
             stock_symbol = row['Symbol']
-            if stock_symbol not in st.session_state['sent_email_alerts']:
+            
+            # Persistent & Session Check both applied
+            if stock_symbol not in already_sent_set and stock_symbol not in st.session_state['sent_email_alerts']:
               sent_status = send_email_alert(
                   symbol=stock_symbol,
                   entry=row['Entry Price (₹)'],
@@ -1075,111 +1081,123 @@ def run_streamlit_app():
                   condition=row['Execution Condition'],
               )
               if sent_status:
+                mark_stock_as_sent(stock_symbol)
                 st.session_state['sent_email_alerts'].add(stock_symbol)
                 st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
 
-          st.success(
-              f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s)'
-              ' met 100% criteria.'
-          )
+          # Screen par pehle se bheje gaye stocks chhupane ka logic
+          if hide_sent_stocks:
+            ideal_display_df = ideal_matches_df[~ideal_matches_df['Symbol'].isin(already_sent_set)].copy()
+            res_df_display = res_df[~res_df['Symbol'].isin(already_sent_set)].copy()
+          else:
+            ideal_display_df = ideal_matches_df.copy()
+            res_df_display = res_df.copy()
 
-          box_html = (
-              f'<div style="background-color: #161b22; border: 2px solid'
-              ' #ffd700; border-radius: 12px; padding: 18px; margin-bottom:'
-              ' 25px;"><h2 style="color: #ffd700; margin-top: 0;'
-              ' margin-bottom: 15px;">👑 Breakout Execution Roadmap'
-              f' ({len(ideal_matches_df)} Found)</h2>'
-          )
+          if not ideal_display_df.empty:
+            st.success(
+                f'🎉 **NEW IDEAL MATCHES FOUND!** {len(ideal_display_df)} fresh stock(s)'
+                ' met 100% criteria.'
+            )
 
-          for idx, row in ideal_matches_df.iterrows():
-            rank = idx + 1
-            sym = row['Symbol']
-            ex_rank = row['Execution Rank']
-            win = row['Entry Window']
-            cond = row['Execution Condition']
-            sc = row['Score']
-            cs = row['Continuation Score (%)']
-            mbs = row['Massive Buying Surge (%)']
-            rsi_v = row['RSI']
-            p_entry = row['Entry Price (₹)']
-            p_sl = row['Stop Loss (₹)']
-            p_tgt = row['Target Price (₹)']
+            box_html = (
+                f'<div style="background-color: #161b22; border: 2px solid'
+                ' #ffd700; border-radius: 12px; padding: 18px; margin-bottom:'
+                ' 25px;"><h2 style="color: #ffd700; margin-top: 0;'
+                ' margin-bottom: 15px;">👑 Breakout Execution Roadmap'
+                f' ({len(ideal_display_df)} Found)</h2>'
+            )
 
-            box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
+            for idx, row in ideal_display_df.iterrows():
+              rank = idx + 1
+              sym = row['Symbol']
+              ex_rank = row['Execution Rank']
+              win = row['Entry Window']
+              cond = row['Execution Condition']
+              sc = row['Score']
+              cs = row['Continuation Score (%)']
+              mbs = row['Massive Buying Surge (%)']
+              rsi_v = row['RSI']
+              p_entry = row['Entry Price (₹)']
+              p_sl = row['Stop Loss (₹)']
+              p_tgt = row['Target Price (₹)']
+
+              box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
 <p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
 </div>"""
 
-          box_html += '</div>'
-          st.markdown(box_html, unsafe_allow_html=True)
+            box_html += '</div>'
+            st.markdown(box_html, unsafe_allow_html=True)
 
-          top_stock_row = ideal_matches_df.iloc[0]
-          top_stock = top_stock_row['Symbol']
+            top_stock_row = ideal_display_df.iloc[0]
+            top_stock = top_stock_row['Symbol']
 
-          st.markdown(f'### 👑 Chart View: **{top_stock}**')
-          chart_data = yf.download(
-              f'{top_stock}.NS',
-              period='3mo',
-              interval='1d',
-              progress=False,
-              session=session,
-          )
-          chart_data = flatten_yfinance_df(chart_data)
-
-          if not chart_data.empty:
-            chart_data = chart_data.dropna(
-                subset=['Open', 'High', 'Low', 'Close', 'Volume']
+            st.markdown(f'### 👑 Chart View: **{top_stock}**')
+            chart_data = yf.download(
+                f'{top_stock}.NS',
+                period='3mo',
+                interval='1d',
+                progress=False,
+                session=session,
             )
+            chart_data = flatten_yfinance_df(chart_data)
+
             if not chart_data.empty:
-              fig = go.Figure(
-                  data=[
-                      go.Candlestick(
-                          x=chart_data.index,
-                          open=chart_data['Open'],
-                          high=chart_data['High'],
-                          low=chart_data['Low'],
-                          close=chart_data['Close'],
-                          name='Candlestick',
-                      )
-                  ]
+              chart_data = chart_data.dropna(
+                  subset=['Open', 'High', 'Low', 'Close', 'Volume']
               )
-              fig.add_trace(
-                  go.Scatter(
-                      x=chart_data.index,
-                      y=chart_data['Close'].ewm(span=20).mean(),
-                      line=dict(color='orange', width=1.5),
-                      name='EMA 20',
-                  )
-              )
+              if not chart_data.empty:
+                fig = go.Figure(
+                    data=[
+                        go.Candlestick(
+                            x=chart_data.index,
+                            open=chart_data['Open'],
+                            high=chart_data['High'],
+                            low=chart_data['Low'],
+                            close=chart_data['Close'],
+                            name='Candlestick',
+                        )
+                    ]
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=chart_data.index,
+                        y=chart_data['Close'].ewm(span=20).mean(),
+                        line=dict(color='orange', width=1.5),
+                        name='EMA 20',
+                    )
+                )
 
-              live_sl = top_stock_row['Stop Loss (₹)']
-              live_tgt = top_stock_row['Target Price (₹)']
+                live_sl = top_stock_row['Stop Loss (₹)']
+                live_tgt = top_stock_row['Target Price (₹)']
 
-              fig.add_hline(
-                  y=live_sl,
-                  line_dash='dash',
-                  line_color='red',
-                  line_width=2,
-                  annotation_text=f'SL: ₹{live_sl}',
-                  annotation_position='bottom left',
-              )
-              fig.add_hline(
-                  y=live_tgt,
-                  line_dash='dash',
-                  line_color='green',
-                  line_width=2,
-                  annotation_text=f'Target: ₹{live_tgt}',
-                  annotation_position='top left',
-              )
+                fig.add_hline(
+                    y=live_sl,
+                    line_dash='dash',
+                    line_color='red',
+                    line_width=2,
+                    annotation_text=f'SL: ₹{live_sl}',
+                    annotation_position='bottom left',
+                )
+                fig.add_hline(
+                    y=live_tgt,
+                    line_dash='dash',
+                    line_color='green',
+                    line_width=2,
+                    annotation_text=f'Target: ₹{live_tgt}',
+                    annotation_position='top left',
+                )
 
-              fig.update_layout(
-                  template='plotly_dark',
-                  title=f'{top_stock} Setup Chart',
-                  xaxis_rangeslider_visible=False,
-              )
-              st.plotly_chart(fig)
+                fig.update_layout(
+                    template='plotly_dark',
+                    title=f'{top_stock} Setup Chart',
+                    xaxis_rangeslider_visible=False,
+                )
+                st.plotly_chart(fig)
+          else:
+            st.info('ℹ️ Aaj ke sabhi ideal stocks alert ho chuke hain aur display list se hide ho gaye hain.')
         else:
           st.markdown(
               '<div style="background-color: #161b22; border: 2px solid'
@@ -1209,8 +1227,9 @@ def run_streamlit_app():
             ] * len(row)
           return [''] * len(row)
 
-        styled_df = res_df.style.apply(highlight_buying, axis=1)
-        st.subheader(f'📊 Active Signals Found: {len(res_df)}')
+        display_res = res_df[~res_df['Symbol'].isin(already_sent_set)] if hide_sent_stocks else res_df
+        styled_df = display_res.style.apply(highlight_buying, axis=1)
+        st.subheader(f'📊 Active Signals Found: {len(display_res)}')
         st.dataframe(styled_df, hide_index=True)
       else:
         st.caption(
