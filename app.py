@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import textwrap
 
 import pandas as pd
 import requests
@@ -169,6 +170,7 @@ def fetch_nifty_market_status():
           last_ema20 = float(nifty['EMA_20'].iloc[-1])
           pct_diff = round(((last_close - last_ema20) / last_ema20) * 100, 2)
 
+          # --- NIFTY SUPPORT & RESISTANCE CALCULATION ---
           prev_day = nifty.iloc[-2] if len(nifty) >= 2 else nifty.iloc[-1]
           pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3.0
           s1 = round((2 * pivot) - prev_day['High'], 2)
@@ -250,14 +252,13 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    min_candles = 30 if 'Version 3' in formula_version else 50
-    if len(df) < min_candles:
+    if len(df) < 50:
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    if len(df) < min_candles:
+    if len(df) < 50:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -286,6 +287,12 @@ def analyze_single_ticker(
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
 
+    window_size = max(10, min(500, len(df) - 2))
+    df['Max_500_High_1d_Ago'] = (
+        df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
+    )
+    df['Low_5d'] = df['Low'].rolling(window=5).min()
+
     candle_range = df['High'] - df['Low']
     real_body_top = df[['Open', 'Close']].max(axis=1)
     upper_wick = df['High'] - real_body_top
@@ -294,49 +301,18 @@ def analyze_single_ticker(
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
+    cond4 = df['Return_20d'] >= 2.0
+    cond5 = df['Turnover'] > (turnover_limit * 10000000)
+    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
+    cond9 = df['Close'] > df['EMA_20']
+    cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
-    # VERSION 3 (1-HOUR TIMEFRAME)
-    if 'Version 3' in formula_version or formula_version == 'v3':
-      cond2 = (df['Pct_Change'] >= 0.5) & (df['Pct_Change'] <= 8.0)
-      cond4 = df['Return_20d'] >= 1.0
-      cond5 = df['Turnover'] > ((turnover_limit / 6.0) * 10000000)
-      cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 78)
-      cond9 = df['Close'] > df['EMA_20']
-      cond_accum = df['Accum_Ratio_10d'] >= 1.3
-      df['Low_SL'] = df['Low'].rolling(window=10).min()
-
-      df['Signal'] = (
-          cond1
-          & cond2
-          & cond3
-          & cond4
-          & cond5
-          & cond8
-          & cond9
-          & cond_accum
-          & cond_no_wick
-          & cond_breakout
-      )
-
-    # VERSION 1 (STRICT DAILY)
-    elif 'Version 1' in formula_version or formula_version == 'v1':
-      window_size = max(10, min(500, len(df) - 2))
-      df['Max_500_High_1d_Ago'] = (
-          df['High'].shift(1).rolling(window=window_size, min_periods=1).max()
-      )
-      df['Low_SL'] = df['Low'].rolling(window=5).min()
-
-      cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
-      cond4 = df['Return_20d'] >= 2.0
-      cond5 = df['Turnover'] > (turnover_limit * 10000000)
+    if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
-      cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
-      cond9 = df['Close'] > df['EMA_20']
       cond10 = df['EMA_50'] > df['EMA_200']
       cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
-      cond_accum = df['Accum_Ratio_10d'] >= 1.5
-
       df['Signal'] = (
           cond1
           & cond2
@@ -352,17 +328,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
       )
-
-    # VERSION 2 (DEFAULT DAILY)
     else:
-      df['Low_SL'] = df['Low'].rolling(window=5).min()
-      cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
-      cond4 = df['Return_20d'] >= 2.0
-      cond5 = df['Turnover'] > (turnover_limit * 10000000)
-      cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
-      cond9 = df['Close'] > df['EMA_20']
-      cond_accum = df['Accum_Ratio_10d'] >= 1.5
-
       df['Signal'] = (
           cond1
           & cond2
@@ -386,9 +352,9 @@ def analyze_single_ticker(
     if is_signal and pd.notna(last_close_val):
       entry = float(last_close_val)
       sl = (
-          float(df['Low_SL'].values[-1])
-          if pd.notna(df['Low_SL'].values[-1])
-          else entry * 0.96
+          float(df['Low_5d'].values[-1])
+          if pd.notna(df['Low_5d'].values[-1])
+          else entry * 0.95
       )
       if sl >= entry or (entry - sl) / entry < 0.005:
         sl = entry * 0.965
@@ -412,27 +378,18 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if 'Version 3' in formula_version:
-        entry_win_1 = 'Hourly Candle Close'
-        entry_win_2 = 'Next 1-Hour Bar Entry'
-        entry_win_3 = 'Pullback to 20 EMA'
-      else:
-        entry_win_1 = '9:15 AM - 9:30 AM'
-        entry_win_2 = '9:20 AM - 9:35 AM'
-        entry_win_3 = '9:30 AM - 9:45 AM'
-
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
-        entry_window = entry_win_1
+        entry_window = '9:15 AM - 9:30 AM'
         exec_condition = f'Hold above ₹{round(entry, 2)}'
       elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
-        entry_window = entry_win_2
+        entry_window = '9:20 AM - 9:35 AM'
         exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
       else:
         exec_rank = '🥉 Rank 3 (Wait & Watch)'
-        entry_window = entry_win_3
-        exec_condition = f'Candle Close above ₹{round(entry, 2)}'
+        entry_window = '9:30 AM - 9:45 AM'
+        exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
       if close_pos >= 85.0 and vol_spike >= 2.5:
@@ -466,10 +423,10 @@ def analyze_single_ticker(
           'Entry Price (₹)': round(entry, 2),
           'Stop Loss (₹)': round(sl, 2),
           'Target Price (₹)': round(target, 2),
-          'Change (%)': round(float(df['Pct_Change'].values[-1]), 2),
+          'Day Change (%)': round(float(df['Pct_Change'].values[-1]), 2),
           'RSI': round(rsi_val, 2),
           'Vol Spike (x)': round(vol_spike, 1),
-          'Accum Ratio': round(accum_ratio, 2),
+          'Accum Ratio (10d)': round(accum_ratio, 2),
           'Continuation Score (%)': round(close_pos, 1),
           'Massive Buying Surge (%)': round(buying_surge_pct, 1),
           'Score': total_score,
@@ -486,8 +443,8 @@ def filter_ideal_breakout_stock(df):
   cond_cont = df['Continuation Score (%)'] > 80
   cond_surge = df['Massive Buying Surge (%)'] > 120
   cond_vol = df['Vol Spike (x)'] > 2.2
-  cond_accum = df['Accum Ratio'] > 1.6
-  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 75)
+  cond_accum = df['Accum Ratio (10d)'] > 1.6
+  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
 
   ideal_df = df[
       cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
@@ -499,6 +456,9 @@ def filter_ideal_breakout_stock(df):
   return pd.DataFrame()
 
 
+# ==============================================================================
+# OPTIMIZED ULTRA-FAST & ANTI-BLOCKING DOWNLOADER (WITH PERCENTAGE TRACKING)
+# ==============================================================================
 def download_market_data_safe(
     tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5, progress_bar=None, status_text=None
 ):
@@ -549,7 +509,7 @@ def download_market_data_safe(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
             t_data = t_data[t_data['Volume'] > 0]
-            if not t_data.empty and len(t_data) >= 20:
+            if not t_data.empty and len(t_data) >= 30:
               local_data[ticker] = t_data
           except Exception:
             continue
@@ -578,7 +538,7 @@ def download_market_data_safe(
       completed_tickers += len(chunk_tickers)
       pct = min(100, int((completed_chunks / total_chunks) * 100))
 
-      msg = f"⏳ Downloading market data ({interval}): {pct}% ({min(completed_tickers, total_tickers)}/{total_tickers} stocks)"
+      msg = f"⏳ Downloading market data: {pct}% ({min(completed_tickers, total_tickers)}/{total_tickers} stocks)"
       if IS_HEADLESS:
         log_msg(msg, 'info')
       else:
@@ -592,110 +552,98 @@ def download_market_data_safe(
   return cached_master
 
 
+# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
-  ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-  now = datetime.datetime.now(ist)
-
-  if now.weekday() >= 5:
-    return False, 'Weekend (Saturday/Sunday) - Market Closed'
-
-  start_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
-  end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-  if start_time <= now <= end_time:
-    return True, 'Market Hours Active'
-  elif now < start_time:
-    return (
-        False,
-        f"Market Hours not started yet (Current IST: {now.strftime('%H:%M:%S')})",
-    )
-  else:
-    return (
-        False,
-        f"Market Hours ended (Current IST: {now.strftime('%H:%M:%S')})",
-    )
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now = datetime.datetime.now(ist)
+    
+    # Mon (0) to Fri (4) check
+    if now.weekday() >= 5:
+        return False, "Weekend (Saturday/Sunday) - Market Closed"
+        
+    start_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    if start_time <= now <= end_time:
+        return True, "Market Hours Active"
+    elif now < start_time:
+        return False, f"Market Hours not started yet (Current IST: {now.strftime('%H:%M:%S')})"
+    else:
+        return False, f"Market Hours ended (Current IST: {now.strftime('%H:%M:%S')})"
 
 
 # ==============================================================================
 # MODE 1: HEADLESS / BACKGROUND SCANNER EXECUTION
 # ==============================================================================
 def run_headless_scan():
-  log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
+    log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-  is_active, reason = is_market_hours()
-  if not is_active:
-    log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
-    return
+    # Market Hours Verification (8:00 AM - 4:00 PM IST)
+    is_active, reason = is_market_hours()
+    if not is_active:
+        log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
+        return
 
-  nifty = fetch_nifty_market_status()
-  log_msg(
-      f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} |"
-      f" Resistance (R1): ₹{nifty['r1']}.",
-      'info',
-  )
-
-  tickers = fetch_mega_nse_universe()
-  log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
-
-  cached_master = download_market_data_safe(
-      tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
-  )
-
-  if not cached_master:
-    log_msg(
-        '❌ No stock data downloaded. Yahoo Finance may be rate-limiting.',
-        'error',
-    )
-    return
-
-  results = []
-  with ThreadPoolExecutor(max_workers=6) as executor:
-    futures = {
-        executor.submit(
-            analyze_single_ticker, ticker, df, formula_version='Version 2'
-        ): ticker
-        for ticker, df in cached_master.items()
-    }
-    for future in as_completed(futures):
-      res = future.result()
-      if res:
-        results.extend(res)
-
-  res_df = pd.DataFrame(results)
-  if res_df.empty:
-    log_msg('No breakout signals found in this pass.', 'info')
-    return
-
-  already_sent = get_already_sent_stocks()
-  alert_candidates = filter_ideal_breakout_stock(res_df)
-
-  log_msg(
-      f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info'
-  )
-
-  for _, row in alert_candidates.iterrows():
-    symbol = row['Symbol']
-
-    if symbol not in already_sent:
-      ok = send_email_alert(
-          symbol=symbol,
-          entry=row['Entry Price (₹)'],
-          sl=row['Stop Loss (₹)'],
-          target=row['Target Price (₹)'],
-          score=row['Score'],
-          rank=row['Execution Rank'],
-          window=row['Entry Window'],
-          condition=row['Execution Condition'],
-      )
-      if ok:
-        mark_stock_as_sent(symbol)
-        log_msg(f'🎯 Instant Mail Sent for new breakout: {symbol}', 'success')
+    nifty = fetch_nifty_market_status()
+    if not nifty['is_bullish']:
+        log_msg(f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...", 'warning')
     else:
-      log_msg(
-          f'⏭️ Duplicate Alert Skipped (Already Sent Today): {symbol}', 'info'
-      )
+        log_msg(f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}.", 'info')
 
-  log_msg('🏁 Headless Scan Completed Successfully.', 'success')
+    tickers = fetch_mega_nse_universe()
+    log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
+
+    cached_master = download_market_data_safe(
+        tickers, period='3mo', interval='1d', chunk_size=40, sleep_sec=0.5
+    )
+
+    if not cached_master:
+        log_msg('❌ No stock data downloaded. Yahoo Finance may be rate-limiting.', 'error')
+        return
+
+    results = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(analyze_single_ticker, ticker, df): ticker
+            for ticker, df in cached_master.items()
+        }
+        for future in as_completed(futures):
+            res = future.result()
+            if res:
+                results.extend(res)
+
+    res_df = pd.DataFrame(results)
+    if res_df.empty:
+        log_msg('No breakout signals found in this pass.', 'info')
+        return
+
+    already_sent = get_already_sent_stocks()
+    alert_candidates = filter_ideal_breakout_stock(res_df)
+
+    log_msg(f'Found {len(alert_candidates)} Roadmap breakout candidate(s).', 'info')
+
+    for _, row in alert_candidates.iterrows():
+        symbol = row['Symbol']
+        
+        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
+        if symbol not in already_sent:
+            ok = send_email_alert(
+                symbol=symbol,
+                entry=row['Entry Price (₹)'],
+                sl=row['Stop Loss (₹)'],
+                target=row['Target Price (₹)'],
+                score=row['Score'],
+                rank=row['Execution Rank'],
+                window=row['Entry Window'],
+                condition=row['Execution Condition'],
+            )
+            if ok:
+                mark_stock_as_sent(symbol)
+                log_msg(f'🎯 Instant Mail Sent for new breakout: {symbol}', 'success')
+        else:
+            log_msg(f'⏭️ Duplicate Alert Skipped (Already Sent Today): {symbol}', 'info')
+
+    log_msg('🏁 Headless Scan Completed Successfully.', 'success')
 
 
 # ==============================================================================
@@ -720,14 +668,14 @@ def run_streamlit_app():
     return fetch_mega_nse_universe()
 
   @st.cache_data(ttl=900, show_spinner=False)
-  def download_all_market_data(tickers, interval='1d', period='3mo'):
+  def download_all_market_data(tickers):
     status_text = st.empty()
     progress_bar = st.progress(0)
 
     cached_master = download_market_data_safe(
         tickers,
-        period=period,
-        interval=interval,
+        period='3mo',
+        interval='1d',
         chunk_size=40,
         sleep_sec=0.5,
         progress_bar=progress_bar,
@@ -752,8 +700,8 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & 1-Hour Timeframe Support'
-      ' Added ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      ' ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -776,20 +724,10 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 2 (Without 500-day High - Daily)',
-          'Version 1 (With 500-day High & Strict Filters - Daily)',
-          'Version 3 (1-Hour Timeframe Breakout)',
+          'Version 2 (Without 500-day High)',
+          'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
-
-  # Dynamic Interval & Period Setup
-  if 'Version 3' in formula_version:
-    data_interval = '1h'
-    data_period = '1mo'
-  else:
-    data_interval = '1d'
-    data_period = '3mo'
-
   rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
   volume_multiplier = st.sidebar.slider(
       'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
@@ -816,21 +754,19 @@ def run_streamlit_app():
 
   st.sidebar.write(f'Total Active Stocks: **{len(all_tickers)}**')
 
-  cache_key = f"{data_interval}_{data_period}"
-  if 'data_key' not in st.session_state or st.session_state['data_key'] != cache_key:
-    st.sidebar.warning(f'⚠️ Market Data not loaded for {data_interval}.')
+  if 'master_market_data' not in st.session_state:
+    st.sidebar.warning('⚠️ Data not loaded.')
   else:
     st.sidebar.success(
-        f"✅ Loaded {data_interval} ({len(st.session_state.get('master_market_data', {}))} stocks)"
+        f"✅ Loaded ({len(st.session_state['master_market_data'])} stocks)"
     )
 
   if st.sidebar.button('📥 Fetch / Refresh Data'):
-    with st.spinner(f'Downloading {data_interval} data for {len(all_tickers)} stocks...'):
+    with st.spinner(f'Downloading data for {len(all_tickers)} stocks...'):
       download_all_market_data.clear()
       st.session_state['master_market_data'] = download_all_market_data(
-          all_tickers, interval=data_interval, period=data_period
+          all_tickers
       )
-      st.session_state['data_key'] = cache_key
       st.session_state['live_results'] = pd.DataFrame()
       st.sidebar.success('🏁 Fresh Data Loaded!')
       st.rerun()
@@ -859,10 +795,10 @@ def run_streamlit_app():
           results.extend(res)
     return pd.DataFrame(results)
 
-  st.subheader(f'⚡ Live Data Collection ({data_interval}) & Priority Scan')
+  st.subheader('⚡ Live Data Collection & Priority Scan')
 
-  if 'master_market_data' not in st.session_state or st.session_state.get('data_key') != cache_key:
-    st.info(f"👈 Please click 'Fetch / Refresh Data' from the sidebar first to load {data_interval} candles.")
+  if 'master_market_data' not in st.session_state:
+    st.info("👈 Please click 'Fetch / Refresh Data' from the sidebar first.")
   else:
     if st.button('🚀 Run Scanner', key='live_btn'):
       with st.spinner('Searching for breakout setups...'):
@@ -927,11 +863,11 @@ def run_streamlit_app():
         top_stock_row = ideal_matches_df.iloc[0]
         top_stock = top_stock_row['Symbol']
 
-        st.markdown(f'### 👑 Chart View ({data_interval}): **{top_stock}**')
+        st.markdown(f'### 👑 Chart View: **{top_stock}**')
         chart_data = yf.download(
             f'{top_stock}.NS',
-            period=data_period,
-            interval=data_interval,
+            period='3mo',
+            interval='1d',
             progress=False,
             session=session,
         )
@@ -985,7 +921,7 @@ def run_streamlit_app():
 
             fig.update_layout(
                 template='plotly_dark',
-                title=f'{top_stock} Setup Chart ({data_interval})',
+                title=f'{top_stock} Setup Chart',
                 xaxis_rangeslider_visible=False,
             )
             st.plotly_chart(fig)
@@ -1019,7 +955,7 @@ def run_streamlit_app():
         return [''] * len(row)
 
       styled_df = res_df.style.apply(highlight_buying, axis=1)
-      st.subheader(f'📊 Active Signals Found ({data_interval}): {len(res_df)}')
+      st.subheader(f'📊 Active Signals Found: {len(res_df)}')
       st.dataframe(styled_df, hide_index=True)
     else:
       st.caption("No breakout setups currently active. Click 'Run Scanner' above.")
