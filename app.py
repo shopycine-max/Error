@@ -107,7 +107,7 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
         <body style="font-family: Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 20px;">
             <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
                 <h2 style="color: #28a745; margin-top: 0;">🚀 Breakout Alert Triggered!</h2>
-                <p>Stock <b>{symbol}</b> has met breakout conditions.</p>
+                <p>Stock <b>{symbol}</b> has met breakout conditions during Nifty Consolidation.</p>
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
                 <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
@@ -179,16 +179,26 @@ def fetch_nifty_market_status():
           sup_20d = round(float(nifty['Low'].tail(20).min()), 2)
           res_20d = round(float(nifty['High'].tail(20).max()), 2)
 
+          # --- 1-DAY NIFTY CONSOLIDATION DETECTION ---
+          # Check last 5 days high-low range relative to price (< 1.8% means tight consolidation)
+          recent_5d = nifty.tail(5)
+          nifty_range_pct = round(((recent_5d['High'].max() - recent_5d['Low'].min()) / last_close) * 100, 2)
+          is_consolidating = nifty_range_pct <= 1.8
+
           is_bullish = last_close > last_ema20
-          status_text = (
-              '🟢 TRADE MODE ACTIVE (Bullish Trend)'
-              if is_bullish
-              else '🔴 AVOID / BEARISH TREND'
-          )
+          
+          if is_consolidating:
+            status_text = '🟡 NIFTY CONSOLIDATING (Ideal Environment for Breakouts)'
+          elif is_bullish:
+            status_text = '🟢 NIFTY TRENDING UPWARD (Caution: Trend Expansion)'
+          else:
+            status_text = '🔴 NIFTY BEARISH / TRENDING DOWN'
 
           return {
               'status': status_text,
               'is_bullish': is_bullish,
+              'is_consolidating': is_consolidating,
+              'nifty_range_pct': nifty_range_pct,
               'nifty_close': round(last_close, 2),
               'nifty_ema20': round(last_ema20, 2),
               'pct_diff': pct_diff,
@@ -204,6 +214,8 @@ def fetch_nifty_market_status():
   return {
       'status': '⚠️ UNKNOWN (Bypassed Rate Limit)',
       'is_bullish': True,
+      'is_consolidating': True,
+      'nifty_range_pct': 0.0,
       'nifty_close': 0.0,
       'nifty_ema20': 0.0,
       'pct_diff': 0.0,
@@ -578,17 +590,18 @@ def is_market_hours():
 def run_headless_scan():
     log_msg('🚀 Starting Background Headless Market Scanner...', 'info')
 
-    # Market Hours Verification (8:00 AM - 4:00 PM IST)
     is_active, reason = is_market_hours()
     if not is_active:
         log_msg(f'⏸️ Skipping Scan: {reason}', 'warning')
         return
 
     nifty = fetch_nifty_market_status()
-    if not nifty['is_bullish']:
-        log_msg(f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...", 'warning')
-    else:
-        log_msg(f"🟢 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} | Resistance (R1): ₹{nifty['r1']}.", 'info')
+    log_msg(f"📊 Nifty Status: {nifty['status']} | Range (5d): {nifty['nifty_range_pct']}% | Support: ₹{nifty['s1']} | Resistance: ₹{nifty['r1']}.", 'info')
+
+    # CONSOLIDATION CHECK: Agar Nifty consolidate nahi kar raha toh alert send karne me extra caution ya skip
+    if not nifty['is_consolidating']:
+        log_msg('⚠️ Nifty is currently trending/directional (Not Consolidating). Skipping automatic breakout alerts to prevent fake-outs.', 'warning')
+        return
 
     tickers = fetch_mega_nse_universe()
     log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
@@ -625,7 +638,6 @@ def run_headless_scan():
     for _, row in alert_candidates.iterrows():
         symbol = row['Symbol']
         
-        # DUPLICATE CHECK: Agar stock aaj bhej chuke hain toh skip karega
         if symbol not in already_sent:
             ok = send_email_alert(
                 symbol=symbol,
@@ -700,24 +712,23 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter & Execution Rank Integrated'
+      'Engine Upgraded ⚙️ (NIFTY 50 Consolidation Filter & Execution Rank Integrated'
       ' ⚡)'
   )
 
   nifty_info = cached_nifty_status()
-  if nifty_info['is_bullish']:
+  if nifty_info['is_consolidating']:
     st.success(
-        f"### 🟢 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n\n"
-        f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | **Strength:** +{nifty_info['pct_diff']}% above EMA. **(Take Fresh Long Trades)**\n\n"
-        f"🛡️ **Immediate Support (S1):** ₹{nifty_info['s1']} | **20-Day Support (Low):** ₹{nifty_info['sup_20d']}\n\n"
-        f"🎯 **Immediate Resistance (R1):** ₹{nifty_info['r1']} | **20-Day Resistance (High):** ₹{nifty_info['res_20d']}"
+        f"### 🟡 NIFTY 50 STATUS: **{nifty_info['status']}**\n\n"
+        f"**Nifty Close:** ₹{nifty_info['nifty_close']} | **5-Day Range:** {nifty_info['nifty_range_pct']}% (Tight Range) 🎯 **(Best Conditions for Rank 1 Breakouts)**\n\n"
+        f"🛡️ **Support (S1):** ₹{nifty_info['s1']} | **20-Day Low:** ₹{nifty_info['sup_20d']}\n\n"
+        f"🎯 **Resistance (R1):** ₹{nifty_info['r1']} | **20-Day High:** ₹{nifty_info['res_20d']}"
     )
   else:
-    st.error(
-        f"### 🔴 NIFTY 50 TREND STATUS: **{nifty_info['status']}**\n\n"
-        f"**Nifty 50 Close:** ₹{nifty_info['nifty_close']} | **20 EMA:** ₹{nifty_info['nifty_ema20']} | **Weakness:** {nifty_info['pct_diff']}% below EMA. **(Avoid New Long Positions)**\n\n"
-        f"🛡️ **Immediate Support (S1):** ₹{nifty_info['s1']} | **20-Day Support (Low):** ₹{nifty_info['sup_20d']}\n\n"
-        f"🎯 **Immediate Resistance (R1):** ₹{nifty_info['r1']} | **20-Day Resistance (High):** ₹{nifty_info['res_20d']}"
+    st.warning(
+        f"### ⚠️ NIFTY 50 STATUS: **{nifty_info['status']}**\n\n"
+        f"**Nifty Close:** ₹{nifty_info['nifty_close']} | **5-Day Range:** {nifty_info['nifty_range_pct']}% (Directional Move) ⚠️ **(Breakouts may face fake-outs / low success rate)**\n\n"
+        f"🛡️ **Support (S1):** ₹{nifty_info['s1']} | **Resistance (R1):** ₹{nifty_info['r1']}"
     )
 
   st.sidebar.header('⚙️ Pro Scanner Controls')
@@ -812,27 +823,27 @@ def run_streamlit_app():
       ideal_matches_df = filter_ideal_breakout_stock(res_df)
 
       if not ideal_matches_df.empty:
-        for _, row in ideal_matches_df.iterrows():
-          stock_symbol = row['Symbol']
-          if stock_symbol not in st.session_state['sent_email_alerts']:
-            sent_status = send_email_alert(
-                symbol=stock_symbol,
-                entry=row['Entry Price (₹)'],
-                sl=row['Stop Loss (₹)'],
-                target=row['Target Price (₹)'],
-                score=row['Score'],
-                rank=row['Execution Rank'],
-                window=row['Entry Window'],
-                condition=row['Execution Condition'],
-            )
-            if sent_status:
-              st.session_state['sent_email_alerts'].add(stock_symbol)
-              st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
-
-        st.success(
-            f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met'
-            ' 100% criteria.'
-        )
+        # Check if Nifty is consolidating before sending alerts in Streamlit web app
+        if nifty_info['is_consolidating']:
+          for _, row in ideal_matches_df.iterrows():
+            stock_symbol = row['Symbol']
+            if stock_symbol not in st.session_state['sent_email_alerts']:
+              sent_status = send_email_alert(
+                  symbol=stock_symbol,
+                  entry=row['Entry Price (₹)'],
+                  sl=row['Stop Loss (₹)'],
+                  target=row['Target Price (₹)'],
+                  score=row['Score'],
+                  rank=row['Execution Rank'],
+                  window=row['Entry Window'],
+                  condition=row['Execution Condition'],
+              )
+              if sent_status:
+                st.session_state['sent_email_alerts'].add(stock_symbol)
+                st.toast(f'📧 Email alert sent for {stock_symbol}!', icon='📩')
+          st.success(f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s) met 100% criteria during Nifty Consolidation.')
+        else:
+          st.warning(f'⚠️ {len(ideal_matches_df)} stock(s) found, but **Email alerts are paused** because Nifty is currently in a directional trend (not consolidating).')
 
         box_html = f"""<div style="background-color: #161b22; border: 2px solid #ffd700; border-radius: 12px; padding: 18px; margin-bottom: 25px;"><h2 style="color: #ffd700; margin-top: 0; margin-bottom: 15px;">👑 Breakout Execution Roadmap ({len(ideal_matches_df)} Found)</h2>"""
 
