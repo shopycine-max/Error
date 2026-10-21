@@ -242,6 +242,18 @@ def fetch_mega_nse_universe():
   return fallback
 
 
+def calculate_risk_status(vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio):
+  """Centralized Risk Calculator function based on User Criteria."""
+  if vol_spike > 3.5 or pct_from_ema20 > 12.0 or buying_surge_pct > 300.0:
+    return '🚨 HIGH RISK (Exhaustion / Gap-Up Profit Booking Trap)'
+  elif (2.8 <= vol_spike <= 3.5) or buying_surge_pct > 220.0:
+    return '⚠️ MODERATE RISK (Overheated Buying Surge)'
+  elif accum_ratio < 1.7:
+    return '⚡ WATCH / CAUTION (Weak Accumulation)'
+  else:
+    return '✅ LOW RISK (Safe Clean Breakout)'
+
+
 def analyze_single_ticker(
     ticker,
     df,
@@ -377,19 +389,14 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- ADVANCED RISK & TRAP STUDY LOGIC (Live Scanner) ---
+      # --- ADVANCED RISK & TRAP STUDY LOGIC ---
       rr_ratio = round((target - entry) / (entry - sl + 1e-10), 2)
       ema20_val = float(df['EMA_20'].values[-1])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
-      if vol_spike > 3.5 or pct_from_ema20 > 12.0 or buying_surge_pct > 300.0:
-        risk_status = '🚨 HIGH RISK (Exhaustion / Gap-Up Profit Booking Trap)'
-      elif vol_spike > 2.8 or buying_surge_pct > 220.0:
-        risk_status = '⚠️ MODERATE RISK (Overheated Buying Surge)'
-      elif accum_ratio < 1.7:
-        risk_status = '⚡ WATCH / CAUTION (Weak Accumulation)'
-      else:
-        risk_status = '✅ LOW RISK (Safe Clean Breakout)'
+      risk_status = calculate_risk_status(
+          vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio
+      )
 
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
@@ -473,11 +480,11 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WITH RISK METRICS)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WITH FULL RISK POINT MAPPING)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   """Evaluates data day-by-day for the last ~3 months to find the Serial #1
-  Roadmap Stock and includes Risk & Overheating metrics.
+  Roadmap Stock and maps all Risk Points onto the Backtested Table.
   """
   if not master_data:
     return pd.DataFrame()
@@ -596,19 +603,14 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- ADVANCED RISK & TRAP STUDY LOGIC (Backtest) ---
+      # --- BACKTEST RISK MAPPING ---
       rr_ratio = round((target - entry) / (entry - sl + 1e-10), 2)
       ema20_val = float(row['EMA_20'])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
-      if vol_spike > 3.5 or pct_from_ema20 > 12.0 or buying_surge_pct > 300.0:
-        risk_status = '🚨 HIGH RISK (Exhaustion / Gap-Up Profit Booking Trap)'
-      elif vol_spike > 2.8 or buying_surge_pct > 220.0:
-        risk_status = '⚠️ MODERATE RISK (Overheated Buying Surge)'
-      elif accum_ratio < 1.7:
-        risk_status = '⚡ WATCH / CAUTION (Weak Accumulation)'
-      else:
-        risk_status = '✅ LOW RISK (Safe Clean Breakout)'
+      risk_status = calculate_risk_status(
+          vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio
+      )
 
       if (
           close_pos > 80
