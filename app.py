@@ -1,10 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import json
 import os
 import smtplib
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import textwrap
@@ -278,13 +278,6 @@ def analyze_single_ticker(
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
-    # --- ANTI-OVEREXTENSION & EXHAUSTION FILTERS ---
-    df['EMA_20_Dist'] = (df['Close'] - df['EMA_20']) / df['EMA_20'] * 100
-    cond_not_overextended = df['EMA_20_Dist'] <= 12.0
-
-    df['Consecutive_Green'] = df['Is_Green'].astype(int).rolling(4).sum()
-    cond_not_exhausted = df['Consecutive_Green'] <= 3
-
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -333,8 +326,6 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
-          & cond_not_overextended
-          & cond_not_exhausted
       )
     else:
       df['Signal'] = (
@@ -348,8 +339,6 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
-          & cond_not_overextended
-          & cond_not_exhausted
       )
 
     is_signal = (
@@ -388,6 +377,22 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
+      # --- FALSE BREAKOUT / TRAP SHIELD FORMULA (PREVIOUS DAY ANALYSIS) ---
+      ema_20_val = float(df['EMA_20'].values[-1])
+      ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
+      upper_wick_pct = float(df['Wick_Ratio'].values[-1] * 100)
+
+      # Risk calculation based on previous day candle structure
+      if ema_dist_pct <= 7.0 and upper_wick_pct <= 15.0 and close_pos >= 90.0 and vol_spike <= 3.2:
+        trap_shield = '🟢 Safe Breakout (Low Risk)'
+        false_breakout_risk_pct = 12.5
+      elif ema_dist_pct <= 12.0 and upper_wick_pct <= 22.0 and close_pos >= 80.0:
+        trap_shield = '⚠️ Moderate Trap Risk'
+        false_breakout_risk_pct = 35.0
+      else:
+        trap_shield = '❌ High False Breakout Risk (Trap)'
+        false_breakout_risk_pct = 68.0
+
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
@@ -402,7 +407,7 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 85.0 and vol_spike >= 2.5:
+      if close_pos >= 85.0 and vol_spike >= 2.5 and trap_shield.startswith('🟢'):
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 30
       elif accum_ratio >= 2.0 and vol_spike >= 2.0:
@@ -420,13 +425,16 @@ def analyze_single_ticker(
           + (vol_spike * 5)
           + (accum_ratio * 10)
           + (close_pos / 2)
-          + bonus_score,
+          + bonus_score
+          - (false_breakout_risk_pct / 5),
           2,
       )
 
       return [{
           'Symbol': ticker.replace('.NS', ''),
           'Execution Rank': exec_rank,
+          'Trap Shield Status': trap_shield,
+          'False Breakout Risk (%)': f'{false_breakout_risk_pct}%',
           'Entry Window': entry_window,
           'Execution Condition': exec_condition,
           'Alert': alert_type,
@@ -455,9 +463,10 @@ def filter_ideal_breakout_stock(df):
   cond_vol = df['Vol Spike (x)'] > 2.2
   cond_accum = df['Accum Ratio (10d)'] > 1.6
   cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
+  cond_trap = df['Trap Shield Status'].str.contains('Safe Breakout|Moderate', na=False)
 
   ideal_df = df[
-      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
+      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi & cond_trap
   ].copy()
   if not ideal_df.empty:
     return ideal_df.sort_values(by='Score', ascending=False).reset_index(
@@ -513,15 +522,6 @@ def run_3month_backtest(master_data, backtest_days=60):
     df_calc['High_20_Prev'] = df_calc['High'].shift(1).rolling(20).max()
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
 
-    # --- NAYE BACKTEST FILTERS ---
-    df_calc['EMA_20_Dist'] = (
-        (df_calc['Close'] - df_calc['EMA_20']) / df_calc['EMA_20'] * 100
-    )
-    cond_not_overextended = df_calc['EMA_20_Dist'] <= 12.0
-
-    df_calc['Consecutive_Green'] = df_calc['Is_Green'].astype(int).rolling(4).sum()
-    cond_not_exhausted = df_calc['Consecutive_Green'] <= 3
-
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -560,8 +560,6 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_accum
         & cond_no_wick
         & cond_breakout
-        & cond_not_overextended
-        & cond_not_exhausted
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -601,6 +599,21 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
+      # Backtest Trap Shield Calculation
+      ema_20_val = float(row['EMA_20'])
+      ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
+      upper_wick_pct = float(row['Wick_Ratio'] * 100)
+
+      if ema_dist_pct <= 7.0 and upper_wick_pct <= 15.0 and close_pos >= 90.0 and vol_spike <= 3.2:
+        trap_shield = '🟢 Safe Breakout'
+        false_breakout_risk_pct = 12.5
+      elif ema_dist_pct <= 12.0 and upper_wick_pct <= 22.0 and close_pos >= 80.0:
+        trap_shield = '⚠️ Moderate Risk'
+        false_breakout_risk_pct = 35.0
+      else:
+        trap_shield = '❌ High Trap Risk'
+        false_breakout_risk_pct = 68.0
+
       if (
           close_pos > 80
           and buying_surge_pct > 120
@@ -614,7 +627,8 @@ def run_3month_backtest(master_data, backtest_days=60):
             + (vol_spike * 5)
             + (accum_ratio * 10)
             + (close_pos / 2)
-            + bonus_score,
+            + bonus_score
+            - (false_breakout_risk_pct / 5),
             2,
         )
 
@@ -632,25 +646,12 @@ def run_3month_backtest(master_data, backtest_days=60):
         max_gain_pct = round(((max_future_high - entry) / entry) * 100, 2)
 
         outcome = '⏳ Open'
-        fail_reason = 'N/A'
-
         if hit_target and not hit_sl:
           outcome = '🎯 Hit Target (2R)'
-          fail_reason = 'Successful Breakout'
         elif hit_sl and not hit_target:
           outcome = '🛑 Hit Stop Loss'
-          fail_reason = (
-              'Intraday Profit Booking / False Breakout'
-              if max_gain_pct < 2
-              else 'Volatility / Reversal'
-          )
         elif hit_target and hit_sl:
-          if max_gain_pct >= 4:
-            outcome = '🎯 Target First / Volatile'
-            fail_reason = 'Hit Target before SL'
-          else:
-            outcome = '🛑 Hit SL First'
-            fail_reason = 'Faded after Open'
+          outcome = '🎯 Target First / Volatile' if max_gain_pct >= 4 else '🛑 Hit SL First'
 
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
@@ -665,6 +666,8 @@ def run_3month_backtest(master_data, backtest_days=60):
         daily_candidates[dt].append({
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
+            'Trap Shield Status': trap_shield,
+            'False Breakout Risk (%)': f'{false_breakout_risk_pct}%',
             'Score': total_score,
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
@@ -672,7 +675,6 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
             'Next Day PnL (%)': f"{next_pnl_pct:+}%",
-            'Status / Reason': fail_reason,  # 👈 Placed right after Next Day PnL (%)
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
@@ -961,8 +963,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (Anti-Exhaustion & EMA Distance Filters Integrated'
-      ' ⚡)'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank, False Breakout Shield & 3-Month Backtest History ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -1131,11 +1132,13 @@ def run_streamlit_app():
             p_entry = row['Entry Price (₹)']
             p_sl = row['Stop Loss (₹)']
             p_tgt = row['Target Price (₹)']
+            trap_status = row['Trap Shield Status']
+            trap_risk = row['False Breakout Risk (%)']
 
             box_html += f"""<div style="border-bottom: 1px dashed #30363d; padding-bottom: 12px; margin-bottom: 12px;">
 <h3 style="color: #58a6ff; margin: 0;">#{rank} Stock: <u>{sym}</u> ({ex_rank})</h3>
 <p style="color: #ffd700; font-weight: bold; margin-top: 4px; margin-bottom: 4px;">⏰ Entry Window: {win} | ⚡ Execution Rule: {cond}</p>
-<p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Continuation Score:</b> {cs}% | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
+<p style="color: #c9d1d9; font-size: 14px; margin-top: 2px; margin-bottom: 6px;"><b>Score:</b> {sc} | <b>Shield:</b> {trap_status} (Risk: {trap_risk}) | <b>Surge:</b> {mbs}% | <b>RSI:</b> {rsi_v}</p>
 <p style="color: #00ff7f; font-weight: bold; margin: 0; font-size: 15px;">🎯 Trigger: ₹{p_entry} | SL: ₹{p_sl} | Target: ₹{p_tgt}</p>
 </div>"""
 
@@ -1248,7 +1251,7 @@ def run_streamlit_app():
     st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock aur next 5-day performance ki report.'
+        ' wale stock, False Breakout Risk status aur next 5-day performance ki report.'
     )
 
     if 'master_market_data' not in st.session_state:
