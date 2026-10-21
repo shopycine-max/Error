@@ -249,6 +249,7 @@ def analyze_single_ticker(
     rsi_filter=58,
     turnover_limit=3,
     formula_version='Version 2',
+    is_nifty_bullish=True,
 ):
   try:
     if len(df) < 50:
@@ -297,11 +298,10 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    cond_no_wick = df['Wick_Ratio'] <= 0.15  # Strict Wick Limit
+    cond_no_wick = df['Wick_Ratio'] <= 0.12  # Strict 12% Upper Wick Limit
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 10.0)
-    # UPDATED VOLUME SPIKE FILTER: ALLOW UP TO 7.5x
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 9.0)
     cond3 = (df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)) & (df['Volume'] <= (df['Vol_SMA20'] * 7.5))
     cond4 = df['Return_20d'] >= 2.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
@@ -312,7 +312,7 @@ def analyze_single_ticker(
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
       cond10 = df['EMA_50'] > df['EMA_200']
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.08)
+      cond12 = df['Close'] <= (df['EMA_20'] * 1.05)  # Strict 5% EMA Cap
       df['Signal'] = (
           cond1
           & cond2
@@ -329,7 +329,7 @@ def analyze_single_ticker(
           & cond_breakout
       )
     else:
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.08)
+      cond12 = df['Close'] <= (df['EMA_20'] * 1.05)  # Strict 5% EMA Cap
       df['Signal'] = (
           cond1
           & cond2
@@ -380,27 +380,27 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- 3-MONTH BACKTEST OPTIMIZED SHIELD ---
+      # --- RE-ENGINEERED ULTRA-STRICT TRAP SHIELD ---
       ema_20_val = float(df['EMA_20'].values[-1])
       ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
       upper_wick_pct = float(df['Wick_Ratio'].values[-1] * 100)
 
-      # VOL SPIKE CAP ALLOWED UP TO 7.5x FOR ULTRA SAFE
-      if close_pos >= 90.0 and ema_dist_pct <= 8.0 and upper_wick_pct <= 12.0 and 2.2 <= vol_spike <= 7.5:
+      # Ultra-Safe needs 92%+ Close Position + Nifty Bullish Trend + EMA Dist <= 5%
+      if close_pos >= 92.0 and ema_dist_pct <= 5.0 and upper_wick_pct <= 10.0 and 2.2 <= vol_spike <= 7.5 and is_nifty_bullish:
         trap_shield = '🟢 Ultra-Safe (High +PnL Prob)'
-        false_breakout_risk_pct = 5.0
-      elif close_pos >= 85.0 and ema_dist_pct <= 10.0:
+        false_breakout_risk_pct = 4.0
+      elif close_pos >= 85.0 and ema_dist_pct <= 8.0:
         trap_shield = '⚠️ Moderate Trap Risk'
-        false_breakout_risk_pct = 30.0
+        false_breakout_risk_pct = 35.0
       else:
         trap_shield = '❌ High Trap Risk / Overextended'
-        false_breakout_risk_pct = 75.0
+        false_breakout_risk_pct = 80.0
 
-      if close_pos >= 90.0 and buying_surge_pct >= 120.0 and trap_shield.startswith('🟢'):
+      if close_pos >= 92.0 and buying_surge_pct >= 120.0 and trap_shield.startswith('🟢'):
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
         exec_condition = f'Hold above ₹{round(entry, 2)}'
-      elif close_pos >= 85.0 and trap_shield.startswith('🟢'):
+      elif close_pos >= 88.0 and trap_shield.startswith('🟢'):
         exec_rank = '🥈 Rank 2 (High Priority)'
         entry_window = '9:20 AM - 9:35 AM'
         exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
@@ -409,7 +409,7 @@ def analyze_single_ticker(
         entry_window = '9:30 AM - 9:45 AM'
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
-      bonus_score = 30 if (close_pos >= 90.0 and trap_shield.startswith('🟢')) else 0
+      bonus_score = 30 if (close_pos >= 92.0 and trap_shield.startswith('🟢')) else 0
       alert_type = '⭐ Ultimate Explosive Setup' if bonus_score > 0 else '✅ Normal Signal'
 
       rsi_val = (
@@ -453,9 +453,9 @@ def analyze_single_ticker(
 def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
-  cond_cont = df['Continuation Score (%)'] >= 90.0
+  cond_cont = df['Continuation Score (%)'] >= 92.0
   cond_surge = (df['Massive Buying Surge (%)'] >= 120) & (df['Massive Buying Surge (%)'] <= 650)
-  cond_vol = (df['Vol Spike (x)'] >= 2.2) & (df['Vol Spike (x)'] <= 7.5)  # ALLOWED UP TO 7.5x
+  cond_vol = (df['Vol Spike (x)'] >= 2.2) & (df['Vol Spike (x)'] <= 7.5)
   cond_accum = df['Accum Ratio (10d)'] >= 1.8
   cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
   cond_trap = df['Trap Shield Status'].str.contains('Ultra-Safe', na=False)
@@ -530,16 +530,16 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    cond_no_wick = df_calc['Wick_Ratio'] <= 0.15
+    cond_no_wick = df_calc['Wick_Ratio'] <= 0.12
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 10.0)
-    cond3 = (df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)) & (df_calc['Volume'] <= (df_calc['Vol_SMA20'] * 7.5)) # UPDATED BACKTEST VOL SPIKE FILTER
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 9.0)
+    cond3 = (df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)) & (df_calc['Volume'] <= (df_calc['Vol_SMA20'] * 7.5))
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
     cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
     cond9 = df_calc['Close'] > df_calc['EMA_20']
-    cond12 = df_calc['Close'] <= (df_calc['EMA_20'] * 1.08)
+    cond12 = df_calc['Close'] <= (df_calc['EMA_20'] * 1.05)
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
 
     df_calc['Signal'] = (
@@ -597,17 +597,17 @@ def run_3month_backtest(master_data, backtest_days=60):
       ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
       upper_wick_pct = float(row['Wick_Ratio'] * 100)
 
-      if close_pos >= 90.0 and ema_dist_pct <= 8.0 and upper_wick_pct <= 12.0 and 2.2 <= vol_spike <= 7.5:
+      if close_pos >= 92.0 and ema_dist_pct <= 5.0 and upper_wick_pct <= 10.0 and 2.2 <= vol_spike <= 7.5:
         trap_shield = '🟢 Ultra-Safe'
-        false_breakout_risk_pct = 5.0
-      elif close_pos >= 85.0 and ema_dist_pct <= 10.0:
+        false_breakout_risk_pct = 4.0
+      elif close_pos >= 85.0 and ema_dist_pct <= 8.0:
         trap_shield = '⚠️ Moderate Risk'
-        false_breakout_risk_pct = 30.0
+        false_breakout_risk_pct = 35.0
       else:
         trap_shield = '❌ High Risk'
-        false_breakout_risk_pct = 75.0
+        false_breakout_risk_pct = 80.0
 
-      if close_pos >= 90.0 and trap_shield.startswith('🟢'):
+      if close_pos >= 92.0 and trap_shield.startswith('🟢'):
         bonus_score = 30
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
@@ -849,7 +849,7 @@ def run_headless_scan():
   results = []
   with ThreadPoolExecutor(max_workers=6) as executor:
     futures = {
-        executor.submit(analyze_single_ticker, ticker, df): ticker
+        executor.submit(analyze_single_ticker, ticker, df, 2.2, 58, 3, 'Version 2', nifty['is_bullish']): ticker
         for ticker, df in cached_master.items()
     }
     for future in as_completed(futures):
@@ -1049,6 +1049,7 @@ def run_streamlit_app():
               rsi_filter,
               min_turnover,
               formula_version,
+              nifty_info['is_bullish'],
           ): ticker
           for ticker, df in pool.items()
       }
