@@ -244,7 +244,6 @@ def fetch_mega_nse_universe():
 
 def calculate_risk_status(vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio, wick_ratio, close_pos):
   """Advanced Dynamic Risk Engine to prevent Next-Day Losses."""
-  # 1. Exhaustion Trap Filter (Volume Spike Extreme or Upper Wick Rejection)
   if vol_spike > 3.2 or pct_from_ema20 > 10.0 or buying_surge_pct > 250.0 or wick_ratio > 0.15:
     return '🚨 HIGH RISK (Upper Wick Rejection / Profit Booking Trap)'
   elif (2.5 <= vol_spike <= 3.2) or buying_surge_pct > 180.0 or close_pos < 85.0:
@@ -311,11 +310,11 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     
-    # --- STRICT NO-WICK FILTER (Upper Wick <= 15% to eliminate selling pressure) ---
+    # STRICT NO-WICK FILTER (Upper Wick <= 15%)
     cond_no_wick = df['Wick_Ratio'] <= 0.15
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 10.0) # Cap at 10% to prevent overextended candles
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 10.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
@@ -397,12 +396,10 @@ def analyze_single_ticker(
       ema20_val = float(df['EMA_20'].values[-1])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
-      # --- ADVANCED RISK ENGINE ---
       risk_status = calculate_risk_status(
           vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio, wick_val, close_pos
       )
 
-      # --- NEXT DAY TRAP SAFETY RULE ---
       next_day_trap_rule = f"BUY ONLY IF Opens > ₹{round(entry, 2)} & Holds 15-Min High. AVOID IF Gaps down!"
 
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
@@ -471,12 +468,12 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 85  # Raised to 85% for safer trades
+  cond_cont = df['Continuation Score (%)'] >= 85
   cond_surge = df['Massive Buying Surge (%)'] > 120
   cond_vol = df['Vol Spike (x)'] > 2.2
   cond_accum = df['Accum Ratio (10d)'] >= 1.7
   cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
-  cond_risk = ~df['Risk Status'].str.contains('HIGH RISK', na=False) # Automatically EXCLUDE High Risk Traps
+  cond_risk = ~df['Risk Status'].str.contains('HIGH RISK', na=False)
 
   ideal_df = df[
       cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi & cond_risk
@@ -489,9 +486,12 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (TRAP-FILTER INTEGRATED)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WITH NEXT-DAY TRAP FILTER INTEGRATION)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
+  """Evaluates data day-by-day for the last ~3 months to find the Serial #1
+  Roadmap Stock and includes Next-Day Trap Filters & Risk Metrics.
+  """
   if not master_data:
     return pd.DataFrame()
 
@@ -614,16 +614,20 @@ def run_3month_backtest(master_data, backtest_days=60):
       ema20_val = float(row['EMA_20'])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
+      # --- ADVANCED RISK ENGINE FOR BACKTEST ---
       risk_status = calculate_risk_status(
           vol_spike, pct_from_ema20, buying_surge_pct, accum_ratio, wick_val, close_pos
       )
 
+      next_day_trap_rule = f"BUY ONLY IF Opens > ₹{round(entry, 2)} & Holds 15-Min High. AVOID IF Gaps down!"
+
+      # EXCLUDE HIGH RISK TRAPS FROM BACKTEST RANK #1 ROADMAP
       if (
           close_pos >= 85.0
           and buying_surge_pct > 120
           and vol_spike > 2.2
           and accum_ratio >= 1.6
-          and 'HIGH RISK' not in risk_status # Reject High Risk Traps in Backtest
+          and 'HIGH RISK' not in risk_status
       ):
         bonus_score = 30 if (close_pos >= 85.0 and vol_spike >= 2.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
@@ -675,6 +679,7 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
             'Risk Status': risk_status,
+            'Next-Day Trap Filter': next_day_trap_rule,
             'Dist from EMA20 (%)': pct_from_ema20,
             'RR Ratio': rr_ratio,
             'Score': total_score,
