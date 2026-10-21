@@ -285,10 +285,9 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     
-    # Ultra-strict conditions for >90% Win Rate
     cond_no_wick = df['Wick_Ratio'] <= 0.15
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 100  # Minimum price filter to avoid low quality stocks
+    cond1 = df['Close'] >= 100
     cond2 = (df['Pct_Change'] >= 2.0) & (df['Pct_Change'] <= 8.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 5.0
@@ -296,7 +295,7 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 68)
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 2.2
-    cond_prev_green = df['Is_Green'] & df['Is_Green'].shift(1)  # 2 consecutive green days
+    cond_prev_green = df['Is_Green'] & df['Is_Green'].shift(1)
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -383,7 +382,8 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 92.0 and vol_spike >= 3.5:
+      # MERGED CONDITION: Close Position >= 85% aur Vol Spike >= 2.5x hone par +50 Bonus Points
+      if close_pos >= 85.0 and vol_spike >= 2.5:
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 50
       elif accum_ratio >= 2.5 and vol_spike >= 3.0:
@@ -431,14 +431,13 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] > 92
-  cond_surge = df['Massive Buying Surge (%)'] > 220
-  cond_vol = df['Vol Spike (x)'] > 3.0
+  cond_cont = df['Continuation Score (%)'] >= 85.0
+  cond_vol = df['Vol Spike (x)'] >= 2.5
   cond_accum = df['Accum Ratio (10d)'] > 2.2
   cond_rsi = (df['RSI'] >= 62) & (df['RSI'] <= 68)
 
   ideal_df = df[
-      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
+      cond_alert & cond_cont & cond_vol & cond_accum & cond_rsi
   ].copy()
   if not ideal_df.empty:
     return ideal_df.sort_values(by='Score', ascending=False).reset_index(
@@ -451,12 +450,6 @@ def filter_ideal_breakout_stock(df):
 # BACKTESTING ENGINE: NEXT-DAY P&L% WIN RATE ROADMAP (>90% WIN RATE TARGET)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
-  """Evaluates day-by-day for the last ~3 months and calculates win rate based
-
-  strictly on NEXT DAY P&L%:
-    - Next day P&L% > 0  ==> 🎯 Target Hit (Win)
-    - Next day P&L% <= 0 ==> 🛑 Stop Loss (Loss)
-  """
   if not master_data:
     return pd.DataFrame()
 
@@ -576,13 +569,9 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if (
-          close_pos >= 92
-          and buying_surge_pct > 220
-          and vol_spike > 3.0
-          and accum_ratio > 2.2
-      ):
-        bonus_score = 50 if (close_pos >= 95.0 and vol_spike >= 3.5) else 0
+      # MERGED CONDITION IN BACKTEST
+      if close_pos >= 85.0 and vol_spike >= 2.5 and accum_ratio > 2.2:
+        bonus_score = 50
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
@@ -593,7 +582,6 @@ def run_3month_backtest(master_data, backtest_days=60):
             2,
         )
 
-        # --- NEXT DAY P&L% OUTCOME EVALUATION ---
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
           next_high = round(float(next_day['High']), 2)
@@ -605,7 +593,6 @@ def run_3month_backtest(master_data, backtest_days=60):
           next_low = round(entry, 2)
           next_pnl_pct = 0.0
 
-        # Win condition: Next day P&L% > 0 (Target Hit), otherwise Stop Loss
         if next_pnl_pct > 0:
           outcome = '🎯 Target Hit (Next Day +)'
         else:
@@ -1097,7 +1084,7 @@ def run_streamlit_app():
               progress=False,
               session=session,
           )
-          chart_data = flatten_yfinance_df(chart_data)
+          chart_data = flatten_yfinance_df(chart_data) if 'flatten_yfinance_df' in globals() else chart_data
 
           if not chart_data.empty:
             chart_data = chart_data.dropna(
@@ -1158,7 +1145,7 @@ def run_streamlit_app():
               ' 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Elite Match'
               ' Found Today</h2><p style="color: #c9d1d9; font-size: 15px;'
               ' margin-top: 8px; margin-bottom: 0px;">No stocks passed the'
-              ' ultra-strict >90% win rate filters.</p></div>',
+              ' ultra-strict win rate filters.</p></div>',
               unsafe_allow_html=True,
           )
 
@@ -1217,7 +1204,7 @@ def run_streamlit_app():
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
-        col2.metric('Winning Days (+ PnL)', f'{targets_hit}')
+        col2.metric('Winning Days (+ PnN)', f'{targets_hit}')
         col3.metric('Losing Days (- PnL)', f'{sl_hit}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
 
