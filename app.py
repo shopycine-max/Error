@@ -278,12 +278,12 @@ def analyze_single_ticker(
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
-    # --- NAYE FILTERS FOR OVEREXTENSION & EXHAUSTION ---
+    # --- ANTI-OVEREXTENSION & EXHAUSTION FILTERS ---
     df['EMA_20_Dist'] = (df['Close'] - df['EMA_20']) / df['EMA_20'] * 100
-    cond_not_overextended = df['EMA_20_Dist'] <= 12.0  # Max 12% distant from 20 EMA
+    cond_not_overextended = df['EMA_20_Dist'] <= 12.0
 
     df['Consecutive_Green'] = df['Is_Green'].astype(int).rolling(4).sum()
-    cond_not_exhausted = df['Consecutive_Green'] <= 3  # Avoid 4+ consecutive green days
+    cond_not_exhausted = df['Consecutive_Green'] <= 3
 
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
@@ -672,13 +672,13 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
             'Next Day PnL (%)': f"{next_pnl_pct:+}%",
+            'Status / Reason': fail_reason,  # 👈 Placed right after Next Day PnL (%)
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
             'Massive Buying Surge (%)': round(buying_surge_pct, 1),
             'Max Gain (Next 5 Days)': f'+{max_gain_pct}%',
             'Outcome': outcome,
-            'Status / Reason': fail_reason,
         })
 
   rank_1_history = []
