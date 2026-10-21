@@ -298,7 +298,7 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    cond_no_wick = df['Wick_Ratio'] <= 0.12  # Strict 12% Upper Wick Limit
+    cond_no_wick = df['Wick_Ratio'] <= 0.10  # Strict 10% Wick Limit
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
     cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 9.0)
@@ -312,7 +312,6 @@ def analyze_single_ticker(
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
       cond10 = df['EMA_50'] > df['EMA_200']
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.05)  # Strict 5% EMA Cap
       df['Signal'] = (
           cond1
           & cond2
@@ -323,13 +322,11 @@ def analyze_single_ticker(
           & cond8
           & cond9
           & cond10
-          & cond12
           & cond_accum
           & cond_no_wick
           & cond_breakout
       )
     else:
-      cond12 = df['Close'] <= (df['EMA_20'] * 1.05)  # Strict 5% EMA Cap
       df['Signal'] = (
           cond1
           & cond2
@@ -338,7 +335,6 @@ def analyze_single_ticker(
           & cond5
           & cond8
           & cond9
-          & cond12
           & cond_accum
           & cond_no_wick
           & cond_breakout
@@ -380,20 +376,17 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- RE-ENGINEERED ULTRA-STRICT TRAP SHIELD ---
-      ema_20_val = float(df['EMA_20'].values[-1])
-      ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
       upper_wick_pct = float(df['Wick_Ratio'].values[-1] * 100)
 
-      # Ultra-Safe needs 92%+ Close Position + Nifty Bullish Trend + EMA Dist <= 5%
-      if close_pos >= 92.0 and ema_dist_pct <= 5.0 and upper_wick_pct <= 10.0 and 2.2 <= vol_spike <= 7.5 and is_nifty_bullish:
+      # TRAP SHIELD WITHOUT EMA DISTANCE
+      if close_pos >= 92.0 and upper_wick_pct <= 8.0 and 2.2 <= vol_spike <= 7.5 and is_nifty_bullish:
         trap_shield = '🟢 Ultra-Safe (High +PnL Prob)'
-        false_breakout_risk_pct = 4.0
-      elif close_pos >= 85.0 and ema_dist_pct <= 8.0:
+        false_breakout_risk_pct = 3.0
+      elif close_pos >= 85.0:
         trap_shield = '⚠️ Moderate Trap Risk'
         false_breakout_risk_pct = 35.0
       else:
-        trap_shield = '❌ High Trap Risk / Overextended'
+        trap_shield = '❌ High Trap Risk / Weak Close'
         false_breakout_risk_pct = 80.0
 
       if close_pos >= 92.0 and buying_surge_pct >= 120.0 and trap_shield.startswith('🟢'):
@@ -530,16 +523,15 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    cond_no_wick = df_calc['Wick_Ratio'] <= 0.12
+    cond_no_wick = df_calc['Wick_Ratio'] <= 0.10
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 9.0)
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 8.0)
     cond3 = (df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)) & (df_calc['Volume'] <= (df_calc['Vol_SMA20'] * 7.5))
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
-    cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
+    cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 70)
     cond9 = df_calc['Close'] > df_calc['EMA_20']
-    cond12 = df_calc['Close'] <= (df_calc['EMA_20'] * 1.05)
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
 
     df_calc['Signal'] = (
@@ -550,7 +542,6 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond5
         & cond8
         & cond9
-        & cond12
         & cond_accum
         & cond_no_wick
         & cond_breakout
@@ -593,14 +584,12 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      ema_20_val = float(row['EMA_20'])
-      ema_dist_pct = ((entry - ema_20_val) / ema_20_val) * 100
       upper_wick_pct = float(row['Wick_Ratio'] * 100)
 
-      if close_pos >= 92.0 and ema_dist_pct <= 5.0 and upper_wick_pct <= 10.0 and 2.2 <= vol_spike <= 7.5:
+      if close_pos >= 92.0 and upper_wick_pct <= 8.0 and 2.2 <= vol_spike <= 7.5:
         trap_shield = '🟢 Ultra-Safe'
-        false_breakout_risk_pct = 4.0
-      elif close_pos >= 85.0 and ema_dist_pct <= 8.0:
+        false_breakout_risk_pct = 3.0
+      elif close_pos >= 85.0:
         trap_shield = '⚠️ Moderate Risk'
         false_breakout_risk_pct = 35.0
       else:
