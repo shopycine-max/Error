@@ -377,17 +377,19 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- RISK & OVERHEATING METRICS (Live Scanner) ---
+      # --- ADVANCED RISK & TRAP STUDY LOGIC (Live Scanner) ---
       rr_ratio = round((target - entry) / (entry - sl + 1e-10), 2)
       ema20_val = float(df['EMA_20'].values[-1])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
-      if vol_spike > 3.5 or pct_from_ema20 > 12.0:
-        risk_status = '⚠️ HIGH RISK (Overextended / Gap-Up Trap Risk)'
-      elif vol_spike > 2.5:
-        risk_status = '⚡ MODERATE RISK (Heavy Momentum)'
+      if vol_spike > 3.5 or pct_from_ema20 > 12.0 or buying_surge_pct > 300.0:
+        risk_status = '🚨 HIGH RISK (Exhaustion / Gap-Up Profit Booking Trap)'
+      elif vol_spike > 2.8 or buying_surge_pct > 220.0:
+        risk_status = '⚠️ MODERATE RISK (Overheated Buying Surge)'
+      elif accum_ratio < 1.7:
+        risk_status = '⚡ WATCH / CAUTION (Weak Accumulation)'
       else:
-        risk_status = '✅ HEALTHY (Normal Breakout)'
+        risk_status = '✅ LOW RISK (Safe Clean Breakout)'
 
       if close_pos >= 90.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
@@ -594,17 +596,19 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # --- RISK & OVERHEATING METRICS (Backtest) ---
+      # --- ADVANCED RISK & TRAP STUDY LOGIC (Backtest) ---
       rr_ratio = round((target - entry) / (entry - sl + 1e-10), 2)
       ema20_val = float(row['EMA_20'])
       pct_from_ema20 = round(((entry - ema20_val) / ema20_val) * 100, 2)
 
-      if vol_spike > 3.5 or pct_from_ema20 > 12.0:
-        risk_status = '⚠️ HIGH RISK (Overextended / Gap-Up Trap Risk)'
-      elif vol_spike > 2.5:
-        risk_status = '⚡ MODERATE RISK (Heavy Momentum)'
+      if vol_spike > 3.5 or pct_from_ema20 > 12.0 or buying_surge_pct > 300.0:
+        risk_status = '🚨 HIGH RISK (Exhaustion / Gap-Up Profit Booking Trap)'
+      elif vol_spike > 2.8 or buying_surge_pct > 220.0:
+        risk_status = '⚠️ MODERATE RISK (Overheated Buying Surge)'
+      elif accum_ratio < 1.7:
+        risk_status = '⚡ WATCH / CAUTION (Weak Accumulation)'
       else:
-        risk_status = '✅ HEALTHY (Normal Breakout)'
+        risk_status = '✅ LOW RISK (Safe Clean Breakout)'
 
       if (
           close_pos > 80
@@ -646,6 +650,7 @@ def run_3month_backtest(master_data, backtest_days=60):
               '🎯 Target First / Volatile' if max_gain_pct >= 4 else '🛑 Hit SL First'
           )
 
+        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING ---
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
           next_high = round(float(next_day['High']), 2)
@@ -1217,15 +1222,8 @@ def run_streamlit_app():
           )
 
         def highlight_buying(row):
-          risk = str(row.get('Risk Status', ''))
           alert = str(row.get('Alert', ''))
-
-          if 'HIGH RISK' in risk:
-            return [
-                'background-color: rgba(220, 53, 69, 0.25); color: #ff6b6b;'
-                ' font-weight: bold'
-            ] * len(row)
-          elif '⭐' in alert or 'Ultimate' in alert:
+          if '⭐' in alert or 'Ultimate' in alert:
             return [
                 'background-color: #ffd700; color: #000000; font-weight: bold'
             ] * len(row)
@@ -1274,7 +1272,11 @@ def run_streamlit_app():
         sl_hit = len(
             bt_history[bt_history['Outcome'].str.contains('Stop Loss', na=False)]
         )
-        win_rate = round((targets_hit / total_trades) * 100, 1) if total_trades > 0 else 0.0
+        win_rate = (
+            round((targets_hit / total_trades) * 100, 1)
+            if total_trades > 0
+            else 0.0
+        )
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
@@ -1284,10 +1286,8 @@ def run_streamlit_app():
 
         st.markdown('---')
 
-        def highlight_backtest(row):
+        def highlight_outcome(row):
           outcome = str(row.get('Outcome', ''))
-          risk = str(row.get('Risk Status', ''))
-
           if 'Target' in outcome:
             return [
                 'background-color: rgba(40, 167, 69, 0.25); color: #28a745;'
@@ -1298,21 +1298,15 @@ def run_streamlit_app():
                 'background-color: rgba(220, 53, 69, 0.25); color: #dc3545;'
                 ' font-weight: bold'
             ] * len(row)
-          elif 'HIGH RISK' in risk:
-            return [
-                'background-color: rgba(255, 193, 7, 0.2); color: #ffc107;'
-            ] * len(row)
           return [''] * len(row)
 
         st.dataframe(
-            bt_history.style.apply(highlight_backtest, axis=1),
+            bt_history.style.apply(highlight_outcome, axis=1),
             use_container_width=True,
             hide_index=True,
         )
       else:
-        st.caption(
-            'Backtest run karne ke liye uper button par click kijiye.'
-        )
+        st.caption('Backtest run karne ke liye uper button par click kijiye.')
 
 
 if __name__ == '__main__':
