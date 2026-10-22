@@ -1,10 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import json
 import os
 import smtplib
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import textwrap
@@ -284,7 +284,7 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    
+
     cond_no_wick = df['Wick_Ratio'] <= 0.15
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 100
@@ -382,7 +382,6 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      # MERGED CONDITION: Close Position >= 85% aur Vol Spike >= 2.5x hone par +50 Bonus Points
       if close_pos >= 85.0 and vol_spike >= 2.5:
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 50
@@ -569,7 +568,6 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      # MERGED CONDITION IN BACKTEST
       if close_pos >= 85.0 and vol_spike >= 2.5 and accum_ratio > 2.2:
         bonus_score = 50
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
@@ -605,6 +603,7 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
+            'Continuation Score (%)': round(close_pos, 1),
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
             'Next Day PnL (%)': f'{next_pnl_pct:+.2f}%',
@@ -1084,7 +1083,6 @@ def run_streamlit_app():
               progress=False,
               session=session,
           )
-          chart_data = flatten_yfinance_df(chart_data) if 'flatten_yfinance_df' in globals() else chart_data
 
           if not chart_data.empty:
             chart_data = chart_data.dropna(
