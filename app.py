@@ -229,12 +229,20 @@ def fetch_mega_nse_universe():
   return fallback
 
 
+def flatten_yfinance_df(df):
+  if df.empty:
+    return df
+  if isinstance(df.columns, pd.MultiIndex):
+    df.columns = df.columns.get_level_values(0)
+  return df
+
+
 def analyze_single_ticker(
     ticker,
     df,
-    volume_multiplier=3.0,
+    volume_multiplier=2.2,
     rsi_filter=62,
-    turnover_limit=5,
+    turnover_limit=3,
     formula_version='Version 2',
 ):
   try:
@@ -284,18 +292,19 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-
+    
+    # Ultra-strict conditions updated with new criteria
     cond_no_wick = df['Wick_Ratio'] <= 0.15
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 100
+    cond1 = df['Close'] >= 100  # Minimum price filter to avoid low quality stocks
     cond2 = (df['Pct_Change'] >= 2.0) & (df['Pct_Change'] <= 8.0)
-    cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
+    cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)  # 2.2x Volume
     cond4 = df['Return_20d'] >= 5.0
-    cond5 = df['Turnover'] > (turnover_limit * 10000000)
-    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 68)
+    cond5 = df['Turnover'] > (turnover_limit * 10000000)  # ₹3 Crores Minimum Turnover
+    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)  # RSI 62 se 75
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 2.2
-    cond_prev_green = df['Is_Green'] & df['Is_Green'].shift(1)
+    cond_prev_green = df['Is_Green'] & df['Is_Green'].shift(1)  # 2 consecutive green days
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -382,7 +391,7 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 90.0 and vol_spike >= 2.5:  # Updated threshold to 90.0
+      if close_pos >= 92.0 and vol_spike >= 3.5:
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 50
       elif accum_ratio >= 2.5 and vol_spike >= 3.0:
@@ -430,15 +439,14 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = (
-      df['Continuation Score (%)'] >= 90.0
-  )  # Updated to >= 90.0 as requested
-  cond_vol = df['Vol Spike (x)'] >= 2.5
+  cond_cont = df['Continuation Score (%)'] > 92
+  cond_surge = df['Massive Buying Surge (%)'] > 220
+  cond_vol = df['Vol Spike (x)'] > 2.2
   cond_accum = df['Accum Ratio (10d)'] > 2.2
-  cond_rsi = (df['RSI'] >= 62) & (df['RSI'] <= 68)
+  cond_rsi = (df['RSI'] >= 62) & (df['RSI'] <= 75)
 
   ideal_df = df[
-      cond_alert & cond_cont & cond_vol & cond_accum & cond_rsi
+      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
   ].copy()
   if not ideal_df.empty:
     return ideal_df.sort_values(by='Score', ascending=False).reset_index(
@@ -448,7 +456,7 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: NEXT-DAY P&L% WIN RATE ROADMAP (>90% WIN RATE TARGET)
+# BACKTESTING ENGINE: NEXT-DAY P&L% WIN RATE ROADMAP
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
@@ -511,10 +519,10 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 100
     cond2 = (df_calc['Pct_Change'] >= 2.0) & (df_calc['Pct_Change'] <= 8.0)
-    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 3.0)
+    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)  # Updated to 2.2x
     cond4 = df_calc['Return_20d'] >= 5.0
-    cond5 = df_calc['Turnover'] > (5 * 10000000)
-    cond8 = (df_calc['RSI'] >= 62) & (df_calc['RSI'] <= 68)
+    cond5 = df_calc['Turnover'] > (3 * 10000000)  # Updated to ₹3 Crores
+    cond8 = (df_calc['RSI'] >= 62) & (df_calc['RSI'] <= 75)  # Updated RSI 62 to 75
     cond9 = df_calc['Close'] > df_calc['EMA_20']
     cond_accum = df_calc['Accum_Ratio_10d'] >= 2.2
     cond_prev_green = df_calc['Is_Green'] & df_calc['Is_Green'].shift(1)
@@ -570,8 +578,13 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if close_pos >= 90.0 and vol_spike >= 2.5 and accum_ratio > 2.2:  # Updated to >= 90.0
-        bonus_score = 50
+      if (
+          close_pos >= 92
+          and buying_surge_pct > 220
+          and vol_spike > 2.2
+          and accum_ratio > 2.2
+      ):
+        bonus_score = 50 if (close_pos >= 95.0 and vol_spike >= 3.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
@@ -605,7 +618,6 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
-            'Continuation Score (%)': round(close_pos, 1),
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
             'Next Day PnL (%)': f'{next_pnl_pct:+.2f}%',
@@ -933,10 +945,10 @@ def run_streamlit_app():
   )
   rsi_filter = st.sidebar.slider('Minimum RSI', 55, 75, 62)
   volume_multiplier = st.sidebar.slider(
-      'Volume Shock Multiplier', 2.0, 5.0, 3.0, step=0.1
+      'Volume Shock Multiplier', 1.5, 5.0, 2.2, step=0.1
   )
   min_turnover = st.sidebar.number_input(
-      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5
+      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
   )
 
   st.sidebar.markdown('---')
@@ -1085,6 +1097,7 @@ def run_streamlit_app():
               progress=False,
               session=session,
           )
+          chart_data = flatten_yfinance_df(chart_data)
 
           if not chart_data.empty:
             chart_data = chart_data.dropna(
@@ -1204,7 +1217,7 @@ def run_streamlit_app():
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
-        col2.metric('Winning Days (+ PnN)', f'{targets_hit}')
+        col2.metric('Winning Days (+ PnL)', f'{targets_hit}')
         col3.metric('Losing Days (- PnL)', f'{sl_hit}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
 
