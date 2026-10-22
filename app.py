@@ -382,7 +382,7 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 85.0 and vol_spike >= 2.5:
+      if close_pos >= 90.0 and vol_spike >= 2.5:  # Updated threshold to 90.0
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 50
       elif accum_ratio >= 2.5 and vol_spike >= 3.0:
@@ -430,7 +430,9 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 85.0
+  cond_cont = (
+      df['Continuation Score (%)'] >= 90.0
+  )  # Updated to >= 90.0 as requested
   cond_vol = df['Vol Spike (x)'] >= 2.5
   cond_accum = df['Accum Ratio (10d)'] > 2.2
   cond_rsi = (df['RSI'] >= 62) & (df['RSI'] <= 68)
@@ -568,7 +570,7 @@ def run_3month_backtest(master_data, backtest_days=60):
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if close_pos >= 85.0 and vol_spike >= 2.5 and accum_ratio > 2.2:
+      if close_pos >= 90.0 and vol_spike >= 2.5 and accum_ratio > 2.2:  # Updated to >= 90.0
         bonus_score = 50
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
