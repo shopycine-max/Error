@@ -182,7 +182,7 @@ def fetch_nifty_market_status():
           is_bullish = last_close > last_ema20
 
           return {
-              'status': '🟢 MARKET FAVORABLE (Bullish & Clear)' if is_bullish else '🔴 BEARISH TREND',
+              'status': '🟢 MARKET FAVORABLE (Bullish)' if is_bullish else '🔴 BEARISH TREND',
               'is_bullish': is_bullish,
               'nifty_close': round(last_close, 2),
               'nifty_ema20': round(last_ema20, 2),
@@ -214,30 +214,25 @@ def get_market_condition_status(nifty_close, nifty_ema20, pct_diff, r1, res_20d)
   if nifty_close == 0:
     return True, 'Market data unavailable, proceeding with caution.'
 
-  # 1. Negative Trend Check
   is_negative = nifty_close < nifty_ema20 or pct_diff < -0.3
-
-  # 2. Sideways Market Check (tight range around EMA, within ±0.5%)
   is_sideways = abs(pct_diff) <= 0.5
-
-  # 3. Near Resistance (R1) Check (Close within 0.7% below R1 or 20-day high resistance)
   is_near_resistance = (r1 > 0 and nifty_close >= r1 * 0.993) or (
       res_20d > 0 and nifty_close >= res_20d * 0.99
   )
 
   if is_negative:
-    return False, '🔴 Nifty is in a Negative Trend (Below 20 EMA / Downside momentum). 70% breakout failure probability!'
+    return False, '🔴 Nifty is in a Negative Trend (Below 20 EMA). 70% breakout failure probability!'
   elif is_sideways:
     return False, '🟡 Nifty is Sideways/Consolidating near 20 EMA. Breakouts likely to fail!'
   elif is_near_resistance:
     return False, '🎯 Nifty is near Immediate Resistance (R1) / 20-Day High. High profit-booking risk!'
   else:
-    return True, '🟢 Market Trend is Strong, Favorable, and Clear of Resistance.'
+    return True, '🟢 Market Trend is Strong and Favorable.'
 
 
 def fetch_mega_nse_universe():
   fallback = [
-      '^NSEI',  # Added Nifty 50 for Market Trend Guardrail in backtest
+      '^NSEI',
       'ADANIENT.NS',
       'ADANIPORTS.NS',
       'APOLLOHOSP.NS',
@@ -316,7 +311,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   if ticker == '^NSEI':
-    return None  # Skip index from stock breakout analysis
+    return None
 
   try:
     if len(df) < 50:
@@ -531,13 +526,16 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE WITH MARKET GUARDRAIL (NIFTY TREND & R1 FILTER)
+# BACKTESTING ENGINE WITH SAFE FALLBACK (GUARDRAIL PROTECTED)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
     return pd.DataFrame()
 
   nifty_df = master_data.get('^NSEI', pd.DataFrame())
+  if nifty_df.empty:
+    nifty_df = master_data.get('NIFTY_50.NS', pd.DataFrame())
+
   if not nifty_df.empty:
     nifty_df = nifty_df.copy()
     nifty_df['EMA_20'] = nifty_df['Close'].ewm(span=20, adjust=False).mean()
@@ -555,19 +553,19 @@ def run_3month_backtest(master_data, backtest_days=60):
 
   all_dates = set()
   for ticker, df in master_data.items():
-    if ticker != '^NSEI' and len(df) >= 50:
+    if ticker not in ['^NSEI', 'NIFTY_50.NS'] and len(df) >= 50:
       all_dates.update(df.index.tolist())
 
   sorted_dates = sorted(list(all_dates))
   if len(sorted_dates) < backtest_days:
-    test_dates = sorted_dates[20:]
+    test_dates = sorted_dates[20:] if len(sorted_dates) >= 20 else sorted_dates
   else:
     test_dates = sorted_dates[-backtest_days:]
 
   daily_candidates = {d: [] for d in test_dates}
 
   for ticker, df in master_data.items():
-    if ticker == '^NSEI' or len(df) < 50:
+    if ticker in ['^NSEI', 'NIFTY_50.NS'] or len(df) < 50:
       continue
 
     df_calc = df.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
@@ -637,18 +635,13 @@ def run_3month_backtest(master_data, backtest_days=60):
       if dt not in daily_candidates:
         continue
 
-      # --- APPLY MARKET GUARDRAIL ON HISTORICAL DATE `dt` ---
+      # --- MARKET GUARDRAIL CHECK FOR BACKTEST ---
       if not nifty_df.empty and dt in nifty_df.index:
         n_row = nifty_df.loc[dt]
         n_close = float(n_row['Close'])
         n_ema = float(n_row['EMA_20'])
-        n_pct = float(n_row['Pct_Diff'])
-        n_r1 = float(n_row['R1']) if pd.notna(n_row['R1']) else 0.0
-        n_res20 = float(n_row['Res_20d']) if pd.notna(n_row['Res_20d']) else 0.0
-
-        is_fav, _ = get_market_condition_status(n_close, n_ema, n_pct, n_r1, n_res20)
-        if not is_fav:
-          continue  # Skip breakout signal on days when Nifty is negative, sideways, or near R1!
+        if n_close < n_ema:
+          continue  # Skip trade if Nifty is below 20 EMA (Negative Trend)
 
       idx = df_calc.index.get_loc(dt)
       row = df_calc.iloc[idx]
