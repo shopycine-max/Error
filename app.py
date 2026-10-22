@@ -1,10 +1,10 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import json
 import os
 import smtplib
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import textwrap
@@ -46,6 +46,15 @@ def log_msg(msg, level='info'):
       st.success(msg)
     else:
       st.info(msg)
+
+
+# --- YFINANCE DATAFRAME FLATTEN HELPER ---
+def flatten_yfinance_df(df):
+  if df.empty:
+    return df
+  if isinstance(df.columns, pd.MultiIndex):
+    df.columns = [col[0] for col in df.columns]
+  return df
 
 
 # --- SECRETS & ENVIRONMENT HELPER ---
@@ -201,7 +210,6 @@ def fetch_nifty_market_status():
 
 
 def fetch_mega_nse_universe():
-  # Expanded fallback universe to include 100+ liquid NSE stocks
   fallback = [
       'ADANIENT.NS', 'ADANIPORTS.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS', 'AXISBANK.NS',
       'BAJAJ-AUTO.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'BPCL.NS', 'BHARTIARTL.NS',
@@ -212,21 +220,21 @@ def fetch_mega_nse_universe():
       'M&M.NS', 'MARUTI.NS', 'NTPC.NS', 'NESTLEIND.NS', 'ONGC.NS', 'POWERGRID.NS',
       'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SUNPHARMA.NS', 'TATACONSUM.NS',
       'TCS.NS', 'TATAMOTORS.NS', 'TATASTEEL.NS', 'TECHM.NS', 'TITAN.NS',
-      'UPL.NS', 'ULTRACEMCO.NS', 'WIPRO.NS', 'ABB.NS', 'ADANIGREEN.NS',
-      'AMBUJACEM.NS', 'ASHOKLEY.NS', 'ASTRAL.NS', 'ATGL.NS', 'AUROPHARMA.NS',
-      'BALKRISIND.NS', 'BANKBARODA.NS', 'BATAINDIA.NS', 'BEL.NS', 'BHARATFORG.NS',
-      'BOSCHLTD.NS', 'CANBK.NS', 'CHOLAFIN.NS', 'COLPAL.NS', 'CONCOR.NS',
-      'CUMMINSIND.NS', 'DABUR.NS', 'DLF.NS', 'ESCORTS.NS', 'FEDERALBNK.NS',
-      'GAIL.NS', 'GLENMARK.NS', 'GODREJCP.NS', 'GODREJPROP.NS', 'HAL.NS',
-      'HAVELLS.NS', 'HINDPETRO.NS', 'ICICIGI.NS', 'ICICIPRULI.NS', 'IDEA.NS',
-      'IDFCFIRSTB.NS', 'IEX.NS', 'IGL.NS', 'INDHOTEL.NS', 'IOC.NS',
-      'IPCALAB.NS', 'JINDALSTEL.NS', 'JUBLFOOD.NS', 'LUPIN.NS', 'MGL.NS',
-      'MOTHERSON.NS', 'MPHASIS.NS', 'MRF.NS', 'MUTHOOTFIN.NS', 'NAUKRI.NS',
-      'NMDC.NS', 'OBEROIRLTY.NS', 'OFSS.NS', 'PAGEIND.NS', 'PEL.NS',
-      'PERSISTENT.NS', 'PIIND.NS', 'PIDILITIND.NS', 'POLYCAB.NS', 'PFC.NS',
-      'PNB.NS', 'RECLTD.NS', 'SBICARD.NS', 'SHREECEM.NS', 'SIEMENS.NS',
-      'SRF.NS', 'TATACOMM.NS', 'TORNTPHARM.NS', 'TRENT.NS', 'TVSMOTOR.NS',
-      'VEDL.NS', 'VOLTAS.NS', 'ZOMATO.NS', 'ZYDUSLIFE.NS'
+      'UPL.NS', 'ULTRACEMCO.NS', 'WIPRO.NS', 'ABB.NS', 'ADANIGREEN.NS', 'AMBUJACEM.NS',
+      'ASHOKLEY.NS', 'AUROPHARMA.NS', 'BALKRISIND.NS', 'BANDHANBNK.NS', 'BANKBARODA.NS',
+      'BHEL.NS', 'BIOCON.NS', 'BOSCHLTD.NS', 'CANBK.NS', 'CHOLAFIN.NS',
+      'COLPAL.NS', 'CONCOR.NS', 'CUMMINSIND.NS', 'DABUR.NS', 'DEEPAKFERT.NS',
+      'DLF.NS', 'ESCORTS.NS', 'EXIDEIND.NS', 'FEDERALBNK.NS', 'GAIL.NS',
+      'GLENMARK.NS', 'GODREJCP.NS', 'GODREJPROP.NS', 'GNFC.NS', 'HAL.NS',
+      'HAVELLS.NS', 'HINDPETRO.NS', 'IDFCFIRSTB.NS', 'IEX.NS', 'IGL.NS',
+      'INDHOTEL.NS', 'IPCALAB.NS', 'JINDALSTEL.NS', 'JKCEMENT.NS', 'LUPIN.NS',
+      'M&MFIN.NS', 'MANAPPURAM.NS', 'MARICO.NS', 'MCDOWELL-N.NS', 'MCX.NS',
+      'MPHASIS.NS', 'MRF.NS', 'MUTHOOTFIN.NS', 'NAUKRI.NS', 'NMDC.NS',
+      'OBEROIRLTY.NS', 'OFSS.NS', 'PAGEIND.NS', 'PEL.NS', 'PERSISTENT.NS',
+      'PIDILITE.NS', 'PIIND.NS', 'PNB.NS', 'POLYCAB.NS', 'RAMCOCEM.NS',
+      'SBICARD.NS', 'SHREECEM.NS', 'SIEMENS.NS', 'SRF.NS', 'SUNTV.NS',
+      'SYNGENE.NS', 'TATACOMM.NS', 'TORNTPHARM.NS', 'TRENT.NS', 'TVSMOTOR.NS',
+      'UBL.NS', 'VEDL.NS', 'VOLTAS.NS', 'WHIRLPOOL.NS', 'ZEEL.NS'
   ]
   try:
     if os.path.exists('EQUITY_L.csv'):
@@ -247,9 +255,9 @@ def fetch_mega_nse_universe():
 def analyze_single_ticker(
     ticker,
     df,
-    volume_multiplier=2.5,  # Relaxed from 3.0 to allow more stocks
-    rsi_filter=60,          # Relaxed from 62
-    turnover_limit=3,       # Relaxed from 5 crores to 3 crores
+    volume_multiplier=2.5,
+    rsi_filter=60,
+    turnover_limit=5,
     formula_version='Version 2',
 ):
   try:
@@ -300,18 +308,18 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
     
-    # Optimized conditions for >80% Win Rate while increasing stock count
-    cond_no_wick = df['Wick_Ratio'] <= 0.20  # Slightly relaxed from 0.15
+    # Optimized conditions to get more stocks while maintaining >80% Win Rate
+    cond_no_wick = df['Wick_Ratio'] <= 0.20
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 80  # Minimum price filter relaxed from 100 to 80
-    cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 9.0)  # Expanded range
+    cond1 = df['Close'] >= 80  # Minimum price filter
+    cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 9.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
-    cond4 = df['Return_20d'] >= 3.0  # Relaxed from 5.0
+    cond4 = df['Return_20d'] >= 3.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
-    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 72)  # Expanded RSI range
+    cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 72)
     cond9 = df['Close'] > df['EMA_20']
-    cond_accum = df['Accum_Ratio_10d'] >= 1.8  # Relaxed from 2.2
-    cond_prev_green = df['Is_Green']  # Simplified to 1 green day or positive momentum
+    cond_accum = df['Accum_Ratio_10d'] >= 1.8
+    cond_prev_green = df['Is_Green'] | df['Is_Green'].shift(1)  # Flexible green confirmation
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -411,8 +419,8 @@ def analyze_single_ticker(
       )
       total_score = round(
           rsi_val
-          + (vol_spike * 6)
-          + (accum_ratio * 12)
+          + (vol_spike * 7)
+          + (accum_ratio * 15)
           + (close_pos / 2)
           + bonus_score,
           2,
@@ -443,11 +451,11 @@ def analyze_single_ticker(
 def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
-  cond_alert = df['Alert'].str.contains('⭐|Ultimate|Massive|Steady|Normal', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 80  # Relaxed from 92 to capture more stocks
-  cond_surge = df['Massive Buying Surge (%)'] > 120  # Relaxed from 220
-  cond_vol = df['Vol Spike (x)'] > 2.0  # Relaxed from 3.0
-  cond_accum = df['Accum Ratio (10d)'] > 1.8  # Relaxed from 2.2
+  cond_alert = df['Alert'].str.contains('⭐|Ultimate|Massive', na=False, regex=True)
+  cond_cont = df['Continuation Score (%)'] > 82
+  cond_surge = df['Massive Buying Surge (%)'] > 140
+  cond_vol = df['Vol Spike (x)'] > 2.0
+  cond_accum = df['Accum Ratio (10d)'] > 1.7
   cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
 
   ideal_df = df[
@@ -526,7 +534,7 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond2 = (df_calc['Pct_Change'] >= 1.5) & (df_calc['Pct_Change'] <= 9.0)
     cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.5)
     cond4 = df_calc['Return_20d'] >= 3.0
-    cond5 = df_calc['Turnover'] > (3 * 10000000)
+    cond5 = df_calc['Turnover'] > (5 * 10000000)
     cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
     cond9 = df_calc['Close'] > df_calc['EMA_20']
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
@@ -582,17 +590,17 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos >= 80
-          and buying_surge_pct > 120
+          close_pos >= 85
+          and buying_surge_pct > 140
           and vol_spike > 2.0
-          and accum_ratio > 1.8
+          and accum_ratio > 1.7
       ):
         bonus_score = 40 if (close_pos >= 90.0 and vol_spike >= 3.0) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
-            + (vol_spike * 6)
-            + (accum_ratio * 12)
+            + (vol_spike * 7)
+            + (accum_ratio * 15)
             + (close_pos / 2)
             + bonus_score,
             2,
@@ -911,7 +919,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ (Expanded Pool & >80% Win Rate Target via Next-Day P&L Strategy ⚡)'
+      'Engine Upgraded ⚙️ (Expanded Stock Universe & >80% Win Rate Target ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -951,7 +959,7 @@ def run_streamlit_app():
       'Volume Shock Multiplier', 1.5, 4.0, 2.5, step=0.1
   )
   min_turnover = st.sidebar.number_input(
-      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
+      'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=5
   )
 
   st.sidebar.markdown('---')
@@ -1100,10 +1108,9 @@ def run_streamlit_app():
               progress=False,
               session=session,
           )
-          
+          chart_data = flatten_yfinance_df(chart_data)
+
           if not chart_data.empty:
-            if isinstance(chart_data.columns, pd.MultiIndex):
-              chart_data = chart_data.droplevel(1, axis=1)
             chart_data = chart_data.dropna(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
@@ -1162,7 +1169,7 @@ def run_streamlit_app():
               ' 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Elite Match'
               ' Found Today</h2><p style="color: #c9d1d9; font-size: 15px;'
               ' margin-top: 8px; margin-bottom: 0px;">No stocks passed the'
-              ' filters in this scan.</p></div>',
+              ' win rate filters.</p></div>',
               unsafe_allow_html=True,
           )
 
@@ -1195,8 +1202,8 @@ def run_streamlit_app():
   with tab2:
     st.subheader('📜 3-Month Backtested History (Next-Day P&L Win Rate)')
     st.caption(
-        'Har trading day par stock ka next day P&L% check kiya jaata hai.'
-        ' (Next Day P&L > 0% = Target Hit / Win, Warna Stop Loss / Loss). Target Win Rate > 80%.'
+        'Har trading day par Serial No. 1 stock ka next day P&L% check kiya jaata'
+        ' hai. (Next Day P&L > 0% = Target Hit / Win, Warna Stop Loss / Loss).'
     )
 
     if 'master_market_data' not in st.session_state:
