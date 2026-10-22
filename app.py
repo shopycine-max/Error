@@ -417,11 +417,11 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if close_pos >= 90.0 and buying_surge_pct >= 200.0:
+      if close_pos >= 87.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥇 Rank 1 (Top Winner)'
         entry_window = '9:15 AM - 9:30 AM'
         exec_condition = f'Hold above ₹{round(entry, 2)}'
-      elif close_pos >= 85.0 and buying_surge_pct >= 150.0:
+      elif close_pos >= 82.0 and buying_surge_pct >= 150.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
         entry_window = '9:20 AM - 9:35 AM'
         exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
@@ -431,7 +431,7 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if close_pos >= 90.0 and vol_spike >= 3.0:
+      if close_pos >= 87.0 and vol_spike >= 3.0:
         alert_type = '⭐ Ultimate Explosive Setup'
         bonus_score = 30
       elif accum_ratio >= 2.0 and vol_spike >= 2.5:
@@ -479,7 +479,7 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] > 90
+  cond_cont = df['Continuation Score (%)'] > 87
   cond_surge = (df['Massive Buying Surge (%)'] > 150) & (
       df['Massive Buying Surge (%)'] < 900
   )
@@ -625,13 +625,13 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos > 90
+          close_pos > 87
           and (150 < buying_surge_pct < 900)
           and (3.0 <= vol_spike < 9.5)
           and (1.8 < accum_ratio < 15.0)
           and (float(row['RSI']) > 62)
       ):
-        bonus_score = 30 if (close_pos >= 90.0 and vol_spike >= 3.0) else 0
+        bonus_score = 30 if (close_pos >= 87.0 and vol_spike >= 3.0) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
@@ -660,7 +660,6 @@ def run_3month_backtest(master_data, backtest_days=60):
           next_low = round(entry, 2)
           next_pnl_pct = 0.0
 
-        # 🔥 Win condition strictly based on Next Day PnL (%) > 0
         is_win = next_pnl_pct > 0
         outcome = (
             '🟢 Next Day Profit (+)' if is_win else '🔴 Next Day Loss (-)'
@@ -964,7 +963,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
