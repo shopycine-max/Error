@@ -201,7 +201,6 @@ def fetch_nifty_market_status():
 
 
 def fetch_mega_nse_universe():
-  # Expanded to 120+ top liquid NSE large and mid-cap stocks for higher signal volume
   fallback = [
       'ABB.NS', 'ADANIENT.NS', 'ADANIPORTS.NS', 'AMBUJACEM.NS', 'APOLLOHOSP.NS',
       'ASIANPAINT.NS', 'AXISBANK.NS', 'BAJAJ-AUTO.NS', 'BAJFINANCE.NS',
@@ -305,10 +304,9 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # Balanced conditions for ~80% Win Rate with increased volume of stocks
     cond_no_wick = df['Wick_Ratio'] <= 0.20
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 80  # Minimum price filter
+    cond1 = df['Close'] >= 80
     cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 8.5)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 4.0
@@ -316,7 +314,7 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 70)
     cond9 = df['Close'] > df['EMA_20']
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_prev_green = df['Is_Green'] | df['Is_Green'].shift(1)  # Flexible green condition
+    cond_prev_green = df['Is_Green'] | df['Is_Green'].shift(1)
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -475,7 +473,8 @@ def run_3month_backtest(master_data, backtest_days=60):
     return pd.DataFrame()
 
   all_dates = set()
-  for ticker, df in master_data.items:
+  # FIXED: added parentheses () to master_data.items()
+  for ticker, df in master_data.items():
     if len(df) >= 50:
       all_dates.update(df.index.tolist())
 
