@@ -113,10 +113,6 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
                 <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
                 <p><b>⏰ Entry Window:</b> {window}</p>
                 <p><b>⚡ Execution Rule:</b> {condition}</p>
-                <p><b>📈 Accum Ratio (10d):</b> {accum_ratio}</p>
-                <p><b>🔥 Massive Buying Surge:</b> {buying_surge}%</p>
-                <p><b>📊 Vol Spike:</b> {vol_spike}x</p>
-                <p><b>🎯 Continuation Score:</b> {close_pos}%</p>
                 <p><b>⭐ Probability Score:</b> {score}</p>
                 <p><b>🎯 Trigger / Entry:</b> ₹{entry}</p>
                 <p><b>🛑 Stop Loss:</b> ₹{sl}</p>
