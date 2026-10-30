@@ -300,7 +300,7 @@ def analyze_single_ticker(
     cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    # Updated: Current Day% (Pct_Change) between 1.0% and less than 3.0%
+    # Current Day% between 1.0% and less than 3.0%
     cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] < 3.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
@@ -460,9 +460,6 @@ def filter_ideal_breakout_stock(df):
 # BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (LAST 3 MONTHS)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
-  """Evaluates data day-by-day for the last ~3 months (60 trading days) to find
-  the Serial #1 Roadmap Stock on each market close date and tracks outcome.
-  """
   if not master_data:
     return pd.DataFrame()
 
@@ -522,7 +519,7 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    # Updated: Current Day% (Pct_Change) between 1.0% and less than 3.0%
+    # Current Day% between 1.0% and less than 3.0%
     cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] < 3.0)
     cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
@@ -1240,7 +1237,7 @@ def run_streamlit_app():
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
         col2.metric('Target Hit (2R)', f'{targets_hit}')
-        col3.metric('Stop Loss Hit', f'{sl_str := sl_hit}')
+        col3.metric('Stop Loss Hit', f'{sl_hit}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
 
         st.markdown('---')
