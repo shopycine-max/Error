@@ -521,7 +521,7 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
-    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] 3.0)
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change']  3.0)
     cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
