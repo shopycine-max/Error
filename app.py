@@ -338,12 +338,12 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 4 >= Weekly Max 52) ---
     df_w = df[['High']].resample('W-FRI').max()
-    w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
+    w_max_4 = df_w['High'].rolling(4, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
     cond_weekly = (
-        (w_max_8 >= w_max_52)
+        (w_max_4 >= w_max_52)
         .shift(1)
         .reindex(df.index, method='ffill')
         .fillna(False)
@@ -581,12 +581,12 @@ def run_6month_backtest(master_data, backtest_days=125):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 4 >= Weekly Max 52) ---
     df_w = df_calc[['High']].resample('W-FRI').max()
-    w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
+    w_max_4 = df_w['High'].rolling(4, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
     cond_weekly = (
-        (w_max_8 >= w_max_52)
+        (w_max_4 >= w_max_52)
         .shift(1)
         .reindex(df_calc.index, method='ffill')
         .fillna(False)
@@ -631,8 +631,6 @@ def run_6month_backtest(master_data, backtest_days=125):
       row = df_calc.iloc[idx]
 
       entry = float(row['Close'])
-      current_day_pct = round(float(row['Pct_Change']), 2)
-
       sl = (
           float(row['Low_5d']) if pd.notna(row['Low_5d']) else entry * 0.95
       )
@@ -684,14 +682,12 @@ def run_6month_backtest(master_data, backtest_days=125):
 
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
-          next_open = round(float(next_day['Open']), 2)
           next_high = round(float(next_day['High']), 2)
           next_low = round(float(next_day['Low']), 2)
           next_pnl_pct = round(
               ((float(next_day['Close']) - entry) / entry) * 100, 2
           )
         else:
-          next_open = round(entry, 2)
           next_high = round(entry, 2)
           next_low = round(entry, 2)
           next_pnl_pct = 0.0
@@ -706,8 +702,6 @@ def run_6month_backtest(master_data, backtest_days=125):
             'Serial #1 Symbol': ticker.replace('.NS', ''),
             'Score': total_score,
             'Entry Price (₹)': round(entry, 2),
-            'Current Day Chg (%)': f'{current_day_pct:+}%',
-            'Next Open (₹)': next_open,
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
             'Next High (₹)': next_high,
