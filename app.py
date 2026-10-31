@@ -178,7 +178,7 @@ def fetch_nifty_market_status():
           sup_20d = round(float(nifty['Low'].tail(20).min()), 2)
           res_20d = round(float(nifty['High'].tail(20).max()), 2)
 
-          is_bullish = last_close >= last_ema20
+          is_bullish = last_close > last_ema20
           status_text = (
               '🟢 TRADE MODE ACTIVE (Bullish Trend)'
               if is_bullish
@@ -357,9 +357,11 @@ def analyze_single_ticker(
     cond4 = df['Return_20d'] >= 2.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
-    # Updated condition: EMA 20 >= EMA 50
-    cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] >= df['EMA_50'])
+    cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
+
+    # --- NEW ADDED CONDITION: Daily Close >= Daily EMA 50 * 1.05 ---
+    cond_ema50_dist = df['Close'] >= (df['EMA_50'] * 1.05)
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -380,6 +382,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
+          & cond_ema50_dist
       )
     else:
       df['Signal'] = (
@@ -394,6 +397,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
+          & cond_ema50_dist
       )
 
     is_signal = (
@@ -597,11 +601,13 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
     cond8 = (df_calc['RSI'] > 62) & (df_calc['RSI'] <= 75)
-    # Updated condition: EMA 20 >= EMA 50
     cond9 = (df_calc['Close'] > df_calc['EMA_20']) & (
-        df_calc['EMA_20'] >= df_calc['EMA_50']
+        df_calc['EMA_20'] > df_calc['EMA_50']
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
+
+    # --- NEW ADDED CONDITION: Daily Close >= Daily EMA 50 * 1.05 ---
+    cond_ema50_dist = df_calc['Close'] >= (df_calc['EMA_50'] * 1.05)
 
     df_calc['Signal'] = (
         cond1
@@ -615,6 +621,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_no_wick
         & cond_breakout
         & cond_weekly
+        & cond_ema50_dist
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
