@@ -291,7 +291,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200:
+    if len(df) < 200:  # Ensure enough data for 200 EMA
       return None
 
     df = df.copy()
@@ -338,7 +338,7 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -359,8 +359,9 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    # --- UPDATED: Daily Close >= 200 EMA * 1.05 ---
-    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.05)
+    cond_ema200 = df['Close'] >= (
+        df['EMA_200'] * 1.10
+    )  # Updated Daily Close >= 200 EMA * 1.10
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -582,7 +583,7 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df_calc[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -605,8 +606,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         df_calc['EMA_20'] > df_calc['EMA_50']
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
-    # --- UPDATED: Daily Close >= 200 EMA * 1.05 ---
-    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.05)
+    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.10)
 
     df_calc['Signal'] = (
         cond1
@@ -997,7 +997,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA * 1.05 Filter, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA * 1.10 Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
