@@ -1,12 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import json
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import os
 import smtplib
 import sys
 import time
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import textwrap
 
 import pandas as pd
@@ -100,14 +100,14 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
     return False
 
   try:
-    subject = f'🚀 [{rank}] High Win-Rate Breakout: {symbol}'
+    subject = f'🚀 [{rank}] High Priority Breakout: {symbol}'
 
     body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 20px;">
             <div style="max-width: 500px; background-color: #161b22; padding: 20px; border-radius: 10px; border: 2px solid #28a745; margin: 0 auto;">
                 <h2 style="color: #28a745; margin-top: 0;">🚀 Breakout Alert Triggered!</h2>
-                <p>Stock <b>{symbol}</b> has met high-probability breakout conditions.</p>
+                <p>Stock <b>{symbol}</b> has met breakout conditions.</p>
                 <hr style="border: 0.5px solid #30363d;">
                 <p><b>📊 Symbol:</b> <span style="color: #58a6ff;">{symbol}</span></p>
                 <p><b>🏆 Execution Rank:</b> <span style="color: #ffd700;">{rank}</span></p>
@@ -118,7 +118,7 @@ def send_email_alert(symbol, entry, sl, target, score, rank, window, condition):
                 <p><b>🛑 Stop Loss:</b> ₹{sl}</p>
                 <p><b>🏁 Target Price:</b> ₹{target}</p>
                 <hr style="border: 0.5px solid #30363d;">
-                <p style="font-size: 12px; color: #8b949e;">Sent automatically from Aashiyana Engine Pro Max 🚀</p>
+                <p style="font-size: 12px; color: #8b949e;">Sent automatically from Aashiyana Engine 🚀</p>
             </div>
         </body>
         </html>
@@ -215,76 +215,16 @@ def fetch_nifty_market_status():
 
 def fetch_mega_nse_universe():
   fallback = [
-      'ADANIENT.NS',
-      'ADANIPORTS.NS',
-      'APOLLOHOSP.NS',
-      'ASIANPAINT.NS',
-      'AXISBANK.NS',
-      'BAJAJ-AUTO.NS',
-      'BAJFINANCE.NS',
-      'BAJAJFINSV.NS',
-      'BPCL.NS',
-      'BHARTIARTL.NS',
-      'BRITANNIA.NS',
-      'CIPLA.NS',
-      'COALINDIA.NS',
-      'DIVISLAB.NS',
-      'DRREDDY.NS',
-      'EICHERMOT.NS',
-      'GRASIM.NS',
-      'HCLTECH.NS',
-      'HDFCBANK.NS',
-      'HDFCLIFE.NS',
-      'HEROMOTOCO.NS',
-      'HINDALCO.NS',
-      'HINDUNILVR.NS',
-      'ICICIBANK.NS',
-      'ITC.NS',
-      'INDUSINDBK.NS',
-      'INFY.NS',
-      'JSWSTEEL.NS',
-      'KOTAKBANK.NS',
-      'LTIM.NS',
-      'LT.NS',
-      'M&M.NS',
-      'MARUTI.NS',
-      'NTPC.NS',
-      'NESTLEIND.NS',
-      'ONGC.NS',
-      'POWERGRID.NS',
-      'RELIANCE.NS',
-      'SBILIFE.NS',
-      'SBIN.NS',
-      'SUNPHARMA.NS',
-      'TATACONSUM.NS',
-      'TCS.NS',
-      'TATAMOTORS.NS',
-      'TATASTEEL.NS',
-      'TECHM.NS',
-      'TITAN.NS',
-      'UPL.NS',
-      'ULTRACEMCO.NS',
-      'WIPRO.NS',
-      # --- Expanded Liquid Universe for Higher Stock Count ---
-      'TVSMOTOR.NS',
-      'CHOLAFIN.NS',
-      'SIEMENS.NS',
-      'ABB.NS',
-      'POLYCAB.NS',
-      'PERSISTENT.NS',
-      'COFORGE.NS',
-      'LODHA.NS',
-      'DLF.NS',
-      'INDIGO.NS',
-      'ZOMATO.NS',
-      'NAUKRI.NS',
-      'JIOFIN.NS',
-      'VEDL.NS',
-      'HAL.NS',
-      'BEL.NS',
-      'IOC.NS',
-      'TORNTPHARM.NS',
-      'LUPIN.NS',
+      'ADANIENT.NS', 'ADANIPORTS.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS', 'AXISBANK.NS',
+      'BAJAJ-AUTO.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'BPCL.NS', 'BHARTIARTL.NS',
+      'BRITANNIA.NS', 'CIPLA.NS', 'COALINDIA.NS', 'DIVISLAB.NS', 'DRREDDY.NS',
+      'EICHERMOT.NS', 'GRASIM.NS', 'HCLTECH.NS', 'HDFCBANK.NS', 'HDFCLIFE.NS',
+      'HEROMOTOCO.NS', 'HINDALCO.NS', 'HINDUNILVR.NS', 'ICICIBANK.NS', 'ITC.NS',
+      'INDUSINDBK.NS', 'INFY.NS', 'JSWSTEEL.NS', 'KOTAKBANK.NS', 'LTIM.NS', 'LT.NS',
+      'M&M.NS', 'MARUTI.NS', 'NTPC.NS', 'NESTLEIND.NS', 'ONGC.NS', 'POWERGRID.NS',
+      'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SUNPHARMA.NS', 'TATACONSUM.NS',
+      'TCS.NS', 'TATAMOTORS.NS', 'TATASTEEL.NS', 'TECHM.NS', 'TITAN.NS',
+      'UPL.NS', 'ULTRACEMCO.NS', 'WIPRO.NS',
   ]
   try:
     if os.path.exists('EQUITY_L.csv'):
@@ -305,8 +245,8 @@ def fetch_mega_nse_universe():
 def analyze_single_ticker(
     ticker,
     df,
-    volume_multiplier=3.2,
-    rsi_filter=62,
+    volume_multiplier=2.2,
+    rsi_filter=58,
     turnover_limit=3,
     formula_version='Version 2',
 ):
@@ -357,23 +297,20 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    cond_no_wick = df['Wick_Ratio'] <= 0.15
+    cond_no_wick = df['Wick_Ratio'] <= 0.25
     cond_breakout = df['Close'] > df['High_20_Prev']
-    cond1 = df['Close'] >= 30
-    cond2 = (df['Pct_Change'] >= 2.0) & (df['Pct_Change'] <= 10.0)
+    cond1 = df['Close'] >= 20
+    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 2.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
-    cond9 = (
-        (df['Close'] > df['EMA_20'])
-        & (df['EMA_20'] > df['EMA_50'])
-        & (df['EMA_50'] > df['EMA_200'])
-    )
-    cond_accum = df['Accum_Ratio_10d'] >= 2.0
+    cond9 = df['Close'] > df['EMA_20']
+    cond_accum = df['Accum_Ratio_10d'] >= 1.5
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
+      cond10 = df['EMA_50'] > df['EMA_200']
       cond12 = df['Close'] <= (df['EMA_20'] * 1.15)
       df['Signal'] = (
           cond1
@@ -384,6 +321,7 @@ def analyze_single_ticker(
           & cond7
           & cond8
           & cond9
+          & cond10
           & cond12
           & cond_accum
           & cond_no_wick
@@ -420,7 +358,7 @@ def analyze_single_ticker(
       if sl >= entry or (entry - sl) / entry < 0.005:
         sl = entry * 0.965
       risk = entry - sl
-      target = entry + (2.2 * risk)
+      target = entry + (2 * risk)
 
       curr_vol = float(df['Volume'].values[-1])
       avg_vol = float(df['Vol_SMA20'].values[-1])
@@ -452,8 +390,16 @@ def analyze_single_ticker(
         entry_window = '9:30 AM - 9:45 AM'
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
-      bonus_score = 30 if (close_pos >= 90.0 and vol_spike >= 3.0) else 10
-      alert_type = '⭐ High Win-Rate Explosive Setup'
+      bonus_score = 0
+      if close_pos >= 85.0 and vol_spike >= 2.5:
+        alert_type = '⭐ Ultimate Explosive Setup'
+        bonus_score = 30
+      elif accum_ratio >= 2.0 and vol_spike >= 2.0:
+        alert_type = '🔥 Massive Heavy Buying'
+      elif accum_ratio >= 1.8:
+        alert_type = '🧱 Steady Accumulation'
+      else:
+        alert_type = '✅ Normal Signal'
 
       rsi_val = (
           float(df['RSI'].values[-1]) if pd.notna(df['RSI'].values[-1]) else 50.0
@@ -492,20 +438,15 @@ def analyze_single_ticker(
 def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
-  cond_alert = df['Alert'].str.contains('⭐|High Win-Rate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 90.0
-  cond_surge = df['Massive Buying Surge (%)'] >= 200.0
-  cond_vol = df['Vol Spike (x)'] >= 3.2
-  cond_accum = df['Accum Ratio (10d)'] >= 2.0
-  cond_rsi = (df['RSI'] >= 62) & (df['RSI'] <= 75)
+  cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
+  cond_cont = df['Continuation Score (%)'] > 80
+  cond_surge = df['Massive Buying Surge (%)'] > 120
+  cond_vol = df['Vol Spike (x)'] > 2.2
+  cond_accum = df['Accum Ratio (10d)'] > 1.6
+  cond_rsi = (df['RSI'] >= 58) & (df['RSI'] <= 72)
 
   ideal_df = df[
-      cond_alert
-      & cond_cont
-      & cond_surge
-      & cond_vol
-      & cond_accum
-      & cond_rsi
+      cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
   ].copy()
   if not ideal_df.empty:
     return ideal_df.sort_values(by='Score', ascending=False).reset_index(
@@ -515,9 +456,12 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: ENHANCED WIN-RATE & TARGET/SL LOGIC
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (LAST 3 MONTHS)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
+  """Evaluates data day-by-day for the last ~3 months (60 trading days) to find
+  the Serial #1 Roadmap Stock on each market close date and tracks outcome based on Next Day PnL.
+  """
   if not master_data:
     return pd.DataFrame()
 
@@ -557,8 +501,6 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['High_20_Prev'] = df_calc['High'].shift(1).rolling(20).max()
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
-    df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
-    df_calc['EMA_200'] = df_calc['Close'].ewm(span=200, adjust=False).mean()
 
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
@@ -576,20 +518,16 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    cond_no_wick = df_calc['Wick_Ratio'] <= 0.15
+    cond_no_wick = df_calc['Wick_Ratio'] <= 0.25
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
-    cond1 = df_calc['Close'] >= 30
-    cond2 = (df_calc['Pct_Change'] >= 2.0) & (df_calc['Pct_Change'] <= 10.0)
-    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 3.2)
+    cond1 = df_calc['Close'] >= 20
+    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 12.0)
+    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.2)
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
-    cond8 = (df_calc['RSI'] >= 62) & (df_calc['RSI'] <= 75)
-    cond9 = (
-        (df_calc['Close'] > df_calc['EMA_20'])
-        & (df_calc['EMA_20'] > df_calc['EMA_50'])
-        & (df_calc['EMA_50'] > df_calc['EMA_200'])
-    )
-    cond_accum = df_calc['Accum_Ratio_10d'] >= 2.0
+    cond8 = (df_calc['RSI'] >= 58) & (df_calc['RSI'] <= 72)
+    cond9 = df_calc['Close'] > df_calc['EMA_20']
+    cond_accum = df_calc['Accum_Ratio_10d'] >= 1.6
 
     df_calc['Signal'] = (
         cond1
@@ -622,7 +560,7 @@ def run_3month_backtest(master_data, backtest_days=60):
       if sl >= entry or (entry - sl) / entry < 0.005:
         sl = entry * 0.965
       risk = entry - sl
-      target = entry + (2.2 * risk)
+      target = entry + (2 * risk)
 
       curr_vol = float(row['Volume'])
       avg_vol = float(row['Vol_SMA20'])
@@ -642,13 +580,12 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos >= 90.0
-          and buying_surge_pct >= 200.0
-          and vol_spike >= 3.2
-          and accum_ratio >= 2.0
-          and float(row['RSI']) >= 62
+          close_pos > 80
+          and buying_surge_pct > 120
+          and vol_spike > 2.2
+          and accum_ratio > 1.6
       ):
-        bonus_score = 30
+        bonus_score = 30 if (close_pos >= 85.0 and vol_spike >= 2.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
@@ -663,11 +600,9 @@ def run_3month_backtest(master_data, backtest_days=60):
         max_future_high = (
             future_df['High'].max() if not future_df.empty else entry
         )
-        min_future_low = (
-            future_df['Low'].min() if not future_df.empty else entry
-        )
         max_gain_pct = round(((max_future_high - entry) / entry) * 100, 2)
 
+        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING & PnL ---
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
           next_high = round(float(next_day['High']), 2)
@@ -680,10 +615,6 @@ def run_3month_backtest(master_data, backtest_days=60):
           next_low = round(entry, 2)
           next_pnl_pct = 0.0
 
-        # Smart Win Logic (Target Hit within next 5 days = Win)
-        is_win = max_future_high >= target
-        outcome = '🟢 Target Hit (+)' if is_win else '🔴 Stop Loss Hit (-)'
-
         daily_candidates[dt].append({
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
@@ -693,13 +624,12 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Target Price (₹)': round(target, 2),
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
-            'Next Day PnL (%)': f'{next_pnl_pct:+}%',
+            'Next Day PnL (%)': next_pnl_pct,
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
             'Massive Buying Surge (%)': round(buying_surge_pct, 1),
             'Max Gain (Next 5 Days)': f'+{max_gain_pct}%',
-            'Outcome': outcome,
         })
 
   rank_1_history = []
@@ -854,7 +784,7 @@ def run_headless_scan():
   if not nifty['is_bullish']:
     log_msg(
         f"🔴 Nifty Status: {nifty['status']} | Support (S1): ₹{nifty['s1']} |"
-        f" Resistance (R1): ₹{nifty['r1']}.",
+        f" Resistance (R1): ₹{nifty['r1']}. Running full scan anyway...",
         'warning',
     )
   else:
@@ -982,7 +912,8 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ Extended Universe & High Win-Rate Filters Enabled'
+      'Engine Upgraded ⚙️ (NIFTY 50 Trend Filter, Execution Rank & 3-Month'
+      ' Backtest History Integrated ⚡)'
   )
 
   nifty_info = cached_nifty_status()
@@ -1017,9 +948,9 @@ def run_streamlit_app():
           'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
-  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 80, 62)
+  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 58)
   volume_multiplier = st.sidebar.slider(
-      'Volume Shock Multiplier', 1.0, 5.0, 3.2, step=0.1
+      'Volume Shock Multiplier', 1.0, 4.0, 2.2, step=0.1
   )
   min_turnover = st.sidebar.number_input(
       'Minimum Daily Turnover (₹ Crores)', min_value=1, max_value=50, value=3
@@ -1127,7 +1058,7 @@ def run_streamlit_app():
 
           st.success(
               f'🎉 **IDEAL MATCHES FOUND!** {len(ideal_matches_df)} stock(s)'
-              ' met high-win-rate criteria.'
+              ' met 100% criteria.'
           )
 
           box_html = (
@@ -1234,15 +1165,25 @@ def run_streamlit_app():
               ' 25px;"><h2 style="color: #ff4d4d; margin: 0;">❌ No Ideal Match'
               ' Found Today</h2><p style="color: #c9d1d9; font-size: 15px;'
               ' margin-top: 8px; margin-bottom: 0px;">No stocks passed all'
-              ' high-win-rate confirmation filters.</p></div>',
+              ' strict confirmation filters.</p></div>',
               unsafe_allow_html=True,
           )
 
         def highlight_buying(row):
           alert = str(row.get('Alert', ''))
-          if '⭐' in alert or 'High Win-Rate' in alert:
+          if '⭐' in alert or 'Ultimate' in alert:
             return [
                 'background-color: #ffd700; color: #000000; font-weight: bold'
+            ] * len(row)
+          elif '🔥' in alert:
+            return [
+                'background-color: rgba(255, 69, 0, 0.35); color: #ffffff;'
+                ' font-weight: bold'
+            ] * len(row)
+          elif '🧱' in alert:
+            return [
+                'background-color: rgba(0, 150, 255, 0.25); color: #ffffff;'
+                ' font-weight: bold'
             ] * len(row)
           return [''] * len(row)
 
@@ -1258,7 +1199,7 @@ def run_streamlit_app():
     st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock ka High Win-Rate Backtest Report (Based on Target/SL Performance).'
+        ' wale stock aur next day PnL (%) ke adhaar par win rate report.'
     )
 
     if 'master_market_data' not in st.session_state:
@@ -1273,47 +1214,48 @@ def run_streamlit_app():
 
       if not bt_history.empty:
         total_trades = len(bt_history)
-        wins = len(
-            bt_history[bt_history['Outcome'].str.contains('Target', na=False)]
-        )
-        losses = len(
-            bt_history[bt_history['Outcome'].str.contains('Loss', na=False)]
-        )
+        profitable_days = len(bt_history[bt_history['Next Day PnL (%)'] > 0])
+        loss_days = len(bt_history[bt_history['Next Day PnL (%)'] <= 0])
         win_rate = (
-            round((wins / total_trades) * 100, 1) if total_trades > 0 else 0.0
+            round((profitable_days / total_trades) * 100, 1)
+            if total_trades > 0
+            else 0.0
         )
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
-        col2.metric('Target Hit (+)', f'{wins}')
-        col3.metric('Stop Loss Hit (-)', f'{losses}')
+        col2.metric('Profitable Days (>0%)', f'{profitable_days}')
+        col3.metric('Loss Days (<=0%)', f'{loss_days}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
 
         st.markdown('---')
 
         def highlight_outcome(row):
-          outcome = str(row.get('Outcome', ''))
-          if 'Target' in outcome:
+          pnl = row.get('Next Day PnL (%)', 0)
+          if pnl > 0:
             return [
                 'background-color: rgba(40, 167, 69, 0.25); color: #28a745;'
                 ' font-weight: bold'
             ] * len(row)
-          elif 'Loss' in outcome:
+          else:
             return [
                 'background-color: rgba(220, 53, 69, 0.25); color: #dc3545;'
                 ' font-weight: bold'
             ] * len(row)
-          return [''] * len(row)
+
+        # Format Next Day PnL (%) for clean display in table
+        display_bt_history = bt_history.copy()
+        display_bt_history['Next Day PnL (%)'] = display_bt_history[
+            'Next Day PnL (%)'
+        ].apply(lambda x: f'{x:+}%')
 
         st.dataframe(
-            bt_history.style.apply(highlight_outcome, axis=1),
+            display_bt_history.style.apply(highlight_outcome, axis=1),
             use_container_width=True,
             hide_index=True,
         )
       else:
-        st.caption(
-            'Backtest run karne ke liye uper button par click kijiye.'
-        )
+        st.caption('Backtest run karne ke liye uper button par click kijiye.')
 
 
 if __name__ == '__main__':
