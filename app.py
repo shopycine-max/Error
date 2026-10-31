@@ -349,11 +349,11 @@ def analyze_single_ticker(
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA CONDITION (Daily Volume > Weekly SMA 5 of Volume) ---
-    df_vol_w = df['Volume'].resample('W-FRI').sum()
-    w_vol_sma5 = df_vol_w.rolling(5, min_periods=1).mean()
-    cond_weekly_vol = (
-        (df['Volume'] > w_vol_sma5.shift(1).reindex(df.index, method='ffill'))
+    # --- WEEKLY VOLUME SMA 50 CONDITION ---
+    df_w_vol = df[['Volume']].resample('W-FRI').sum()
+    w_vol_sma_50 = df_w_vol['Volume'].rolling(50, min_periods=1).mean()
+    cond_weekly_vol_sma = (
+        (df['Volume'] < w_vol_sma_50.reindex(df.index, method='ffill'))
         .fillna(False)
     )
 
@@ -388,7 +388,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_weekly_vol
+          & cond_weekly_vol_sma
           & cond_ema200
       )
     else:
@@ -404,7 +404,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_weekly_vol
+          & cond_weekly_vol_sma
           & cond_ema200
       )
 
@@ -602,11 +602,11 @@ def run_3month_backtest(master_data, backtest_days=60):
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA CONDITION (Daily Volume > Weekly SMA 5 of Volume) ---
-    df_vol_w = df_calc['Volume'].resample('W-FRI').sum()
-    w_vol_sma5 = df_vol_w.rolling(5, min_periods=1).mean()
-    cond_weekly_vol = (
-        (df_calc['Volume'] > w_vol_sma5.shift(1).reindex(df_calc.index, method='ffill'))
+    # --- WEEKLY VOLUME SMA 50 CONDITION ---
+    df_w_vol = df_calc[['Volume']].resample('W-FRI').sum()
+    w_vol_sma_50 = df_w_vol['Volume'].rolling(50, min_periods=1).mean()
+    cond_weekly_vol_sma = (
+        (df_calc['Volume'] < w_vol_sma_50.reindex(df_calc.index, method='ffill'))
         .fillna(False)
     )
 
@@ -636,7 +636,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_no_wick
         & cond_breakout
         & cond_weekly
-        & cond_weekly_vol
+        & cond_weekly_vol_sma
         & cond_ema200
     )
 
@@ -1014,7 +1014,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Weekly Vol SMA 5, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
