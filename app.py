@@ -291,7 +291,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200:  # Ensure enough data for 200 EMA & 200 High
+    if len(df) < 200:
       return None
 
     df = df.copy()
@@ -317,9 +317,6 @@ def analyze_single_ticker(
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
-    
-    # --- NEW ADDITION: Daily Max 200 High ---
-    df['Max_200_High'] = df['High'].rolling(window=200, min_periods=1).max()
 
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
@@ -363,8 +360,9 @@ def analyze_single_ticker(
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
     cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)
-    
-    # --- NEW ADDITION: Daily Close * 1.02 <= Daily Max (200, Daily High) ---
+
+    # --- NEWLY ADDED FORMULA CONDITION ---
+    df['Max_200_High'] = df['High'].rolling(window=200, min_periods=1).max()
     cond_max200 = (df['Close'] * 1.02) <= df['Max_200_High']
 
     if 'Version 1' in formula_version or formula_version == 'v1':
@@ -528,7 +526,7 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
@@ -572,9 +570,6 @@ def run_3month_backtest(master_data, backtest_days=60):
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
     df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
     df_calc['EMA_200'] = df_calc['Close'].ewm(span=200, adjust=False).mean()
-    
-    # --- NEW ADDITION IN BACKTEST ---
-    df_calc['Max_200_High'] = df_calc['High'].rolling(window=200, min_periods=1).max()
 
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
@@ -616,8 +611,9 @@ def run_3month_backtest(master_data, backtest_days=60):
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
     cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.0)
-    
-    # --- NEW ADDITION IN BACKTEST ---
+
+    # --- NEWLY ADDED FORMULA CONDITION IN BACKTEST ---
+    df_calc['Max_200_High'] = df_calc['High'].rolling(window=200, min_periods=1).max()
     cond_max200 = (df_calc['Close'] * 1.02) <= df_calc['Max_200_High']
 
     df_calc['Signal'] = (
