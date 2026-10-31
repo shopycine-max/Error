@@ -245,10 +245,10 @@ def fetch_mega_nse_universe():
 def analyze_single_ticker(
     ticker,
     df,
-    volume_multiplier=2.2,
-    rsi_filter=58,
+    volume_multiplier=2.0,
+    rsi_filter=50,
     turnover_limit=3,
-    formula_version='Version 3 (Major EMA / Trend Reversal Breakout)',
+    formula_version='Version 3 (EMA 20 Sharp Reversal Breakout)',
 ):
   try:
     if len(df) < 50:
@@ -274,6 +274,7 @@ def analyze_single_ticker(
     df['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
     df['High_20_Prev'] = df['High'].shift(1).rolling(20).max()
+    df['High_5_Prev'] = df['High'].shift(1).rolling(5).max()
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -297,32 +298,32 @@ def analyze_single_ticker(
     upper_wick = df['High'] - real_body_top
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
-    cond_no_wick = df['Wick_Ratio'] <= 0.3
+    cond_no_wick = df['Wick_Ratio'] <= 0.35
     cond_breakout = df['Close'] > df['High_20_Prev']
     cond1 = df['Close'] >= 20
-    cond2 = (df['Pct_Change'] >= 1.0) & (df['Pct_Change'] <= 12.0)
+    cond2 = (df['Pct_Change'] >= 1.5) & (df['Pct_Change'] <= 15.0)
     cond3 = df['Volume'] > (df['Vol_SMA20'] * volume_multiplier)
     cond4 = df['Return_20d'] >= 1.0
     cond5 = df['Turnover'] > (turnover_limit * 10000000)
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 78)
     cond9 = df['Close'] > df['EMA_20']
-    cond_accum = df['Accum_Ratio_10d'] >= 1.3
+    cond_accum = df['Accum_Ratio_10d'] >= 1.2
 
-    # --- VERSION 3: MAJOR EMA / TREND REVERSAL BREAKOUT (As per chart pattern) ---
-    # Price crosses above major moving average (EMA 50 / Yellow Line) after consolidation/downtrend
-    cond_major_ema_breakout = (df['Close'] > df['EMA_50']) & (
-        df['Close'].shift(1) <= df['EMA_50'] * 1.02
-    )
+    # --- VERSION 3: EMA 20 SHARP REVERSAL BREAKOUT ---
+    # 1. Previous day Close was near or below EMA 20 (downtrend / consolidation base)
+    # 2. Today's Close strongly breaks ABOVE EMA 20 and breaks past the recent 5-day high
+    cond_ema20_reversal = (df['Close'] > df['EMA_20']) & (
+        df['Close'].shift(1) <= df['EMA_20'] * 1.015
+    ) & (df['Close'] > df['High_5_Prev'])
 
-    if 'Version 3' in formula_version or 'Trend Reversal' in formula_version:
+    if 'Version 3' in formula_version or 'EMA 20 Sharp Reversal' in formula_version:
       df['Signal'] = (
           cond1
           & cond2
           & cond3
           & cond5
           & cond8
-          & cond9
-          & cond_major_ema_breakout
+          & cond_ema20_reversal
           & cond_accum
           & cond_no_wick
       )
@@ -457,11 +458,11 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] > 80
-  cond_surge = df['Massive Buying Surge (%)'] > 120
-  cond_vol = df['Vol Spike (x)'] > 2.0
-  cond_accum = df['Accum Ratio (10d)'] > 1.4
-  cond_rsi = (df['RSI'] >= 55) & (df['RSI'] <= 78)
+  cond_cont = df['Continuation Score (%)'] > 78
+  cond_surge = df['Massive Buying Surge (%)'] > 100
+  cond_vol = df['Vol Spike (x)'] > 1.8
+  cond_accum = df['Accum Ratio (10d)'] > 1.2
+  cond_rsi = (df['RSI'] >= 50) & (df['RSI'] <= 78)
 
   ideal_df = df[
       cond_alert & cond_cont & cond_surge & cond_vol & cond_accum & cond_rsi
@@ -514,9 +515,8 @@ def run_3month_backtest(master_data, backtest_days=60):
     down_vol_10 = df_calc['Red_Vol'].rolling(10).sum()
     df_calc['Accum_Ratio_10d'] = up_vol_10 / (down_vol_10 + 1e-10)
 
-    df_calc['High_20_Prev'] = df_calc['High'].shift(1).rolling(20).max()
+    df_calc['High_5_Prev'] = df_calc['High'].shift(1).rolling(5).max()
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
-    df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
 
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
@@ -534,17 +534,16 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    cond_no_wick = df_calc['Wick_Ratio'] <= 0.3
-    cond_major_ema_breakout = (df_calc['Close'] > df_calc['EMA_50']) & (
-        df_calc['Close'].shift(1) <= df_calc['EMA_50'] * 1.02
-    )
+    cond_no_wick = df_calc['Wick_Ratio'] <= 0.35
+    cond_ema20_reversal = (df_calc['Close'] > df_calc['EMA_20']) & (
+        df_calc['Close'].shift(1) <= df_calc['EMA_20'] * 1.015
+    ) & (df_calc['Close'] > df_calc['High_5_Prev'])
     cond1 = df_calc['Close'] >= 20
-    cond2 = (df_calc['Pct_Change'] >= 1.0) & (df_calc['Pct_Change'] <= 12.0)
-    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 2.0)
+    cond2 = (df_calc['Pct_Change'] >= 1.5) & (df_calc['Pct_Change'] <= 15.0)
+    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 1.8)
     cond5 = df_calc['Turnover'] > (3 * 10000000)
-    cond8 = (df_calc['RSI'] >= 55) & (df_calc['RSI'] <= 78)
-    cond9 = df_calc['Close'] > df_calc['EMA_20']
-    cond_accum = df_calc['Accum_Ratio_10d'] >= 1.3
+    cond8 = (df_calc['RSI'] >= 50) & (df_calc['RSI'] <= 78)
+    cond_accum = df_calc['Accum_Ratio_10d'] >= 1.2
 
     df_calc['Signal'] = (
         cond1
@@ -552,8 +551,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond3
         & cond5
         & cond8
-        & cond9
-        & cond_major_ema_breakout
+        & cond_ema20_reversal
         & cond_accum
         & cond_no_wick
     )
@@ -596,10 +594,10 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos > 80
+          close_pos > 78
           and buying_surge_pct > 100
-          and vol_spike > 2.0
-          and accum_ratio > 1.3
+          and vol_spike > 1.8
+          and accum_ratio > 1.2
       ):
         bonus_score = 30 if (close_pos >= 85.0 and vol_spike >= 2.5) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
@@ -923,12 +921,12 @@ def run_streamlit_app():
   formula_version = st.sidebar.selectbox(
       '📊 Strategy Formula Version',
       [
-          'Version 3 (Major EMA / Trend Reversal Breakout)',
+          'Version 3 (EMA 20 Sharp Reversal Breakout)',
           'Version 2 (Without 500-day High)',
           'Version 1 (With 500-day High & Strict Filters)',
       ],
   )
-  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 55)
+  rsi_filter = st.sidebar.slider('Minimum RSI', 45, 75, 50)
   volume_multiplier = st.sidebar.slider(
       'Volume Shock Multiplier', 1.0, 4.0, 2.0, step=0.1
   )
