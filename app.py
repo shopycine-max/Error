@@ -318,6 +318,9 @@ def analyze_single_ticker(
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
+    # --- ADDED: Daily Max (200, Daily High) ---
+    df['High_200'] = df['High'].rolling(200, min_periods=1).max()
+
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -359,7 +362,10 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)  # Added Daily Close >= 200 EMA
+    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)
+
+    # --- ADDED CONDITION FOR 200-DAY HIGH ---
+    cond_200_max = (df['Close'] * 1.05) > df['High_200']
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -381,6 +387,7 @@ def analyze_single_ticker(
           & cond_breakout
           & cond_weekly
           & cond_ema200
+          & cond_200_max
       )
     else:
       df['Signal'] = (
@@ -396,6 +403,7 @@ def analyze_single_ticker(
           & cond_breakout
           & cond_weekly
           & cond_ema200
+          & cond_200_max
       )
 
     is_signal = (
@@ -565,6 +573,9 @@ def run_3month_backtest(master_data, backtest_days=60):
     df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
     df_calc['EMA_200'] = df_calc['Close'].ewm(span=200, adjust=False).mean()
 
+    # --- ADDED: Daily Max (200, Daily High) ---
+    df_calc['High_200'] = df_calc['High'].rolling(200, min_periods=1).max()
+
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -606,6 +617,9 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
     cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.0)
 
+    # --- ADDED CONDITION FOR 200-DAY HIGH ---
+    cond_200_max = (df_calc['Close'] * 1.05) > df_calc['High_200']
+
     df_calc['Signal'] = (
         cond1
         & cond2
@@ -619,6 +633,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_breakout
         & cond_weekly
         & cond_ema200
+        & cond_200_max
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -995,7 +1010,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, 200-Day High Max Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
