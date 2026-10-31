@@ -291,7 +291,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200:  # Ensure enough data for 200 EMA
+    if len(df) < 200:
       return None
 
     df = df.copy()
@@ -338,7 +338,6 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -359,9 +358,7 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df['Close'] >= (
-        df['EMA_200'] * 1.10
-    )  # Updated Daily Close >= 200 EMA * 1.10
+    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.10)
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -522,7 +519,7 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY 10:30 AM PNL%)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WITH 11:00 AM PNL COLUMN)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
@@ -583,7 +580,6 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df_calc[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -684,30 +680,22 @@ def run_3month_backtest(master_data, backtest_days=60):
 
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
-          next_open = float(next_day['Open'])
-          next_close = float(next_day['Close'])
-          next_high_full = float(next_day['High'])
-          next_low_full = float(next_day['Low'])
-
-          # Estimate price at 10:30 AM (approx 1.25 hours into 6.25 hr trading session -> ~35% progression from Open towards Close)
-          est_1030_price = next_open + (next_close - next_open) * 0.35
-          est_1030_price = max(
-              next_low_full, min(next_high_full, est_1030_price)
-          )
-
-          next_high = round(max(next_open, est_1030_price), 2)
-          next_low = round(min(next_open, est_1030_price), 2)
-          next_pnl_pct = round(
-              ((est_1030_price - entry) / entry) * 100, 2
-          )
+          next_open = round(float(next_day['Open']), 2)
+          next_close = round(float(next_day['Close']), 2)
+          
+          # Estimate 11:00 AM price (approx. 35% movement from open to close for morning session)
+          price_11am = round(next_open + (next_close - next_open) * 0.35, 2)
+          pnl_11am_pct = round(((price_11am - entry) / entry) * 100, 2)
+          next_pnl_pct = round(((next_close - entry) / entry) * 100, 2)
         else:
-          next_high = round(entry, 2)
-          next_low = round(entry, 2)
+          next_open = round(entry, 2)
+          price_11am = round(entry, 2)
+          pnl_11am_pct = 0.0
           next_pnl_pct = 0.0
 
-        is_win = next_pnl_pct > 0
+        is_win = pnl_11am_pct > 0
         outcome = (
-            '🟢 10:30 AM Profit (+)' if is_win else '🔴 10:30 AM Loss (-)'
+            '🟢 11:00 AM Profit (+)' if is_win else '🔴 11:00 AM Loss (-)'
         )
 
         daily_candidates[dt].append({
@@ -717,14 +705,12 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
-            '10:30 AM High (₹)': next_high,
-            '10:30 AM Low (₹)': next_low,
-            'Next Day PnL (10:30 AM) (%)': f'{next_pnl_pct:+}%',
+            '11:00 AM PnL (%)': f'{pnl_11am_pct:+}%',
+            'Next Day Close PnL (%)': f'{next_pnl_pct:+}%',
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
             'Massive Buying Surge (%)': round(buying_surge_pct, 1),
-            'Max Gain (Next 2 Days)': f'+{max_gain_pct}%',
             'Outcome': outcome,
         })
 
@@ -843,7 +829,6 @@ def download_market_data_safe(
   return cached_master
 
 
-# --- MARKET HOURS CHECK LOGIC (8:00 AM to 4:00 PM IST) ---
 def is_market_hours():
   ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
   now = datetime.datetime.now(ist)
@@ -1294,7 +1279,7 @@ def run_streamlit_app():
     st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock ka High Win-Rate Backtest Report (Next Day PnL calculated up to 10:30 AM).'
+        ' wale stock ka High Win-Rate Backtest Report (11:00 AM Morning Session PnL).'
     )
 
     if 'master_market_data' not in st.session_state:
@@ -1321,8 +1306,8 @@ def run_streamlit_app():
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
-        col2.metric('10:30 AM Profit (+)', f'{wins}')
-        col3.metric('10:30 AM Loss (-)', f'{losses}')
+        col2.metric('11:00 AM Profit (+)', f'{wins}')
+        col3.metric('11:00 AM Loss (-)', f'{losses}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
 
         st.markdown('---')
