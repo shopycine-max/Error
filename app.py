@@ -1,12 +1,12 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import json
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import os
 import smtplib
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import textwrap
 
 import pandas as pd
@@ -460,7 +460,7 @@ def filter_ideal_breakout_stock(df):
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   """Evaluates data day-by-day for the last ~3 months (60 trading days) to find
-  the Serial #1 Roadmap Stock on each market close date and tracks outcome based on Next Day PnL.
+  the Serial #1 Roadmap Stock on each market close date and tracks outcome.
   """
   if not master_data:
     return pd.DataFrame()
@@ -600,16 +600,29 @@ def run_3month_backtest(master_data, backtest_days=60):
         max_future_high = (
             future_df['High'].max() if not future_df.empty else entry
         )
+        min_future_low = (
+            future_df['Low'].min() if not future_df.empty else entry
+        )
+
+        hit_target = max_future_high >= target
+        hit_sl = min_future_low <= sl
+
         max_gain_pct = round(((max_future_high - entry) / entry) * 100, 2)
 
-        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING & PnL ---
+        outcome = '⏳ Open'
+        if hit_target and not hit_sl:
+          outcome = '🎯 Hit Target (2R)'
+        elif hit_sl and not hit_target:
+          outcome = '🛑 Hit Stop Loss'
+        elif hit_target and hit_sl:
+          outcome = '🎯 Target First / Volatile' if max_gain_pct >= 4 else '🛑 Hit SL First'
+
+        # --- INTEGRATED USER FORMULA: AGLE DIN KA DATA FETCHING ---
         if idx + 1 < len(df_calc):
           next_day = df_calc.iloc[idx + 1]
           next_high = round(float(next_day['High']), 2)
           next_low = round(float(next_day['Low']), 2)
-          next_pnl_pct = round(
-              ((float(next_day['Close']) - entry) / entry) * 100, 2
-          )
+          next_pnl_pct = round(((float(next_day['Close']) - entry) / entry) * 100, 2)
         else:
           next_high = round(entry, 2)
           next_low = round(entry, 2)
@@ -624,12 +637,13 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Target Price (₹)': round(target, 2),
             'Next High (₹)': next_high,
             'Next Low (₹)': next_low,
-            'Next Day PnL (%)': next_pnl_pct,
+            'Next Day PnL (%)': f"{next_pnl_pct:+}%",
             'RSI': round(rsi_val, 1),
             'Vol Spike': f'{round(vol_spike, 1)}x',
             'Accum Ratio (10d)': round(accum_ratio, 2),
             'Massive Buying Surge (%)': round(buying_surge_pct, 1),
             'Max Gain (Next 5 Days)': f'+{max_gain_pct}%',
+            'Outcome': outcome,
         })
 
   rank_1_history = []
@@ -1199,7 +1213,7 @@ def run_streamlit_app():
     st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock aur next day PnL (%) ke adhaar par win rate report.'
+        ' wale stock aur next day PnL (%) ke basis par performance ki report.'
     )
 
     if 'master_market_data' not in st.session_state:
@@ -1214,48 +1228,54 @@ def run_streamlit_app():
 
       if not bt_history.empty:
         total_trades = len(bt_history)
-        profitable_days = len(bt_history[bt_history['Next Day PnL (%)'] > 0])
-        loss_days = len(bt_history[bt_history['Next Day PnL (%)'] <= 0])
-        win_rate = (
-            round((profitable_days / total_trades) * 100, 1)
-            if total_trades > 0
-            else 0.0
+        
+        # --- WIN RATE CALCULATED BASED ON NEXT DAY PnL (%) ---
+        pnl_series = (
+            bt_history['Next Day PnL (%)']
+            .astype(str)
+            .str.replace('+', '', regex=False)
+            .str.replace('%', '', regex=False)
+            .astype(float)
         )
+        wins = len(bt_history[pnl_series > 0])
+        losses = len(bt_history[pnl_series <= 0])
+        win_rate = round((wins / total_trades) * 100, 1) if total_trades > 0 else 0.0
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Total Serial #1 Days', f'{total_trades}')
-        col2.metric('Profitable Days (>0%)', f'{profitable_days}')
-        col3.metric('Loss Days (<=0%)', f'{loss_days}')
-        col4.metric('Win Rate (%)', f'{win_rate}%')
+        col2.metric('Next Day Wins (>0%)', f'{wins}')
+        col3.metric('Next Day Losses (<=0%)', f'{losses}')
+        col4.metric('Win Rate (Next Day PnL)', f'{win_rate}%')
 
         st.markdown('---')
 
         def highlight_outcome(row):
-          pnl = row.get('Next Day PnL (%)', 0)
-          if pnl > 0:
-            return [
-                'background-color: rgba(40, 167, 69, 0.25); color: #28a745;'
-                ' font-weight: bold'
-            ] * len(row)
-          else:
-            return [
-                'background-color: rgba(220, 53, 69, 0.25); color: #dc3545;'
-                ' font-weight: bold'
-            ] * len(row)
-
-        # Format Next Day PnL (%) for clean display in table
-        display_bt_history = bt_history.copy()
-        display_bt_history['Next Day PnL (%)'] = display_bt_history[
-            'Next Day PnL (%)'
-        ].apply(lambda x: f'{x:+}%')
+          pnl_str = str(row.get('Next Day PnL (%)', '0'))
+          try:
+            val = float(pnl_str.replace('+', '').replace('%', '').strip())
+            if val > 0:
+              return [
+                  'background-color: rgba(40, 167, 69, 0.25); color: #28a745;'
+                  ' font-weight: bold'
+              ] * len(row)
+            else:
+              return [
+                  'background-color: rgba(220, 53, 69, 0.25); color: #dc3545;'
+                  ' font-weight: bold'
+              ] * len(row)
+          except Exception:
+            pass
+          return [''] * len(row)
 
         st.dataframe(
-            display_bt_history.style.apply(highlight_outcome, axis=1),
+            bt_history.style.apply(highlight_outcome, axis=1),
             use_container_width=True,
             hide_index=True,
         )
       else:
-        st.caption('Backtest run karne ke liye uper button par click kijiye.')
+        st.caption(
+            'Backtest run karne ke liye uper button par click kijiye.'
+        )
 
 
 if __name__ == '__main__':
