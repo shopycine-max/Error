@@ -291,7 +291,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200:  # Ensure enough data for 200 EMA
+    if len(df) < 200:
       return None
 
     df = df.copy()
@@ -338,7 +338,7 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
+    # --- WEEKLY BREAKOUT CONDITION ---
     df_w = df[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -348,18 +348,6 @@ def analyze_single_ticker(
         .reindex(df.index, method='ffill')
         .fillna(False)
     )
-
-    # --- WEEKLY SMA VOLUME CONDITION (Daily Volume < Weekly SMA(50)) ---
-    df_vol_w = df['Volume'].resample('W-FRI').mean()
-    weekly_sma_vol_50 = (
-        df_vol_w.rolling(50, min_periods=1)
-        .mean()
-        .shift(1)
-        .reindex(df.index, method='ffill')
-        .fillna(method='bfill')
-        .fillna(0)
-    )
-    cond_weekly_vol_sma = df['Volume'] < weekly_sma_vol_50
 
     cond_no_wick = df['Wick_Ratio'] <= 0.20
     cond_breakout = df['Close'] > df['High_20_Prev']
@@ -371,7 +359,8 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)
+    # --- UPDATED: Daily Close >= 200 EMA * 1.05 ---
+    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.05)
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -393,7 +382,6 @@ def analyze_single_ticker(
           & cond_breakout
           & cond_weekly
           & cond_ema200
-          & cond_weekly_vol_sma
       )
     else:
       df['Signal'] = (
@@ -409,7 +397,6 @@ def analyze_single_ticker(
           & cond_breakout
           & cond_weekly
           & cond_ema200
-          & cond_weekly_vol_sma
       )
 
     is_signal = (
@@ -595,7 +582,7 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
+    # --- WEEKLY BREAKOUT CONDITION ---
     df_w = df_calc[['High']].resample('W-FRI').max()
     w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
     w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
@@ -605,18 +592,6 @@ def run_3month_backtest(master_data, backtest_days=60):
         .reindex(df_calc.index, method='ffill')
         .fillna(False)
     )
-
-    # --- WEEKLY SMA VOLUME CONDITION (Daily Volume < Weekly SMA(50)) ---
-    df_vol_w = df_calc['Volume'].resample('W-FRI').mean()
-    weekly_sma_vol_50 = (
-        df_vol_w.rolling(50, min_periods=1)
-        .mean()
-        .shift(1)
-        .reindex(df_calc.index, method='ffill')
-        .fillna(method='bfill')
-        .fillna(0)
-    )
-    cond_weekly_vol_sma = df_calc['Volume'] < weekly_sma_vol_50
 
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.20
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
@@ -630,7 +605,8 @@ def run_3month_backtest(master_data, backtest_days=60):
         df_calc['EMA_20'] > df_calc['EMA_50']
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.0)
+    # --- UPDATED: Daily Close >= 200 EMA * 1.05 ---
+    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.05)
 
     df_calc['Signal'] = (
         cond1
@@ -645,7 +621,6 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_breakout
         & cond_weekly
         & cond_ema200
-        & cond_weekly_vol_sma
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -1022,7 +997,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA, Weekly Volume SMA Filter)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA * 1.05 Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
