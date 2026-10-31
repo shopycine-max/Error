@@ -162,7 +162,7 @@ def fetch_nifty_market_status():
     for attempt in range(2):
       try:
         nifty_ticker = yf.Ticker(symbol, session=session)
-        nifty = nifty_ticker.history(period='6mo', interval='1d')
+        nifty = nifty_ticker.history(period='1y', interval='1d')
 
         if not nifty.empty and len(nifty) >= 20:
           nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
@@ -520,9 +520,9 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: 1-YEAR HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%)
 # ==============================================================================
-def run_1year_backtest(master_data, backtest_days=250):
+def run_9month_backtest(master_data, backtest_days=189):
   if not master_data:
     return pd.DataFrame()
 
@@ -1076,7 +1076,7 @@ def run_streamlit_app():
       st.rerun()
 
   tab1, tab2 = st.tabs(
-      ['⚡ Live Breakout Scanner', '📜 1-Year Backtest History (Rank #1)']
+      ['⚡ Live Breakout Scanner', '📜 9-Month Backtest History (Rank #1)']
   )
 
   def compute_analytics():
@@ -1278,21 +1278,18 @@ def run_streamlit_app():
         )
 
   with tab2:
-    st.subheader('📜 1-Year Backtested History (Rank #1 Roadmap Stocks)')
+    st.subheader('📜 9-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock ka 1-Year High Win-Rate Backtest Report (Based on Next'
-        ' Day PnL%).'
+        ' wale stock ka High Win-Rate Backtest Report (Based on Next Day PnL%).'
     )
 
     if 'master_market_data' not in st.session_state:
       st.info('👈 Side bar se "Fetch / Refresh Data" par click kijiye pehle.')
     else:
-      if st.button('🔄 Run 1-Year Backtest Analysis', key='backtest_btn'):
-        with st.spinner(
-            'Pichle 1 saal ka Serial #1 history evaluate ho raha hai...'
-        ):
-          bt_df = run_1year_backtest(st.session_state['master_market_data'])
+      if st.button('🔄 Run 9-Month Backtest Analysis', key='backtest_btn'):
+        with st.spinner('Pichle 9 mahine ka Serial #1 history evaluate ho raha hai...'):
+          bt_df = run_9month_backtest(st.session_state['master_market_data'])
           st.session_state['backtest_history'] = bt_df
 
       bt_history = st.session_state.get('backtest_history', pd.DataFrame())
