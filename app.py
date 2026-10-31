@@ -349,15 +349,17 @@ def analyze_single_ticker(
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA (5 periods) CONDITION ---
-    df_w_vol = df[['Volume']].resample('W-FRI').sum()
-    w_vol_sma_5 = df_w_vol['Volume'].rolling(5, min_periods=1).mean()
-    cond_weekly_vol_sma = (
-        df['Volume']
-        < w_vol_sma_5.shift(1).reindex(df.index, method='ffill').fillna(
-            float('inf')
-        )
+    # --- WEEKLY SMA VOLUME CONDITION (Daily Volume < Weekly SMA(50)) ---
+    df_vol_w = df['Volume'].resample('W-FRI').mean()
+    weekly_sma_vol_50 = (
+        df_vol_w.rolling(50, min_periods=1)
+        .mean()
+        .shift(1)
+        .reindex(df.index, method='ffill')
+        .fillna(method='bfill')
+        .fillna(0)
     )
+    cond_weekly_vol_sma = df['Volume'] < weekly_sma_vol_50
 
     cond_no_wick = df['Wick_Ratio'] <= 0.20
     cond_breakout = df['Close'] > df['High_20_Prev']
@@ -390,8 +392,8 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_weekly_vol_sma
           & cond_ema200
+          & cond_weekly_vol_sma
       )
     else:
       df['Signal'] = (
@@ -406,8 +408,8 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_weekly_vol_sma
           & cond_ema200
+          & cond_weekly_vol_sma
       )
 
     is_signal = (
@@ -604,15 +606,17 @@ def run_3month_backtest(master_data, backtest_days=60):
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA (5 periods) CONDITION ---
-    df_w_vol = df_calc[['Volume']].resample('W-FRI').sum()
-    w_vol_sma_5 = df_w_vol['Volume'].rolling(5, min_periods=1).mean()
-    cond_weekly_vol_sma = (
-        df_calc['Volume']
-        < w_vol_sma_5.shift(1).reindex(df_calc.index, method='ffill').fillna(
-            float('inf')
-        )
+    # --- WEEKLY SMA VOLUME CONDITION (Daily Volume < Weekly SMA(50)) ---
+    df_vol_w = df_calc['Volume'].resample('W-FRI').mean()
+    weekly_sma_vol_50 = (
+        df_vol_w.rolling(50, min_periods=1)
+        .mean()
+        .shift(1)
+        .reindex(df_calc.index, method='ffill')
+        .fillna(method='bfill')
+        .fillna(0)
     )
+    cond_weekly_vol_sma = df_calc['Volume'] < weekly_sma_vol_50
 
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.20
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
@@ -640,8 +644,8 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_no_wick
         & cond_breakout
         & cond_weekly
-        & cond_weekly_vol_sma
         & cond_ema200
+        & cond_weekly_vol_sma
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -1018,7 +1022,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA, Weekly Volume SMA Filter)'
   )
 
   nifty_info = cached_nifty_status()
