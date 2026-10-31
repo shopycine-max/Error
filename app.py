@@ -359,7 +359,7 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)  # Added Daily Close >= 200 EMA
+    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)  # Daily Close >= 200 EMA
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -701,6 +701,7 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Date': dt.strftime('%Y-%m-%d'),
             'Serial #1 Symbol': ticker.replace('.NS', ''),
             'Score': total_score,
+            'Continuation Score (%)': round(close_pos, 1),
             'Entry Price (₹)': round(entry, 2),
             'Stop Loss (₹)': round(sl, 2),
             'Target Price (₹)': round(target, 2),
