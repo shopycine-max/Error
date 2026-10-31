@@ -162,7 +162,7 @@ def fetch_nifty_market_status():
     for attempt in range(2):
       try:
         nifty_ticker = yf.Ticker(symbol, session=session)
-        nifty = nifty_ticker.history(period='1y', interval='1d')
+        nifty = nifty_ticker.history(period='6mo', interval='1d')
 
         if not nifty.empty and len(nifty) >= 20:
           nifty['EMA_20'] = nifty['Close'].ewm(span=20, adjust=False).mean()
@@ -291,7 +291,7 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 200:
+    if len(df) < 200:  # Ensure enough data for 200 EMA
       return None
 
     df = df.copy()
@@ -359,7 +359,9 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.10)
+    cond_ema200 = df['Close'] >= (
+        df['EMA_200'] * 1.10
+    )  # Updated Daily Close >= 200 EMA * 1.10
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -522,7 +524,7 @@ def filter_ideal_breakout_stock(df):
 # ==============================================================================
 # BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%)
 # ==============================================================================
-def run_9month_backtest(master_data, backtest_days=189):
+def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
     return pd.DataFrame()
 
@@ -1076,7 +1078,7 @@ def run_streamlit_app():
       st.rerun()
 
   tab1, tab2 = st.tabs(
-      ['⚡ Live Breakout Scanner', '📜 9-Month Backtest History (Rank #1)']
+      ['⚡ Live Breakout Scanner', '📜 3-Month Backtest History (Rank #1)']
   )
 
   def compute_analytics():
@@ -1278,7 +1280,7 @@ def run_streamlit_app():
         )
 
   with tab2:
-    st.subheader('📜 9-Month Backtested History (Rank #1 Roadmap Stocks)')
+    st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
         ' wale stock ka High Win-Rate Backtest Report (Based on Next Day PnL%).'
@@ -1287,9 +1289,9 @@ def run_streamlit_app():
     if 'master_market_data' not in st.session_state:
       st.info('👈 Side bar se "Fetch / Refresh Data" par click kijiye pehle.')
     else:
-      if st.button('🔄 Run 9-Month Backtest Analysis', key='backtest_btn'):
-        with st.spinner('Pichle 9 mahine ka Serial #1 history evaluate ho raha hai...'):
-          bt_df = run_9month_backtest(st.session_state['master_market_data'])
+      if st.button('🔄 Run 3-Month Backtest Analysis', key='backtest_btn'):
+        with st.spinner('Pichle 3 mahine ka Serial #1 history evaluate ho raha hai...'):
+          bt_df = run_3month_backtest(st.session_state['master_market_data'])
           st.session_state['backtest_history'] = bt_df
 
       bt_history = st.session_state.get('backtest_history', pd.DataFrame())
