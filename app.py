@@ -291,13 +291,13 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 252:  # Ensure enough data for 252 Daily High & 200 EMA
+    if len(df) < 200:
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    if len(df) < 252:
+    if len(df) < 200:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -338,14 +338,14 @@ def analyze_single_ticker(
 
     df['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- UPDATED BREAKOUT CONDITION: Weekly Max(4, Weekly High) >= Daily Max(252, Daily High) ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df[['High']].resample('W-FRI').max()
-    w_max_4 = df_w['High'].rolling(4, min_periods=1).max()
-    w_max_4_daily = w_max_4.reindex(df.index, method='ffill')
-    d_max_252 = df['High'].rolling(252, min_periods=1).max()
+    w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
+    w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
     cond_weekly = (
-        (w_max_4_daily >= d_max_252)
+        (w_max_8 >= w_max_52)
         .shift(1)
+        .reindex(df.index, method='ffill')
         .fillna(False)
     )
 
@@ -520,31 +520,31 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%)
+# BACKTESTING ENGINE: HISTORICAL SERIAL NO. 1 ROADMAP (WIN-RATE BASED ON NEXT DAY PNL%) - 6 MONTHS (~125 TRADING DAYS)
 # ==============================================================================
-def run_3month_backtest(master_data, backtest_days=60):
+def run_6month_backtest(master_data, backtest_days=125):
   if not master_data:
     return pd.DataFrame()
 
   all_dates = set()
   for ticker, df in master_data.items():
-    if len(df) >= 252:
+    if len(df) >= 200:
       all_dates.update(df.index.tolist())
 
   sorted_dates = sorted(list(all_dates))
   if len(sorted_dates) < backtest_days:
-    test_dates = sorted_dates[252:]
+    test_dates = sorted_dates[200:]
   else:
     test_dates = sorted_dates[-backtest_days:]
 
   daily_candidates = {d: [] for d in test_dates}
 
   for ticker, df in master_data.items():
-    if len(df) < 252:
+    if len(df) < 200:
       continue
 
     df_calc = df.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-    if len(df_calc) < 252:
+    if len(df_calc) < 200:
       continue
 
     df_calc['Pct_Change'] = df_calc['Close'].pct_change() * 100
@@ -581,14 +581,14 @@ def run_3month_backtest(master_data, backtest_days=60):
 
     df_calc['Wick_Ratio'] = upper_wick / (candle_range + 1e-10)
 
-    # --- UPDATED BREAKOUT CONDITION: Weekly Max(4, Weekly High) >= Daily Max(252, Daily High) ---
+    # --- WEEKLY BREAKOUT CONDITION (Weekly Max 8 >= Weekly Max 52) ---
     df_w = df_calc[['High']].resample('W-FRI').max()
-    w_max_4 = df_w['High'].rolling(4, min_periods=1).max()
-    w_max_4_daily = w_max_4.reindex(df_calc.index, method='ffill')
-    d_max_252 = df_calc['High'].rolling(252, min_periods=1).max()
+    w_max_8 = df_w['High'].rolling(8, min_periods=1).max()
+    w_max_52 = df_w['High'].rolling(52, min_periods=1).max()
     cond_weekly = (
-        (w_max_4_daily >= d_max_252)
+        (w_max_8 >= w_max_52)
         .shift(1)
+        .reindex(df_calc.index, method='ffill')
         .fillna(False)
     )
 
@@ -784,7 +784,7 @@ def download_market_data_safe(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
             t_data = t_data[t_data['Volume'] > 0]
-            if not t_data.empty and len(t_data) >= 252:
+            if not t_data.empty and len(t_data) >= 200:
               local_data[ticker] = t_data
           except Exception:
             continue
@@ -995,7 +995,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 252-Day High vs 4-Week High Filter, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
@@ -1076,7 +1076,7 @@ def run_streamlit_app():
       st.rerun()
 
   tab1, tab2 = st.tabs(
-      ['⚡ Live Breakout Scanner', '📜 3-Month Backtest History (Rank #1)']
+      ['⚡ Live Breakout Scanner', '📜 6-Month Backtest History (Rank #1)']
   )
 
   def compute_analytics():
@@ -1278,7 +1278,7 @@ def run_streamlit_app():
         )
 
   with tab2:
-    st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
+    st.subheader('📜 6-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
         ' wale stock ka High Win-Rate Backtest Report (Based on Next Day PnL%).'
@@ -1287,9 +1287,9 @@ def run_streamlit_app():
     if 'master_market_data' not in st.session_state:
       st.info('👈 Side bar se "Fetch / Refresh Data" par click kijiye pehle.')
     else:
-      if st.button('🔄 Run 3-Month Backtest Analysis', key='backtest_btn'):
-        with st.spinner('Pichle 3 mahine ka Serial #1 history evaluate ho raha hai...'):
-          bt_df = run_3month_backtest(st.session_state['master_market_data'])
+      if st.button('🔄 Run 6-Month Backtest Analysis', key='backtest_btn'):
+        with st.spinner('Pichle 6 mahine ka Serial #1 history evaluate ho raha hai...'):
+          bt_df = run_6month_backtest(st.session_state['master_market_data'])
           st.session_state['backtest_history'] = bt_df
 
       bt_history = st.session_state.get('backtest_history', pd.DataFrame())
