@@ -300,6 +300,7 @@ def analyze_single_ticker(
     if len(df) < 50:
       return None
 
+    # Baseline Calculations
     df['Pct_Change'] = df['Close'].pct_change() * 100
     df['Vol_SMA20'] = df['Volume'].rolling(20).mean()
     df['Return_20d'] = df['Close'].pct_change(periods=20) * 100
@@ -318,6 +319,7 @@ def analyze_single_ticker(
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
+    # Relative Strength Index (RSI)
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -325,6 +327,16 @@ def analyze_single_ticker(
     avg_loss = loss.ewm(com=13, adjust=False).mean()
     rs = avg_gain / (avg_loss + 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
+
+    # --- 🔥 NEW ADVANCED PRO FILTERS (ATR & MULTI-DAY VOLUME) ---
+    df['TR'] = pd.concat([
+        df['High'] - df['Low'],
+        (df['High'] - df['Close'].shift(1)).abs(),
+        (df['Low'] - df['Close'].shift(1)).abs()
+    ], axis=1).max(axis=1)
+    df['ATR_14'] = df['TR'].rolling(14).mean()
+    df['Candle_Range'] = df['High'] - df['Low']
+    cond_atr = df['Candle_Range'] >= (1.2 * df['ATR_14']) # Range expansion filter
 
     window_size = max(10, min(500, len(df) - 2))
     df['Max_500_High_1d_Ago'] = (
@@ -366,6 +378,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_atr
       )
     else:
       df['Signal'] = (
@@ -379,6 +392,7 @@ def analyze_single_ticker(
           & cond_accum
           & cond_no_wick
           & cond_breakout
+          & cond_atr
       )
 
     is_signal = (
@@ -479,7 +493,7 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] > 87
+  cond_cont = df['Continuation Score (%)'] >= 87.0
   cond_surge = (df['Massive Buying Surge (%)'] > 150) & (
       df['Massive Buying Surge (%)'] < 900
   )
@@ -555,6 +569,16 @@ def run_3month_backtest(master_data, backtest_days=60):
     rs = avg_gain / (avg_loss + 1e-10)
     df_calc['RSI'] = 100 - (100 / (1 + rs))
 
+    # ATR Calculation for Backtest
+    df_calc['TR'] = pd.concat([
+        df_calc['High'] - df_calc['Low'],
+        (df_calc['High'] - df_calc['Close'].shift(1)).abs(),
+        (df_calc['Low'] - df_calc['Close'].shift(1)).abs()
+    ], axis=1).max(axis=1)
+    df_calc['ATR_14'] = df_calc['TR'].rolling(14).mean()
+    df_calc['Candle_Range'] = df_calc['High'] - df_calc['Low']
+    cond_atr = df_calc['Candle_Range'] >= (1.2 * df_calc['ATR_14'])
+
     df_calc['Low_5d'] = df_calc['Low'].rolling(window=5).min()
 
     candle_range = df_calc['High'] - df_calc['Low']
@@ -585,6 +609,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_accum
         & cond_no_wick
         & cond_breakout
+        & cond_atr
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -625,7 +650,7 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos > 87
+          close_pos >= 87.0
           and (150 < buying_surge_pct < 900)
           and (3.0 <= vol_spike < 9.5)
           and (1.8 < accum_ratio < 15.0)
@@ -963,7 +988,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ Ultra-High Win-Rate Filters Enabled (3x Vol, ATR Range Expansion, Wick Protection, CS >= 87%)'
   )
 
   nifty_info = cached_nifty_status()
