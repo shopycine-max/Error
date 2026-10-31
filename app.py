@@ -528,9 +528,9 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HIGH WIN-RATE ROADMAP (85%+ TARGET)
+# BACKTESTING ENGINE: 9-MONTH HIGH WIN-RATE ROADMAP (85%+ TARGET)
 # ==============================================================================
-def run_3month_backtest(master_data, backtest_days=60):
+def run_9month_backtest(master_data, backtest_days=189):
   if not master_data:
     return pd.DataFrame()
 
@@ -1090,7 +1090,7 @@ def run_streamlit_app():
       st.rerun()
 
   tab1, tab2 = st.tabs(
-      ['⚡ Live Breakout Scanner', '📜 3-Month Backtest History (Rank #1)']
+      ['⚡ Live Breakout Scanner', '📜 9-Month Backtest History (Rank #1)']
   )
 
   def compute_analytics():
@@ -1291,21 +1291,23 @@ def run_streamlit_app():
         )
 
   with tab2:
-    st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
+    st.subheader('📜 9-Month Backtested History (Rank #1 Roadmap Stocks)')
     st.caption(
         'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock ka High Win-Rate Backtest Report (Targeting >85% Win'
+        ' wale stock ka 9-month High Win-Rate Backtest Report (Targeting >85% Win'
         ' Rate).'
     )
 
     if 'master_market_data' not in st.session_state:
       st.info('👈 Sidebar se "Fetch / Refresh Data" par click kijiye pehle.')
     else:
-      if st.button('🔄 Run 3-Month Backtest Analysis', key='backtest_btn'):
+      if st.button('🔄 Run 9-Month Backtest Analysis', key='backtest_btn'):
         with st.spinner(
-            'Pichle 3 mahine ka Serial #1 history evaluate ho raha hai...'
+            'Pichle 9 mahine ka Serial #1 history evaluate ho raha hai...'
         ):
-          bt_df = run_3month_backtest(st.session_state['master_market_data'])
+          bt_df = run_9month_backtest(
+              st.session_state['master_market_data'], backtest_days=189
+          )
           st.session_state['backtest_history'] = bt_df
 
       bt_history = st.session_state.get('backtest_history', pd.DataFrame())
