@@ -349,12 +349,14 @@ def analyze_single_ticker(
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA 50 CONDITION ---
+    # --- WEEKLY VOLUME SMA (5 periods) CONDITION ---
     df_w_vol = df[['Volume']].resample('W-FRI').sum()
-    w_vol_sma_50 = df_w_vol['Volume'].rolling(50, min_periods=1).mean()
+    w_vol_sma_5 = df_w_vol['Volume'].rolling(5, min_periods=1).mean()
     cond_weekly_vol_sma = (
-        (df['Volume'] < w_vol_sma_50.reindex(df.index, method='ffill'))
-        .fillna(False)
+        df['Volume']
+        < w_vol_sma_5.shift(1).reindex(df.index, method='ffill').fillna(
+            float('inf')
+        )
     )
 
     cond_no_wick = df['Wick_Ratio'] <= 0.20
@@ -602,12 +604,14 @@ def run_3month_backtest(master_data, backtest_days=60):
         .fillna(False)
     )
 
-    # --- WEEKLY VOLUME SMA 50 CONDITION ---
+    # --- WEEKLY VOLUME SMA (5 periods) CONDITION ---
     df_w_vol = df_calc[['Volume']].resample('W-FRI').sum()
-    w_vol_sma_50 = df_w_vol['Volume'].rolling(50, min_periods=1).mean()
+    w_vol_sma_5 = df_w_vol['Volume'].rolling(5, min_periods=1).mean()
     cond_weekly_vol_sma = (
-        (df_calc['Volume'] < w_vol_sma_50.reindex(df_calc.index, method='ffill'))
-        .fillna(False)
+        df_calc['Volume']
+        < w_vol_sma_5.shift(1).reindex(df_calc.index, method='ffill').fillna(
+            float('inf')
+        )
     )
 
     cond_no_wick = df_calc['Wick_Ratio'] <= 0.20
