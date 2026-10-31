@@ -291,13 +291,13 @@ def analyze_single_ticker(
     formula_version='Version 2',
 ):
   try:
-    if len(df) < 50:
+    if len(df) < 200:  # Ensure enough data for 200 EMA
       return None
 
     df = df.copy()
     df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
     df = df[df['Volume'] > 0]
-    if len(df) < 50:
+    if len(df) < 200:
       return None
 
     df['Pct_Change'] = df['Close'].pct_change() * 100
@@ -359,9 +359,7 @@ def analyze_single_ticker(
     cond8 = (df['RSI'] >= rsi_filter) & (df['RSI'] <= 75)
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
-
-    # --- NEW ADDED CONDITION: Daily Close >= Daily EMA 50 * 1.05 ---
-    cond_ema50_dist = df['Close'] >= (df['EMA_50'] * 1.05)
+    cond_ema200 = df['Close'] >= (df['EMA_200'] * 1.0)  # Added Daily Close >= 200 EMA
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -382,7 +380,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_ema50_dist
+          & cond_ema200
       )
     else:
       df['Signal'] = (
@@ -397,7 +395,7 @@ def analyze_single_ticker(
           & cond_no_wick
           & cond_breakout
           & cond_weekly
-          & cond_ema50_dist
+          & cond_ema200
       )
 
     is_signal = (
@@ -530,23 +528,23 @@ def run_3month_backtest(master_data, backtest_days=60):
 
   all_dates = set()
   for ticker, df in master_data.items():
-    if len(df) >= 50:
+    if len(df) >= 200:
       all_dates.update(df.index.tolist())
 
   sorted_dates = sorted(list(all_dates))
   if len(sorted_dates) < backtest_days:
-    test_dates = sorted_dates[20:]
+    test_dates = sorted_dates[200:]
   else:
     test_dates = sorted_dates[-backtest_days:]
 
   daily_candidates = {d: [] for d in test_dates}
 
   for ticker, df in master_data.items():
-    if len(df) < 50:
+    if len(df) < 200:
       continue
 
     df_calc = df.copy().dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-    if len(df_calc) < 50:
+    if len(df_calc) < 200:
       continue
 
     df_calc['Pct_Change'] = df_calc['Close'].pct_change() * 100
@@ -565,6 +563,7 @@ def run_3month_backtest(master_data, backtest_days=60):
     df_calc['High_20_Prev'] = df_calc['High'].shift(1).rolling(20).max()
     df_calc['EMA_20'] = df_calc['Close'].ewm(span=20, adjust=False).mean()
     df_calc['EMA_50'] = df_calc['Close'].ewm(span=50, adjust=False).mean()
+    df_calc['EMA_200'] = df_calc['Close'].ewm(span=200, adjust=False).mean()
 
     delta = df_calc['Close'].diff()
     gain = delta.clip(lower=0)
@@ -605,9 +604,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         df_calc['EMA_20'] > df_calc['EMA_50']
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
-
-    # --- NEW ADDED CONDITION: Daily Close >= Daily EMA 50 * 1.05 ---
-    cond_ema50_dist = df_calc['Close'] >= (df_calc['EMA_50'] * 1.05)
+    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.0)
 
     df_calc['Signal'] = (
         cond1
@@ -621,7 +618,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         & cond_no_wick
         & cond_breakout
         & cond_weekly
-        & cond_ema50_dist
+        & cond_ema200
     )
 
     signal_indices = df_calc[df_calc['Signal']].index
@@ -733,7 +730,7 @@ def run_3month_backtest(master_data, backtest_days=60):
 # ==============================================================================
 def download_market_data_safe(
     tickers,
-    period='6mo',
+    period='1y',
     interval='1d',
     chunk_size=40,
     sleep_sec=0.5,
@@ -787,7 +784,7 @@ def download_market_data_safe(
                 subset=['Open', 'High', 'Low', 'Close', 'Volume']
             )
             t_data = t_data[t_data['Volume'] > 0]
-            if not t_data.empty and len(t_data) >= 30:
+            if not t_data.empty and len(t_data) >= 200:
               local_data[ticker] = t_data
           except Exception:
             continue
@@ -884,7 +881,7 @@ def run_headless_scan():
   log_msg(f'Downloading market data for {len(tickers)} stocks...', 'info')
 
   cached_master = download_market_data_safe(
-      tickers, period='6mo', interval='1d', chunk_size=40, sleep_sec=0.5
+      tickers, period='1y', interval='1d', chunk_size=40, sleep_sec=0.5
   )
 
   if not cached_master:
@@ -972,7 +969,7 @@ def run_streamlit_app():
 
     cached_master = download_market_data_safe(
         tickers,
-        period='6mo',
+        period='1y',
         interval='1d',
         chunk_size=40,
         sleep_sec=0.5,
@@ -998,7 +995,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
