@@ -360,8 +360,8 @@ def analyze_single_ticker(
     cond9 = (df['Close'] > df['EMA_20']) & (df['EMA_20'] > df['EMA_50'])
     cond_accum = df['Accum_Ratio_10d'] >= 1.8
     cond_ema200 = df['Close'] >= (
-        df['EMA_200'] * 1.15
-    )  # Updated: Daily Close >= 200 EMA * 1.15
+        df['EMA_200'] * 1.25
+    )  # Updated: Daily Close >= 200 EMA * 1.25
 
     if 'Version 1' in formula_version or formula_version == 'v1':
       cond7 = df['Close'] >= df['Max_500_High_1d_Ago']
@@ -606,7 +606,7 @@ def run_3month_backtest(master_data, backtest_days=60):
         df_calc['EMA_20'] > df_calc['EMA_50']
     )
     cond_accum = df_calc['Accum_Ratio_10d'] >= 1.8
-    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.15)
+    cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.25)
 
     df_calc['Signal'] = (
         cond1
@@ -997,8 +997,7 @@ def run_streamlit_app():
 
   st.title('Ashiyana Dashboard Pro Max 🚀')
   st.caption(
-      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend'
-      ' Stack, Wick Protection, 200 EMA Filter >= 1.15x, Cont. Score > 87%)'
+      'Engine Upgraded ⚙️ High Win-Rate Filters Enabled (3x Volume, Trend Stack, Wick Protection, 200 EMA * 1.25 Filter, Cont. Score > 87%)'
   )
 
   nifty_info = cached_nifty_status()
