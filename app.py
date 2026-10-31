@@ -439,11 +439,11 @@ def analyze_single_ticker(
           ((entry - day_low) / day_range * 100) if day_range > 0 else 50
       )
 
-      if close_pos >= 87.0 and buying_surge_pct >= 250.0:  # Updated from 92.0
+      if close_pos >= 92.0 and buying_surge_pct >= 250.0:
         exec_rank = '🥇 Rank 1 (Institutional Alpha)'
         entry_window = '9:15 AM - 9:30 AM'
         exec_condition = f'Hold above ₹{round(entry, 2)}'
-      elif close_pos >= 83.0 and buying_surge_pct >= 200.0:
+      elif close_pos >= 88.0 and buying_surge_pct >= 200.0:
         exec_rank = '🥈 Rank 2 (High Priority)'
         entry_window = '9:20 AM - 9:35 AM'
         exec_condition = f'Break & Hold above ₹{round(entry, 2)}'
@@ -453,9 +453,7 @@ def analyze_single_ticker(
         exec_condition = f'15-Min Candle Close above ₹{round(entry, 2)}'
 
       bonus_score = 0
-      if (
-          close_pos >= 87.0 and vol_spike >= 3.5
-      ):  # Updated threshold from 92.0
+      if close_pos >= 92.0 and vol_spike >= 3.5:
         alert_type = '⭐ Ultimate Institutional Setup'
         bonus_score = 30
       elif accum_ratio >= 2.5 and vol_spike >= 3.0:
@@ -504,7 +502,7 @@ def filter_ideal_breakout_stock(df):
   if df.empty:
     return pd.DataFrame()
   cond_alert = df['Alert'].str.contains('⭐|Ultimate', na=False, regex=True)
-  cond_cont = df['Continuation Score (%)'] >= 87.0  # Updated to >= 87.0
+  cond_cont = df['Continuation Score (%)'] >= 92.0  # Top 8% Close Position
   cond_surge = (df['Massive Buying Surge (%)'] >= 250) & (
       df['Massive Buying Surge (%)'] <= 800
   )
@@ -530,7 +528,7 @@ def filter_ideal_breakout_stock(df):
 
 
 # ==============================================================================
-# BACKTESTING ENGINE: HIGH WIN-RATE ROADMAP (85%+ TARGET)
+# BACKTESTING ENGINE: HIGH WIN-RATE ROADMAP (EXPANDED STOCKS, HIGH WIN-RATE)
 # ==============================================================================
 def run_3month_backtest(master_data, backtest_days=60):
   if not master_data:
@@ -605,16 +603,16 @@ def run_3month_backtest(master_data, backtest_days=60):
     cond_breakout = df_calc['Close'] > df_calc['High_20_Prev']
     cond1 = df_calc['Close'] >= 20
     cond2 = (df_calc['Pct_Change'] >= 2.0) & (df_calc['Pct_Change'] <= 9.0)
-    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 3.5)
+    cond3 = df_calc['Volume'] > (df_calc['Vol_SMA20'] * 3.0)
     cond4 = df_calc['Return_20d'] >= 2.0
     cond5 = df_calc['Turnover'] > (3 * 10000000)
-    cond8 = (df_calc['RSI'] >= 63) & (df_calc['RSI'] <= 72)
+    cond8 = (df_calc['RSI'] >= 60) & (df_calc['RSI'] <= 72)
     cond9 = (
         (df_calc['Close'] > df_calc['EMA_20'])
         & (df_calc['EMA_20'] > df_calc['EMA_50'])
         & (df_calc['EMA_50'] > df_calc['EMA_200'])
     )
-    cond_accum = df_calc['Accum_Ratio_10d'] >= 2.2
+    cond_accum = df_calc['Accum_Ratio_10d'] >= 2.0
     cond_ema200 = df_calc['Close'] >= (df_calc['EMA_200'] * 1.10)
 
     df_calc['Signal'] = (
@@ -668,15 +666,13 @@ def run_3month_backtest(master_data, backtest_days=60):
       )
 
       if (
-          close_pos >= 87.0
-          and (250 <= buying_surge_pct <= 800)
-          and (3.5 <= vol_spike <= 8.5)
-          and (2.2 <= accum_ratio <= 12.0)
-          and (63 <= float(row['RSI']) <= 72)
-      ):  # Updated from 92.0
-        bonus_score = (
-            30 if (close_pos >= 87.0 and vol_spike >= 3.5) else 0
-        )  # Updated from 92.0
+          close_pos >= 88.0
+          and (200 <= buying_surge_pct <= 900)
+          and (3.0 <= vol_spike <= 9.0)
+          and (2.0 <= accum_ratio <= 12.0)
+          and (60 <= float(row['RSI']) <= 72)
+      ):
+        bonus_score = 30 if (close_pos >= 90.0 and vol_spike >= 3.0) else 0
         rsi_val = float(row['RSI']) if pd.notna(row['RSI']) else 50.0
         total_score = round(
             rsi_val
@@ -728,14 +724,15 @@ def run_3month_backtest(master_data, backtest_days=60):
             'Outcome': outcome,
         })
 
-  rank_1_history = []
+  top_stocks_history = []
   for dt in test_dates:
     candidates = daily_candidates.get(dt, [])
     if candidates:
       sorted_cands = sorted(candidates, key=lambda x: x['Score'], reverse=True)
-      rank_1_history.append(sorted_cands[0])
+      # Taking Top 3 stocks per day to increase stock count while maintaining high win rate
+      top_stocks_history.extend(sorted_cands[:3])
 
-  return pd.DataFrame(rank_1_history)
+  return pd.DataFrame(top_stocks_history)
 
 
 # ==============================================================================
@@ -1013,7 +1010,7 @@ def run_streamlit_app():
   st.title('Ashiyana Dashboard Pro Max (85%+ Win-Rate Engine) 🚀')
   st.caption(
       'Engine Upgraded ⚙️ Strict Institutional Filters Active (3.5x Vol Spike,'
-      ' EMA Stack, Accumulation Ratio >= 2.2, Cont. Score >= 87%)'
+      ' EMA Stack, Accumulation Ratio >= 2.2, Cont. Score >= 92%)'
   )
 
   nifty_info = cached_nifty_status()
@@ -1094,7 +1091,7 @@ def run_streamlit_app():
       st.rerun()
 
   tab1, tab2 = st.tabs(
-      ['⚡ Live Breakout Scanner', '📜 3-Month Backtest History (Rank #1)']
+      ['⚡ Live Breakout Scanner', '📜 3-Month Backtest History (Top 3 Stocks)']
   )
 
   def compute_analytics():
@@ -1295,11 +1292,10 @@ def run_streamlit_app():
         )
 
   with tab2:
-    st.subheader('📜 3-Month Backtested History (Rank #1 Roadmap Stocks)')
+    st.subheader('📜 3-Month Backtested History (Top 3 Roadmap Stocks Per Day)')
     st.caption(
-        'Har trading day market close par Roadmap me Serial No. 1 par rehne'
-        ' wale stock ka High Win-Rate Backtest Report (Targeting >85% Win'
-        ' Rate).'
+        'Har trading day ke top 3 breakout candidates ka High Win-Rate Backtest'
+        ' Report (Targeting >85% Win Rate with increased trade volume).'
     )
 
     if 'master_market_data' not in st.session_state:
@@ -1307,7 +1303,7 @@ def run_streamlit_app():
     else:
       if st.button('🔄 Run 3-Month Backtest Analysis', key='backtest_btn'):
         with st.spinner(
-            'Pichle 3 mahine ka Serial #1 history evaluate ho raha hai...'
+            'Pichle 3 mahine ka Top 3 stocks history evaluate ho raha hai...'
         ):
           bt_df = run_3month_backtest(st.session_state['master_market_data'])
           st.session_state['backtest_history'] = bt_df
@@ -1327,7 +1323,7 @@ def run_streamlit_app():
         )
 
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric('Total Serial #1 Days', f'{total_trades}')
+        col1.metric('Total Backtest Trades', f'{total_trades}')
         col2.metric('Next Day Profit (+)', f'{wins}')
         col3.metric('Next Day Loss (-)', f'{losses}')
         col4.metric('Win Rate (%)', f'{win_rate}%')
